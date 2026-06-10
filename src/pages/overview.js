@@ -9,7 +9,9 @@
  */
 
 function renderOverview() {
-  var txs = State.get('txs');
+  console.log('[v13:overview] renderOverview() called, txs count:', (State.get('txs') || []).length);
+  
+  var txs = State.get('txs') || [];
   var filter = State.get('currentTimeFilter');
   var filteredTxs = filter ? filterByTime(txs, filter) : txs;
 
@@ -34,7 +36,10 @@ function renderOverview() {
 
 function _renderKPI(kpi) {
   var grid = $('#ov-kpi-grid');
-  if (!grid) return;
+  if (!grid) {
+    console.error('[v13:overview] #ov-kpi-grid not found!');
+    return;
+  }
 
   var cards = [
     { label: TERMS.volume,      value: fmt(kpi.totalVolume),  unit: '萬', color: UI_COLORS.techCyan },

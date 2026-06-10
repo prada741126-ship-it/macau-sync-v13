@@ -1024,6 +1024,9 @@ tr:nth-child(3) td:first-child::before {
 </head>
 <body>
 
+  <!-- v13 启动诊断 -->
+  <div id="v13-boot-diag" style="position:fixed;top:0;left:0;z-index:99999;background:#4c1;color:#fff;padding:2px 12px;font-size:11px;font-family:monospace;display:none">⏳ 加载中...</div>
+
   <!-- 全域载入动画 -->
   <div id="loading-overlay">
     <div class="loading-spinner"></div>
@@ -1408,6 +1411,6 @@ tr:nth-child(3) td:first-child::before {
   <input type="file" id="file-input" accept=".csv" style="display:none" onchange="handleCSVImport(event)">
   <input type="file" id="rm-file-input" accept=".csv" style="display:none" onchange="rmHandleImport(event)">
 
-  <!-- BUILD: v13.0.0 | 2026-06-10 | 2026-06-10T13:49:37.710Z -->
+  <!-- BUILD: v13.0.0 | 2026-06-10 | 2026-06-10T13:56:22.103Z -->
 </body>
 </html>

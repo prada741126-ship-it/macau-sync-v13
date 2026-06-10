@@ -5757,7 +5757,9 @@ function isRemoteAccess() {
  */
 
 function renderOverview() {
-  var txs = State.get('txs');
+  console.log('[v13:overview] renderOverview() called, txs count:', (State.get('txs') || []).length);
+  
+  var txs = State.get('txs') || [];
   var filter = State.get('currentTimeFilter');
   var filteredTxs = filter ? filterByTime(txs, filter) : txs;
 
@@ -5782,7 +5784,10 @@ function renderOverview() {
 
 function _renderKPI(kpi) {
   var grid = $('#ov-kpi-grid');
-  if (!grid) return;
+  if (!grid) {
+    console.error('[v13:overview] #ov-kpi-grid not found!');
+    return;
+  }
 
   var cards = [
     { label: TERMS.volume,      value: fmt(kpi.totalVolume),  unit: '萬', color: UI_COLORS.techCyan },
@@ -6686,6 +6691,17 @@ function renderRoomChart(bookings, month) {
 (function() {
   'use strict';
 
+  // 全局错误捕获 - 显示在诊断面板上
+  window.addEventListener('error', function(e) {
+    try {
+      var diag = document.getElementById('v13-boot-diag');
+      if (diag) {
+        diag.textContent = '✗ ' + (e.message || 'Unknown error');
+        diag.style.background = '#c41';
+      }
+    } catch(ex) {}
+  });
+
   // ========================================================================
   // 第一步: CDN 依赖检测 (非致命: 允许离线/屏蔽环境继续运行)
   // ========================================================================
@@ -6847,6 +6863,12 @@ function renderRoomChart(bookings, month) {
     // 每日自动备份
     try { autoBackupCheck(); } catch(e) {}
 
+    // 诊断: 标记就绪
+    try {
+      var diag = document.getElementById('v13-boot-diag');
+      if (diag) { diag.textContent = '✓ v13 就绪'; diag.style.background = '#4c1'; }
+    } catch(e) {}
+
     console.log('[v13:app] App initialized successfully ✓');
   }
 
@@ -6942,6 +6964,12 @@ function renderRoomChart(bookings, month) {
   // 启动!
   // ========================================================================
   function boot() {
+    // 诊断: 显示启动标记
+    try {
+      var diag = document.getElementById('v13-boot-diag');
+      if (diag) { diag.style.display = 'block'; diag.textContent = 'v13 boot...'; }
+    } catch(e) {}
+
     console.log('[v13:app] Booting v13...');
     console.log('[v13:app] Version:', APP.VERSION);
     console.log('[v13:app] Events registered:', JSON.stringify(Events.listAll()));
