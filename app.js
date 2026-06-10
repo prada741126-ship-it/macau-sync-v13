@@ -3484,6 +3484,37 @@ function getAllAgents() {
   return State.get('agentList').slice();
 }
 
+/** 从经纪人管理面板新增代理 (供 HTML onclick) */
+function addAgentFromMgr() {
+  var nameEl = document.getElementById('mgr-agent-name');
+  if (!nameEl) return;
+  var name = nameEl.value.trim();
+  if (!name) {
+    showToast('请输入代理名称', 'warning');
+    return;
+  }
+  var result = addAgent(name);
+  if (result.success) {
+    showToast('代理 ' + name + ' 已新增', 'success');
+    nameEl.value = '';
+
+    // 刷新代理列表 (调度事件)
+    Events.emit(EVENTS.AGENT_LIST_UPDATED, State.get('agentList'));
+
+    // 重新填充下拉选单
+    var agentSel = document.getElementById('rm-agent');
+    if (agentSel && typeof RM !== 'undefined' && RM.populateAgentDropdown) {
+      RM.populateAgentDropdown();
+    }
+    var agentFilter = document.getElementById('rm-agent-filter');
+    if (agentFilter && typeof RM !== 'undefined' && RM.populateAgentFilter) {
+      RM.populateAgentFilter();
+    }
+  } else {
+    showToast(result.error || '新增失败', 'error');
+  }
+}
+
 // src/data/bookings.js
 /**
  * v13 订房数据模块
@@ -5888,19 +5919,19 @@ function _renderAllKPI(txs) {
   var mini = $('#all-kpi-mini');
   if (!mini) return;
 
-  var totalVol = totalVolume(txs);
-  var totalComm = totalComm(txs);
-  var totalBonus = totalBonus(txs);
-  var totalFund = totalFund(txs);
+  var _totalVol = totalVolume(txs);
+  var _totalComm = totalComm(txs);
+  var _totalBonus = totalBonus(txs);
+  var _totalFund = totalFund(txs);
 
   mini.innerHTML = '';
   mini.style.cssText = 'display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap';
 
   var items = [
-    { label: TERMS.volume, value: fmt(totalVol) + '萬', color: UI_COLORS.techCyan },
-    { label: TERMS.comm,   value: fmtMoney(totalComm),  color: UI_COLORS.skyBlue },
-    { label: TERMS.bonus,  value: fmtMoney(totalBonus), color: UI_COLORS.electricViolet },
-    { label: TERMS.fund,   value: fmtMoney(totalFund),  color: UI_COLORS.goldSoft },
+    { label: TERMS.volume, value: fmt(_totalVol) + '萬', color: UI_COLORS.techCyan },
+    { label: TERMS.comm,   value: fmtMoney(_totalComm),  color: UI_COLORS.skyBlue },
+    { label: TERMS.bonus,  value: fmtMoney(_totalBonus), color: UI_COLORS.electricViolet },
+    { label: TERMS.fund,   value: fmtMoney(_totalFund),  color: UI_COLORS.goldSoft },
   ];
 
   for (var i = 0; i < items.length; i++) {
@@ -6473,6 +6504,24 @@ var RM = {
     Events.on(EVENTS.BOOKINGS_LOADED, function() { RM.load(); RM.render(); });
   }
 };
+
+/** 房务标签切换 */
+function switchRoomTab(tab, el) {
+  // 高亮当前标签
+  var tabs = document.querySelectorAll('#page-room .room-tab');
+  for (var i = 0; i < tabs.length; i++) {
+    tabs[i].classList.remove('active');
+  }
+  if (el) el.classList.add('active');
+
+  // 切换面板
+  var panels = document.querySelectorAll('#page-room .room-panel');
+  for (var j = 0; j < panels.length; j++) {
+    panels[j].style.display = 'none';
+  }
+  var target = document.getElementById('room-panel-' + tab);
+  if (target) target.style.display = 'block';
+}
 
 // 全域桥接 (供 HTML onclick)
 function rmOpenModal(id)     { RM.openModal(id || null); }

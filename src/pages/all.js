@@ -22,19 +22,19 @@ function _renderAllKPI(txs) {
   var mini = $('#all-kpi-mini');
   if (!mini) return;
 
-  var totalVol = totalVolume(txs);
-  var totalComm = totalComm(txs);
-  var totalBonus = totalBonus(txs);
-  var totalFund = totalFund(txs);
+  var _totalVol = totalVolume(txs);
+  var _totalComm = totalComm(txs);
+  var _totalBonus = totalBonus(txs);
+  var _totalFund = totalFund(txs);
 
   mini.innerHTML = '';
   mini.style.cssText = 'display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap';
 
   var items = [
-    { label: TERMS.volume, value: fmt(totalVol) + '萬', color: UI_COLORS.techCyan },
-    { label: TERMS.comm,   value: fmtMoney(totalComm),  color: UI_COLORS.skyBlue },
-    { label: TERMS.bonus,  value: fmtMoney(totalBonus), color: UI_COLORS.electricViolet },
-    { label: TERMS.fund,   value: fmtMoney(totalFund),  color: UI_COLORS.goldSoft },
+    { label: TERMS.volume, value: fmt(_totalVol) + '萬', color: UI_COLORS.techCyan },
+    { label: TERMS.comm,   value: fmtMoney(_totalComm),  color: UI_COLORS.skyBlue },
+    { label: TERMS.bonus,  value: fmtMoney(_totalBonus), color: UI_COLORS.electricViolet },
+    { label: TERMS.fund,   value: fmtMoney(_totalFund),  color: UI_COLORS.goldSoft },
   ];
 
   for (var i = 0; i < items.length; i++) {

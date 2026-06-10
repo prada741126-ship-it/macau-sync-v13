@@ -327,6 +327,24 @@ var RM = {
   }
 };
 
+/** 房务标签切换 */
+function switchRoomTab(tab, el) {
+  // 高亮当前标签
+  var tabs = document.querySelectorAll('#page-room .room-tab');
+  for (var i = 0; i < tabs.length; i++) {
+    tabs[i].classList.remove('active');
+  }
+  if (el) el.classList.add('active');
+
+  // 切换面板
+  var panels = document.querySelectorAll('#page-room .room-panel');
+  for (var j = 0; j < panels.length; j++) {
+    panels[j].style.display = 'none';
+  }
+  var target = document.getElementById('room-panel-' + tab);
+  if (target) target.style.display = 'block';
+}
+
 // 全域桥接 (供 HTML onclick)
 function rmOpenModal(id)     { RM.openModal(id || null); }
 function rmCloseModal()      { RM.closeModal(); }

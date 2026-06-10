@@ -121,3 +121,34 @@ function renameAgent(oldName, newName) {
 function getAllAgents() {
   return State.get('agentList').slice();
 }
+
+/** 从经纪人管理面板新增代理 (供 HTML onclick) */
+function addAgentFromMgr() {
+  var nameEl = document.getElementById('mgr-agent-name');
+  if (!nameEl) return;
+  var name = nameEl.value.trim();
+  if (!name) {
+    showToast('请输入代理名称', 'warning');
+    return;
+  }
+  var result = addAgent(name);
+  if (result.success) {
+    showToast('代理 ' + name + ' 已新增', 'success');
+    nameEl.value = '';
+
+    // 刷新代理列表 (调度事件)
+    Events.emit(EVENTS.AGENT_LIST_UPDATED, State.get('agentList'));
+
+    // 重新填充下拉选单
+    var agentSel = document.getElementById('rm-agent');
+    if (agentSel && typeof RM !== 'undefined' && RM.populateAgentDropdown) {
+      RM.populateAgentDropdown();
+    }
+    var agentFilter = document.getElementById('rm-agent-filter');
+    if (agentFilter && typeof RM !== 'undefined' && RM.populateAgentFilter) {
+      RM.populateAgentFilter();
+    }
+  } else {
+    showToast(result.error || '新增失败', 'error');
+  }
+}
