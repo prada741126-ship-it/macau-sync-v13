@@ -175,26 +175,44 @@ function toggleTypeFields() {
 
 /** 自动计算佣金/基金/未提领 */
 function calc() {
-  var vol = toNum((document.getElementById('tx-volume') || {}).value);
-  var rate = toNum((document.getElementById('tx-rate') || {}).value);
-  var bonus = toNum((document.getElementById('tx-bonus') || {}).value);
-  var drawn = toNum((document.getElementById('tx-drawn') || {}).value);
+  try {
+    var volEl   = document.getElementById('tx-volume');
+    var rateEl  = document.getElementById('tx-rate');
+    var bonusEl = document.getElementById('tx-bonus');
+    var drawnEl = document.getElementById('tx-drawn');
 
-  var comm = calcComm(vol, rate);
-  var fund = calcFund(comm, bonus);
-  var undrawn = calcUndrawn(bonus, drawn);
+    var vol   = toNum(volEl ? volEl.value : 0);
+    var rate  = toNum(rateEl ? rateEl.value : 0);
+    var bonus = toNum(bonusEl ? bonusEl.value : 0);
+    var drawn = toNum(drawnEl ? drawnEl.value : 0);
 
-  var commEl = document.getElementById('tx-comm');
-  if (commEl) commEl.value = fmt(comm);
+    if (typeof calcComm !== 'function') {
+      console.error('[calc] calcComm is not defined');
+      return;
+    }
 
-  var fundEl = document.getElementById('tx-fund');
-  if (fundEl) fundEl.value = fmt(fund);
+    var comm = calcComm(vol, rate);
+    var fund = calcFund(comm, bonus);
+    var undrawn = calcUndrawn(bonus, drawn);
 
-  var undrawnEl = document.getElementById('tx-undrawn');
-  if (undrawnEl) undrawnEl.value = fmt(undrawn);
+    var commEl = document.getElementById('tx-comm');
+    if (commEl) commEl.value = comm.toFixed(2);
 
-  // 保存草稿
-  saveDraft(getCurrentFormData());
+    var fundEl = document.getElementById('tx-fund');
+    if (fundEl) fundEl.value = fund.toFixed(2);
+
+    var undrawnEl = document.getElementById('tx-undrawn');
+    if (undrawnEl) undrawnEl.value = undrawn.toFixed(2);
+
+    console.log('[calc] vol=' + vol + ' rate=' + rate + ' → comm=' + comm.toFixed(2) + ' fund=' + fund.toFixed(2) + ' undrawn=' + undrawn.toFixed(2));
+
+    // 保存草稿
+    if (typeof saveDraft === 'function') {
+      saveDraft(getCurrentFormData());
+    }
+  } catch(e) {
+    console.error('[calc] error:', e);
+  }
 }
 
 /** 保存交易表单 */
