@@ -6173,14 +6173,16 @@ function _renderQueryKPI(txs) {
   var vol = totalVolume(txs);
   var comm = totalComm(txs);
   var undrawn = totalUndrawn(txs);
+  var totalWallet = getTotalWallet();
 
   el.innerHTML = '';
-  el.style.cssText = 'display:flex;gap:16px;margin-bottom:16px';
+  el.style.cssText = 'display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap';
 
   var items = [
     { label: TERMS.volume,  value: fmt(vol) + '萬', color: UI_COLORS.techCyan },
     { label: TERMS.comm,    value: fmtMoney(comm), color: UI_COLORS.skyBlue },
     { label: TERMS.undrawn, value: fmtMoney(undrawn), color: UI_COLORS.warning },
+    { label: '💰 總錢包',   value: fmtMoney(totalWallet), color: UI_COLORS.goldSoft },
   ];
 
   for (var i = 0; i < items.length; i++) {
@@ -6216,8 +6218,9 @@ function _renderQueryAgentSummary(txs) {
   agentTable.innerHTML = '';
   for (var i = 0; i < agg.length; i++) {
     var a = agg[i];
+    var balance = getAgentBalance(a.agent);
     var tr = h('tr');
-    var cells = [a.agent, fmt(a.volume) + '萬', fmtMoney(a.bonus), fmtMoney(a.drawn), fmtMoney(a.undrawn)];
+    var cells = [a.agent, fmt(a.volume) + '萬', fmtMoney(a.bonus), fmtMoney(a.drawn), fmtMoney(a.undrawn), fmtMoney(balance)];
     for (var j = 0; j < cells.length; j++) {
       tr.appendChild(h('td', {}, cells[j]));
     }
