@@ -265,15 +265,48 @@
 .room-tab-content.active { display: block; }
 
 /* 时间筛选按钮 */
-.tf-btn {
-  padding: 4px 12px; font-size: 12px;
-  border-radius: 20px; border: 1px solid var(--border-subtle);
-  background: transparent; color: var(--text-secondary);
-  cursor: pointer; transition: all var(--trans-base);
+.tf-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  width: 100%;
 }
-.tf-btn:hover, .tf-btn.active {
-  background: rgba(0,212,255,0.12); color: var(--tech-cyan);
+.tf-row-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gold-soft);
+  white-space: nowrap;
+  margin-right: 4px;
+}
+.tf-btn {
+  padding: 6px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 20px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--trans-base);
+  min-width: 60px;
+  text-align: center;
+}
+.tf-btn:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
   border-color: var(--tech-cyan);
+}
+.tf-btn.active {
+  background: var(--tech-cyan);
+  color: #000;
+  border-color: var(--tech-cyan);
+  font-weight: 700;
+  box-shadow: 0 0 12px rgba(0, 212, 255, 0.35);
 }
 
 /* 快捷操作 */
