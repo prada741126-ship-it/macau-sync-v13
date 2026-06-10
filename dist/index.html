@@ -1277,7 +1277,7 @@ tr:nth-child(3) td:first-child::before {
         <div id="draft-indicator" style="display:none;font-size:11px;color:var(--warning);margin-bottom:8px">📝 有未儲存的草稿</div>
         <div class="form-row"><label>類型</label><select name="type" id="tx-type" onchange="toggleTypeFields()"><option value="rolling">轉碼</option><option value="cash">現金寄放</option></select></div>
         <div class="form-row"><label>日期</label><input type="date" name="date" id="tx-date"></div>
-        <div class="form-row"><label>代理</label><select name="agent" id="tx-agent"><option value="">選擇代理</option></select></div>
+        <div class="form-row"><label>代理</label><select name="agent" id="tx-agent" onchange="_onAgentChange()"><option value="">選擇代理</option></select></div>
         <div class="form-row"><label>客戶</label><input type="text" name="client" id="tx-client"></div>
         <div class="form-row"><label>地點</label><select name="venue" id="tx-venue"><option value="">選擇地點</option></select></div>
         <div class="form-row"><label>洗碼量(萬)</label><input type="number" name="volume" id="tx-volume" step="0.01" oninput="calc()"></div>
@@ -1411,6 +1411,6 @@ tr:nth-child(3) td:first-child::before {
   <input type="file" id="file-input" accept=".csv" style="display:none" onchange="handleCSVImport(event)">
   <input type="file" id="rm-file-input" accept=".csv" style="display:none" onchange="rmHandleImport(event)">
 
-  <!-- BUILD: v13.0.0 | 2026-06-10 | 2026-06-10T14:59:08.095Z -->
+  <!-- BUILD: v13.0.0 | 2026-06-10 | 2026-06-10T15:11:02.511Z -->
 </body>
 </html>

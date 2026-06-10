@@ -6787,6 +6787,8 @@ function _populateTxAgentDropdown() {
     opt.textContent = agents[i];
     sel.appendChild(opt);
   }
+  // 绑定代理选择联动 → 自动填入碼佣率
+  sel.onchange = _onAgentChange;
 }
 
 /** 填充交易表单地点下拉 */
@@ -6797,10 +6799,44 @@ function _populateTxVenueDropdown() {
   var venues = (typeof VENUE_OPTIONS !== 'undefined') ? VENUE_OPTIONS : ['新濠天地', '新濠影滙', '金沙', '銀河', '永利', '上葡京'];
   for (var i = 0; i < venues.length; i++) {
     var opt = document.createElement('option');
-    opt.value = venues[i];
-    opt.textContent = venues[i];
+    // VENUE_OPTIONS 是对象数组 {label, casino}
+    var venue = venues[i];
+    if (typeof venue === 'object' && venue !== null) {
+      opt.value = venue.label || venue;
+      opt.textContent = venue.label || venue;
+      opt.setAttribute('data-casino', venue.casino || '');
+    } else {
+      opt.value = venue;
+      opt.textContent = venue;
+    }
     sel.appendChild(opt);
   }
+}
+
+/** 代理选择变更 → 自动填入该代理最近交易的碼佣率 */
+function _onAgentChange() {
+  var agentSel = document.getElementById('tx-agent');
+  var rateEl = document.getElementById('tx-rate');
+  if (!agentSel || !rateEl) return;
+  var agent = agentSel.value;
+  if (!agent) return;
+
+  // 查找该代理最近一笔交易，取其碼佣率
+  var txs = State.get('txs');
+  var lastRate = null;
+  for (var i = txs.length - 1; i >= 0; i--) {
+    if (txs[i].agent === agent && txs[i].rate) {
+      lastRate = txs[i].rate;
+      break;
+    }
+  }
+  // 若无历史交易，使用默认 0.8
+  if (lastRate != null) {
+    rateEl.value = lastRate;
+  } else if (!rateEl.value) {
+    rateEl.value = '0.8';
+  }
+  calc(); // 触发自动计算佣金/基金
 }
 
 /** 填写编辑表单 */
