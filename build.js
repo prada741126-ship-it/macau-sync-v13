@@ -77,6 +77,9 @@ const JS_FILES = [
   'src/pages/room.js',
   'src/charts/trend.js',
 
+  // Phase 7: Bridge (HTML onclick → JS glue, 最后加载)
+  'src/bridge/bridge.js',
+
   // Phase 8: Entry point (最后)
   'src/app.js',
 ];
