@@ -162,15 +162,20 @@ function build() {
   const buildInfo = '<!-- BUILD: v' + version.version + ' | ' + version.buildDate + ' | ' + new Date().toISOString() + ' -->';
   html = html.replace('<!-- BUILD_INFO_PLACEHOLDER -->', buildInfo);
 
-  // 输出
+  // 输出 dist/index.html
   if (!fs.existsSync(DIST_DIR)) {
     fs.mkdirSync(DIST_DIR, { recursive: true });
   }
   fs.writeFileSync(OUTPUT, html, 'utf-8');
 
+  // 同时输出根目录 index.html（GitHub Pages 从根目录部署）
+  const ROOT_OUTPUT = path.join(BASE_DIR, 'index.html');
+  fs.writeFileSync(ROOT_OUTPUT, html, 'utf-8');
+
   const stats = fs.statSync(OUTPUT);
-  console.log('\n✅ Build complete: dist/index.html');
-  console.log('   Size:', (stats.size / 1024).toFixed(1), 'KB');
+  console.log('\n✅ Build complete:');
+  console.log('   dist/index.html  —', (stats.size / 1024).toFixed(1), 'KB');
+  console.log('   index.html       —', (fs.statSync(ROOT_OUTPUT).size / 1024).toFixed(1), 'KB (GitHub Pages root)');
   console.log('   JS modules:', JS_FILES.length);
   console.log('   CSS modules:', CSS_FILES.length);
 
