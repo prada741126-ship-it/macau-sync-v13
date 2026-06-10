@@ -6821,37 +6821,31 @@ function renderRoomChart(bookings, month) {
   function initAppAfterLogin() {
     console.log('[v13:app] User authenticated, initializing app...');
 
+    // ★ 首先绑定交互: 先保侧栏能点、页面能切，再渲染数据
+    _setupSidebar();
+    _setupMonthBar();
+    _setupBackToTop();
+    _setupAutoRefresh();
+
     // 填充下拉
-    _populateDropdowns();
+    try { _populateDropdowns(); } catch(e) { console.error('[v13:app] populateDropdowns error:', e); }
 
-    // 启动 Firebase 监听器
-    startWatchers();
+    // 启动 Firebase 监听器 (非致命)
+    try { startWatchers(); } catch(e) { console.warn('[v13:app] startWatchers error:', e); }
 
-    // 手动同步一次
-    syncUploadAll();
-    syncDownloadAll();
+    // 手动同步一次 (非致命)
+    try { syncUploadAll(); } catch(e) { console.warn('[v13:app] syncUploadAll error:', e); }
+    try { syncDownloadAll(); } catch(e) { console.warn('[v13:app] syncDownloadAll error:', e); }
 
-    // 渲染初始页面
-    renderAll();
-    renderOverview();
+    // 渲染: 加 try-catch 确保一个页面失败不影响其他
+    try { renderOverview(); } catch(e) { console.error('[v13:app] renderOverview error:', e); }
+    try { renderAll(); } catch(e) { console.error('[v13:app] renderAll error:', e); }
 
     // 初始化房务系统
-    if (typeof RM !== 'undefined') RM.init();
-
-    // 设置回顶部按钮
-    _setupBackToTop();
-
-    // 设置侧边栏事件
-    _setupSidebar();
-
-    // 设置月份切换
-    _setupMonthBar();
+    try { if (typeof RM !== 'undefined') RM.init(); } catch(e) { console.error('[v13:app] RM.init error:', e); }
 
     // 每日自动备份
     try { autoBackupCheck(); } catch(e) {}
-
-    // 事件监听: 数据变更后自动刷新
-    _setupAutoRefresh();
 
     console.log('[v13:app] App initialized successfully ✓');
   }
