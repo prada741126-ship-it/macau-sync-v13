@@ -280,8 +280,8 @@ function quickFilter(type) {
     }
   }
 
-  // 隐藏/显示日期选择器
-  if (customRange) customRange.style.display = 'none';
+  // 显示日期选择器（快捷按钮自动填入日期，方便查帐）
+  if (customRange) customRange.style.display = '';
 
   // 设定 date 输入
   if (fromEl) fromEl.value = dateFrom;
