@@ -957,79 +957,65 @@ tr:nth-child(3) td:first-child::before {
 
 </style>
 
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-
-  <!-- CryptoJS -->
-  <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
-
-  <!-- Chart.js -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-
-  <!-- Firebase 初始化 -->
+  <!-- 密码验证兜底脚本 (必须最先执行, 零外部依赖) -->
   <script>
-    // 容错: CDN 加载失败时不会崩溃整个页面
-    try {
-      if (typeof firebase !== 'undefined') {
-        firebase.initializeApp({
-          apiKey: "AIzaSyDPLDEr5QnMQ_AD-z7Wppt2fylxWoBuxj0U",
-          authDomain: "macau-sync.firebaseapp.com",
-          databaseURL: "https://macau-sync-default-rtdb.asia-southeast1.firebasedatabase.app",
-          projectId: "macau-sync",
-          storageBucket: "macau-sync.appspot.com",
-          messagingSenderId: "5394959664910",
-          appId: "1:5394959664910:web:f445ede79937711fdd65f",
-          measurementId: "G-8BFD758YCF"
-        });
-      }
-    } catch(e) { /* CDN 未加载，静默处理 */ }
-  </script>
-
-  <!-- 密码验证兜底脚本 (零依赖: 不依赖 CryptoJS/Firebase/主JS) -->
-  <script>
-    var _v13_APP_PWD = 'bWFjYXU4ODg=';  // base64('macau888') — 与 constants.js 一致
+    var _v13_APP_PWD = 'bWFjYXU4ODg=';  // base64('macau888')
     function _v13b64d(s) { try { return atob(s); } catch(e) { return ''; } }
     function _v13LoginFallback() {
       var input = document.getElementById('pw-input');
       var errorEl = document.getElementById('pw-error');
       var btn = document.querySelector('.pw-btn');
       if (!input) return;
-
       var entered = input.value.trim();
       if (!entered) {
         if (errorEl) { errorEl.textContent = '請輸入密碼'; errorEl.style.display = 'block'; }
         return;
       }
-
-      // 纯 JS 验证: base64 decode 后明文比较 (零外部依赖)
       if (entered === _v13b64d(_v13_APP_PWD)) {
         if (errorEl) errorEl.style.display = 'none';
         try { sessionStorage.setItem('macau_auth', '1'); } catch(e) {}
-        // 隐藏密码遮罩
         var overlay = document.getElementById('pw-overlay');
-        if (overlay) {
-          overlay.style.opacity = '0';
-          overlay.style.transition = 'opacity 0.5s';
-          setTimeout(function() { overlay.style.display = 'none'; }, 500);
-        }
-        // 如果主 app 已加载则通知它
+        if (overlay) { overlay.style.opacity = '0'; overlay.style.transition = 'opacity 0.5s'; setTimeout(function() { overlay.style.display = 'none'; }, 500); }
         if (typeof checkPassword === 'function') { checkPassword(entered); }
         return;
       }
-
-      // 失败
       if (errorEl) { errorEl.textContent = '密碼錯誤'; errorEl.style.display = 'block'; }
       input.value = '';
       if (btn) { btn.classList.add('pw-shake'); setTimeout(function() { btn.classList.remove('pw-shake'); }, 500); }
     }
-    // Enter 键触发登录 (DOM ready 后绑定)
+    // Enter 键触发登录
     document.addEventListener('DOMContentLoaded', function() {
       var inp = document.getElementById('pw-input');
       if (inp) {
         inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') _v13LoginFallback(); });
         inp.focus();
       }
+    });
+  </script>
+
+  <!-- CDN 脚本: 全部 async, 不阻塞页面加载 -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" async></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js" async></script>
+  <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js" async></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" async></script>
+
+  <!-- Firebase 初始化 (等 CDN 加载后) -->
+  <script>
+    window.addEventListener('load', function() {
+      try {
+        if (typeof firebase !== 'undefined' && firebase.initializeApp) {
+          firebase.initializeApp({
+            apiKey: "AIzaSyDPLDEr5QnMQ_AD-z7Wppt2fylxWoBuxj0U",
+            authDomain: "macau-sync.firebaseapp.com",
+            databaseURL: "https://macau-sync-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "macau-sync",
+            storageBucket: "macau-sync.appspot.com",
+            messagingSenderId: "5394959664910",
+            appId: "1:5394959664910:web:f445ede79937711fdd65f",
+            measurementId: "G-8BFD758YCF"
+          });
+        }
+      } catch(e) { console.warn('[v13] Firebase init deferred'); }
     });
   </script>
 
@@ -6116,7 +6102,7 @@ function decodeFirebaseKey(encoded) {
   <input type="file" id="file-input" accept=".csv" style="display:none" onchange="handleCSVImport(event)">
   <input type="file" id="rm-file-input" accept=".csv" style="display:none" onchange="rmHandleImport(event)">
 
-  <!-- BUILD: v13.0.0 | 2026-06-10 | 2026-06-10T12:57:56.511Z -->
+  <!-- BUILD: v13.0.0 | 2026-06-10 | 2026-06-10T13:13:31.568Z -->
 </body>
 </html>
 )
@@ -8115,32 +8101,30 @@ function renderRoomChart(bookings, month) {
   'use strict';
 
   // ========================================================================
-  // 第一步: CDN 依赖检测 (致命错误不可静默)
+  // 第一步: CDN 依赖检测 (非致命: 允许离线/屏蔽环境继续运行)
   // ========================================================================
   function checkDependencies() {
-    var errors = [];
+    var warnings = [];
 
     if (typeof firebase === 'undefined') {
-      errors.push('Firebase SDK 未載入');
+      warnings.push('Firebase SDK 未載入 — 同步功能不可用');
     }
 
     if (!checkCrypto()) {
-      errors.push(getCryptoError());
+      warnings.push(getCryptoError() + ' — 数据以明文存储');
     }
 
     if (typeof Chart === 'undefined') {
-      console.warn('[v13:app] Chart.js not loaded — 图表功能不可用');
+      warnings.push('Chart.js 未載入 — 图表功能不可用');
     }
 
-    if (errors.length > 0) {
-      var msg = errors.join('\n');
-      console.error('[v13:app] FATAL DEPENDENCY ERRORS:\n' + msg);
-      // UI 上显示错误
-      showToast(msg, 'error', 10000);
-      return false;
+    if (warnings.length > 0) {
+      console.warn('[v13:app] CDN dependencies missing (non-fatal):\n' + warnings.join('\n'));
+    } else {
+      console.log('[v13:app] All CDN dependencies verified ✓');
     }
 
-    console.log('[v13:app] All CDN dependencies verified ✓');
+    // 始终返回 true — 不允许 CDN 失败阻止应用启动
     return true;
   }
 
@@ -8165,12 +8149,15 @@ function renderRoomChart(bookings, month) {
   }
 
   // ========================================================================
-  // 第三步: Firebase 初始化
+  // 第三步: Firebase 初始化 (非致命)
   // ========================================================================
   function initFirebaseAndSync() {
-    if (!initFirebase()) {
-      console.error('[v13:app] Firebase initialization failed');
-      return false;
+    try {
+      if (!initFirebase()) {
+        console.warn('[v13:app] Firebase initialization skipped (CDN unavailable)');
+      }
+    } catch (e) {
+      console.warn('[v13:app] Firebase initialization error (non-fatal):', e.message);
     }
     return true;
   }

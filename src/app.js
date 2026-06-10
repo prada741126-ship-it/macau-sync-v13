@@ -12,32 +12,30 @@
   'use strict';
 
   // ========================================================================
-  // 第一步: CDN 依赖检测 (致命错误不可静默)
+  // 第一步: CDN 依赖检测 (非致命: 允许离线/屏蔽环境继续运行)
   // ========================================================================
   function checkDependencies() {
-    var errors = [];
+    var warnings = [];
 
     if (typeof firebase === 'undefined') {
-      errors.push('Firebase SDK 未載入');
+      warnings.push('Firebase SDK 未載入 — 同步功能不可用');
     }
 
     if (!checkCrypto()) {
-      errors.push(getCryptoError());
+      warnings.push(getCryptoError() + ' — 数据以明文存储');
     }
 
     if (typeof Chart === 'undefined') {
-      console.warn('[v13:app] Chart.js not loaded — 图表功能不可用');
+      warnings.push('Chart.js 未載入 — 图表功能不可用');
     }
 
-    if (errors.length > 0) {
-      var msg = errors.join('\n');
-      console.error('[v13:app] FATAL DEPENDENCY ERRORS:\n' + msg);
-      // UI 上显示错误
-      showToast(msg, 'error', 10000);
-      return false;
+    if (warnings.length > 0) {
+      console.warn('[v13:app] CDN dependencies missing (non-fatal):\n' + warnings.join('\n'));
+    } else {
+      console.log('[v13:app] All CDN dependencies verified ✓');
     }
 
-    console.log('[v13:app] All CDN dependencies verified ✓');
+    // 始终返回 true — 不允许 CDN 失败阻止应用启动
     return true;
   }
 
@@ -62,12 +60,15 @@
   }
 
   // ========================================================================
-  // 第三步: Firebase 初始化
+  // 第三步: Firebase 初始化 (非致命)
   // ========================================================================
   function initFirebaseAndSync() {
-    if (!initFirebase()) {
-      console.error('[v13:app] Firebase initialization failed');
-      return false;
+    try {
+      if (!initFirebase()) {
+        console.warn('[v13:app] Firebase initialization skipped (CDN unavailable)');
+      }
+    } catch (e) {
+      console.warn('[v13:app] Firebase initialization error (non-fatal):', e.message);
     }
     return true;
   }

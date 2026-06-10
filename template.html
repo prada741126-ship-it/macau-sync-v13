@@ -24,79 +24,65 @@
   <!-- CSS (由 build.js 合并注入) -->
   <!-- CSS_PLACEHOLDER -->
 
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-
-  <!-- CryptoJS -->
-  <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
-
-  <!-- Chart.js -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-
-  <!-- Firebase 初始化 -->
+  <!-- 密码验证兜底脚本 (必须最先执行, 零外部依赖) -->
   <script>
-    // 容错: CDN 加载失败时不会崩溃整个页面
-    try {
-      if (typeof firebase !== 'undefined') {
-        firebase.initializeApp({
-          apiKey: "AIzaSyDPLDEr5QnMQ_AD-z7Wppt2fylxWoBuxj0U",
-          authDomain: "macau-sync.firebaseapp.com",
-          databaseURL: "https://macau-sync-default-rtdb.asia-southeast1.firebasedatabase.app",
-          projectId: "macau-sync",
-          storageBucket: "macau-sync.appspot.com",
-          messagingSenderId: "5394959664910",
-          appId: "1:5394959664910:web:f445ede79937711fdd65f",
-          measurementId: "G-8BFD758YCF"
-        });
-      }
-    } catch(e) { /* CDN 未加载，静默处理 */ }
-  </script>
-
-  <!-- 密码验证兜底脚本 (零依赖: 不依赖 CryptoJS/Firebase/主JS) -->
-  <script>
-    var _v13_APP_PWD = 'bWFjYXU4ODg=';  // base64('macau888') — 与 constants.js 一致
+    var _v13_APP_PWD = 'bWFjYXU4ODg=';  // base64('macau888')
     function _v13b64d(s) { try { return atob(s); } catch(e) { return ''; } }
     function _v13LoginFallback() {
       var input = document.getElementById('pw-input');
       var errorEl = document.getElementById('pw-error');
       var btn = document.querySelector('.pw-btn');
       if (!input) return;
-
       var entered = input.value.trim();
       if (!entered) {
         if (errorEl) { errorEl.textContent = '請輸入密碼'; errorEl.style.display = 'block'; }
         return;
       }
-
-      // 纯 JS 验证: base64 decode 后明文比较 (零外部依赖)
       if (entered === _v13b64d(_v13_APP_PWD)) {
         if (errorEl) errorEl.style.display = 'none';
         try { sessionStorage.setItem('macau_auth', '1'); } catch(e) {}
-        // 隐藏密码遮罩
         var overlay = document.getElementById('pw-overlay');
-        if (overlay) {
-          overlay.style.opacity = '0';
-          overlay.style.transition = 'opacity 0.5s';
-          setTimeout(function() { overlay.style.display = 'none'; }, 500);
-        }
-        // 如果主 app 已加载则通知它
+        if (overlay) { overlay.style.opacity = '0'; overlay.style.transition = 'opacity 0.5s'; setTimeout(function() { overlay.style.display = 'none'; }, 500); }
         if (typeof checkPassword === 'function') { checkPassword(entered); }
         return;
       }
-
-      // 失败
       if (errorEl) { errorEl.textContent = '密碼錯誤'; errorEl.style.display = 'block'; }
       input.value = '';
       if (btn) { btn.classList.add('pw-shake'); setTimeout(function() { btn.classList.remove('pw-shake'); }, 500); }
     }
-    // Enter 键触发登录 (DOM ready 后绑定)
+    // Enter 键触发登录
     document.addEventListener('DOMContentLoaded', function() {
       var inp = document.getElementById('pw-input');
       if (inp) {
         inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') _v13LoginFallback(); });
         inp.focus();
       }
+    });
+  </script>
+
+  <!-- CDN 脚本: 全部 async, 不阻塞页面加载 -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" async></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js" async></script>
+  <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js" async></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" async></script>
+
+  <!-- Firebase 初始化 (等 CDN 加载后) -->
+  <script>
+    window.addEventListener('load', function() {
+      try {
+        if (typeof firebase !== 'undefined' && firebase.initializeApp) {
+          firebase.initializeApp({
+            apiKey: "AIzaSyDPLDEr5QnMQ_AD-z7Wppt2fylxWoBuxj0U",
+            authDomain: "macau-sync.firebaseapp.com",
+            databaseURL: "https://macau-sync-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "macau-sync",
+            storageBucket: "macau-sync.appspot.com",
+            messagingSenderId: "5394959664910",
+            appId: "1:5394959664910:web:f445ede79937711fdd65f",
+            measurementId: "G-8BFD758YCF"
+          });
+        }
+      } catch(e) { console.warn('[v13] Firebase init deferred'); }
     });
   </script>
 
