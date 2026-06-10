@@ -164,6 +164,9 @@ function build() {
     replaceCount++;
     return 'v' + version.version;
   });
+  // cache-busting for app.js
+  html = html.replace(/__VERSION__/g, version.version);
+  replaceCount++;
   console.log('\n🔄 Version replacements:', replaceCount);
 
   // BUILD_INFO
