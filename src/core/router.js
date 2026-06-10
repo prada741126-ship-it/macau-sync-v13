@@ -78,7 +78,8 @@ function _refreshPage(pageName) {
       if (typeof renderAll === 'function') renderAll();
       break;
     case 'query':
-      if (typeof doQuery === 'function') doQuery();
+      if (typeof renderQuery === 'function') renderQuery();
+      else if (typeof doQuery === 'function') doQuery();
       break;
     case 'summary':
       if (typeof renderSummary === 'function') renderSummary();

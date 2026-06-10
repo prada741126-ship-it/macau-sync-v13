@@ -1167,6 +1167,20 @@ tr:nth-child(3) td:first-child::before {
         <!-- ===== 查询页 ===== -->
         <div class="page" id="page-query">
           <div class="toolbar">
+            <div class="tf-row">
+              <button class="btn btn-sm tf-btn" onclick="quickFilter('lastWeek')">上週</button>
+              <button class="btn btn-sm tf-btn" onclick="quickFilter('thisWeek')">本週</button>
+              <button class="btn btn-sm tf-btn" onclick="quickFilter('thisMonth')">本月</button>
+              <button class="btn btn-sm tf-btn" onclick="quickFilter('lastMonth')">上月</button>
+              <button class="btn btn-sm tf-btn" onclick="quickFilter('thisYear')">年度</button>
+              <button class="btn btn-sm tf-btn" onclick="quickFilter('custom')">自訂</button>
+              <span style="display:none" id="query-date-range">
+                從 <input type="date" id="query-date-from" style="width:130px" onchange="doQuery()">
+                到 <input type="date" id="query-date-to" style="width:130px" onchange="doQuery()">
+              </span>
+            </div>
+          </div>
+          <div class="toolbar" style="margin-top:6px">
             <select id="query-agent" onchange="doQuery()"><option value="">全部代理</option></select>
             <select id="query-venue" onchange="doQuery()"><option value="">全部地點</option></select>
             <select id="query-month" onchange="doQuery()"><option value="">全部月份</option></select>
@@ -1411,6 +1425,6 @@ tr:nth-child(3) td:first-child::before {
   <input type="file" id="file-input" accept=".csv" style="display:none" onchange="handleCSVImport(event)">
   <input type="file" id="rm-file-input" accept=".csv" style="display:none" onchange="rmHandleImport(event)">
 
-  <!-- BUILD: v13.0.0 | 2026-06-10 | 2026-06-10T15:27:10.144Z -->
+  <!-- BUILD: v13.0.0 | 2026-06-10 | 2026-06-10T15:39:13.037Z -->
 </body>
 </html>
