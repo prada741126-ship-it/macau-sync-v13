@@ -1,0 +1,96 @@
+/* ============================================================================
+ * v13 中国风主题 (隐性克制)
+ * 对照档第五节 — 30% 中国风，非侵入式
+ * 
+ * 手法: 极淡山水线稿背景 (<1.5% 透明度)、窗棂线条、印章感元素
+ * 避免: 龙纹/祥云/牡丹/宫廷风/厚重发光/俗艳渐变
+ * ============================================================================ */
+
+/* 极淡山水线稿背景 */
+#app-shell::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.01;
+  background:
+    /* 远山轮廓 */
+    radial-gradient(ellipse 60% 30% at 20% 85%, rgba(201,168,76,0.02) 0%, transparent 70%),
+    radial-gradient(ellipse 50% 25% at 70% 88%, rgba(201,168,76,0.015) 0%, transparent 70%),
+    /* 云雾 */
+    radial-gradient(ellipse 80% 15% at 50% 80%, rgba(255,255,255,0.008) 0%, transparent 60%);
+}
+
+/* 窗棂几何线 (hover 时 1px) */
+.sb-item:hover::after {
+  content: '';
+  position: absolute;
+  right: 12px;
+  width: 20px;
+  height: 20px;
+  border: 1px solid rgba(201,168,76,0.15);
+  border-radius: 2px;
+  opacity: 0;
+  animation: latticeReveal 0.4s ease forwards;
+}
+@keyframes latticeReveal { to { opacity: 1; } }
+.sb-item { position: relative; }
+
+/* 登录画面印章感 */
+#pw-box {
+  position: relative;
+}
+#pw-box::before {
+  content: '';
+  position: absolute;
+  top: 16px; right: 16px;
+  width: 28px; height: 28px;
+  border: 1px solid rgba(201,168,76,0.12);
+  border-radius: 4px;
+  transform: rotate(15deg);
+  opacity: 0.5;
+}
+
+/* 登录画面角落装饰 */
+.pw-corners { display: none; } /* 旧版有 .tl/.tr/.bl/.br，新版用 box-shadow */
+
+/* 月度结算按钮朱砂红 */
+#btn-close-month {
+  background: transparent;
+  border-color: var(--vermilion);
+  color: var(--vermilion);
+}
+#btn-close-month:hover {
+  background: rgba(192,57,43,0.1);
+}
+
+/* 代理排行第一条金色 */
+tr:first-child td:first-child::before {
+  content: '🥇 ';
+  font-size: 12px;
+}
+tr:nth-child(2) td:first-child::before {
+  content: '🥈 ';
+  font-size: 12px;
+}
+tr:nth-child(3) td:first-child::before {
+  content: '🥉 ';
+  font-size: 12px;
+}
+
+/* 装饰性分割线 */
+.decorative-line {
+  background: linear-gradient(90deg, transparent, rgba(201,168,76,0.15), transparent);
+}
+
+/* 总览页 KPI 卡片金色微边 */
+.kpi-card:hover {
+  box-shadow: 0 0 0 1px rgba(201,168,76,0.1), var(--shadow-sm);
+}
+
+/* 版本号小印章 */
+#version-badge {
+  font-family: 'STKaiti', 'KaiTi', serif;
+  letter-spacing: 1px;
+}

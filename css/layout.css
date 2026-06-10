@@ -1,0 +1,237 @@
+/* ============================================================================
+ * v13 布局 CSS — Sidebar / Main Content / Topbar / Page
+ * ============================================================================ */
+
+/* App Shell */
+#app-shell {
+  display: flex;
+  min-height: 100vh;
+  position: relative;
+}
+
+/* Sidebar */
+#sidebar {
+  width: var(--sidebar-w);
+  min-height: 100vh;
+  background: linear-gradient(180deg, var(--bg-elevated) 0%, var(--bg-surface) 100%);
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 100;
+  transition: width var(--trans-base), transform var(--trans-base);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+#sidebar.collapsed {
+  width: var(--sidebar-collapsed);
+}
+#sidebar.collapsed .sb-logo-text,
+#sidebar.collapsed .sb-item span,
+#sidebar.collapsed .sb-version,
+#sidebar.collapsed .sb-divider { display: none; }
+
+.sb-logo {
+  padding: 20px 16px 12px;
+  text-align: center;
+  border-bottom: 1px solid var(--border-gold);
+}
+.sb-logo-icon { font-size: 28px; color: var(--gold-soft); }
+.sb-logo-text { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+.sb-logo-name { font-size: 15px; font-weight: 700; color: var(--text-primary); letter-spacing: 2px; }
+.sb-month {
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--gold-soft);
+  text-align: center;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.sb-nav {
+  flex: 1;
+  padding: 8px 0;
+  list-style: none;
+}
+
+.sb-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all var(--trans-base);
+  font-size: 13px;
+  border-left: 2px solid transparent;
+}
+.sb-item:hover {
+  background: rgba(0,212,255,0.06);
+  color: var(--text-primary);
+}
+.sb-item.active {
+  background: rgba(0,212,255,0.1);
+  color: var(--tech-cyan);
+  border-left-color: var(--tech-cyan);
+}
+.sb-item .icon { font-size: 16px; width: 20px; text-align: center; }
+.sb-divider { height: 1px; background: var(--border-subtle); margin: 8px 12px; }
+
+.sb-toggle {
+  padding: 8px;
+  text-align: center;
+  cursor: pointer;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border-subtle);
+  font-size: 18px;
+  user-select: none;
+}
+.sb-toggle:hover { color: var(--text-primary); }
+
+.sb-version {
+  padding: 6px 16px 10px;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* Sidebar Overlay (手机) */
+#sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 99;
+}
+
+/* Main Content */
+#main-content {
+  flex: 1;
+  margin-left: var(--sidebar-w);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  transition: margin-left var(--trans-base);
+}
+#sidebar.collapsed + #sidebar-overlay + #main-content,
+#sidebar.collapsed ~ #main-content {
+  margin-left: var(--sidebar-collapsed);
+}
+
+/* Topbar */
+#topbar {
+  height: var(--topbar-h);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+#topbar-title { font-size: 16px; font-weight: 600; flex: 1; }
+#topbar-actions { display: flex; gap: 8px; }
+
+/* Page Scroll */
+#page-scroll {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+/* Month Bar */
+.month-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+}
+#month-badge {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--gold-soft);
+}
+#month-status { font-size: 12px; color: var(--text-muted); }
+#sync-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #888;
+  transition: background 0.3s;
+}
+#sync-dot.connected { background: var(--success); }
+#sync-text { font-size: 11px; color: var(--text-muted); }
+
+/* Pages */
+.page {
+  display: none;
+  animation: pageFadeIn 0.25s ease;
+}
+.page.active {
+  display: block;
+}
+@keyframes pageFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* KPI Grid (总览) */
+#ov-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+/* Two Column */
+.ov-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+/* Chart Full */
+.chart-full {
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  padding: 16px;
+  margin-bottom: 20px;
+  height: 300px;
+  position: relative;
+}
+
+/* Timeline */
+.timeline-box {
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  padding: 16px;
+}
+
+/* Table Scroll Wrapper */
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
+/* Toolbar */
+.toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}

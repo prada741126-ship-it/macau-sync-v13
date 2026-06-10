@@ -1,0 +1,108 @@
+/* ============================================================================
+ * v13 移动端响应式 CSS
+ * 对照档第五节 — 断点 ≤700px 手机, 701-1023 平板, ≥1024 桌面
+ * ============================================================================ */
+
+@media (max-width: 700px) {
+  /* Sidebar → 隐藏，用 overlay */
+  #sidebar {
+    transform: translateX(-100%);
+    width: 220px;
+    position: fixed;
+    z-index: 101;
+  }
+  #sidebar.open {
+    transform: translateX(0);
+  }
+  #sidebar-overlay {
+    display: block; /* 通过 JS 控制 visibility */
+  }
+
+  #main-content {
+    margin-left: 0 !important;
+    padding-bottom: 60px; /* 底部导航空间 */
+  }
+
+  /* Topbar 简化 */
+  #topbar { padding: 0 12px; }
+  #topbar-title { font-size: 14px; }
+  #mobile-sb-btn { display: block !important; }
+
+  /* 底部导航 */
+  .mobile-bottom-nav {
+    display: flex;
+    justify-content: space-around;
+  }
+  .nav-item {
+    flex: 1; text-align: center;
+    padding: 8px 4px; font-size: 10px;
+    color: var(--text-muted); cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+  }
+  .nav-item .icon { font-size: 18px; }
+  .nav-item.active { color: var(--tech-cyan); }
+
+  /* Page padding */
+  #page-scroll { padding: 12px; }
+
+  /* Modal 全屏 */
+  .modal {
+    min-width: unset !important;
+    max-width: 95vw !important;
+    width: 95vw;
+    padding: 16px;
+    max-height: 90vh;
+  }
+  .modal .form-row { flex-direction: column; align-items: flex-start; }
+  .modal .form-row label { width: auto; text-align: left; }
+  .modal .form-row input,
+  .modal .form-row select { width: 100%; }
+  .rm-modal { min-width: unset; max-width: 95vw; width: 95vw; padding: 16px; }
+
+  /* KPI Grid 单列 */
+  #ov-kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+
+  /* Two Col → 单列 */
+  .ov-two-col { grid-template-columns: 1fr; }
+
+  /* 表格横向滚动 */
+  .table-scroll { font-size: 12px; }
+  th, td { padding: 6px 8px; font-size: 11px; }
+
+  /* Month Bar 简化 */
+  .month-bar { padding: 8px 12px; gap: 8px; }
+
+  /* KPI mini 简化 */
+  #all-kpi-mini { flex-direction: column; }
+  #all-kpi-mini > div { flex: unset; }
+
+  /* Topbar actions 简化 */
+  #topbar-actions .btn span { display: none; } /* 只显示图标 */
+}
+
+/* 平板 */
+@media (min-width: 701px) and (max-width: 1023px) {
+  #sidebar { width: 56px; }
+  #sidebar .sb-logo-text,
+  #sidebar .sb-item span,
+  #sidebar .sb-version,
+  #sidebar .sb-divider { display: none; }
+
+  #main-content { margin-left: 56px; }
+
+  #ov-kpi-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* 桌面 */
+@media (min-width: 1024px) {
+  #ov-kpi-grid { grid-template-columns: repeat(3, 1fr); }
+  #sidebar { width: var(--sidebar-w); }
+  #main-content { margin-left: var(--sidebar-w); }
+}
+
+/* 桌面大屏 */
+@media (min-width: 1400px) {
+  #ov-kpi-grid { grid-template-columns: repeat(6, 1fr); }
+  .ov-two-col { gap: 24px; }
+  .modal { min-width: 500px; max-width: 700px; }
+}

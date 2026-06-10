@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>澳門洗碼報表 v13.0.0</title>
+
+  <!-- 版本快取清除 -->
+  <script>
+    (function() {
+      var APP_VERSION = 'v13.0.0';
+      var stored = localStorage.getItem('macau_app_version');
+      if (stored && stored !== APP_VERSION && !sessionStorage.getItem('_v13_reloaded')) {
+        sessionStorage.setItem('_v13_reloaded', '1');
+        location.replace(location.href.split('?')[0] + '?v=' + APP_VERSION);
+      }
+      localStorage.setItem('macau_app_version', APP_VERSION);
+    })();
+  </script>
+
+  <!-- CSS (由 build.js 合并注入) -->
+  <!-- CSS_PLACEHOLDER -->
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+
+  <!-- CryptoJS -->
+  <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js"></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <!-- Firebase 初始化 -->
+  <script>
+    firebase.initializeApp({
+      apiKey: "AIzaSyDPLDEr5QnMQ_AD-z7Wppt2fylxWoBuxj0U",
+      authDomain: "macau-sync.firebaseapp.com",
+      databaseURL: "https://macau-sync-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "macau-sync",
+      storageBucket: "macau-sync.appspot.com",
+      messagingSenderId: "5394959664910",
+      appId: "1:5394959664910:web:f445ede79937711fdd65f",
+      measurementId: "G-8BFD758YCF"
+    });
+  </script>
+
+  <!-- JS (由 build.js 合并注入) -->
+  <!-- JS_PLACEHOLDER -->
+</head>
+<body>
+
+  <!-- 全域载入动画 -->
+  <div id="loading-overlay">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">處理中...</div>
+  </div>
+
+  <!-- 密码保护遮罩 -->
+  <div id="pw-overlay">
+    <div id="pw-box">
+      <div class="pw-emblem-text">博盈</div>
+      <div class="pw-subtitle">BOYING INTERNATIONAL CLUB</div>
+      <div class="pw-title">博盈國際會</div>
+      <div class="pw-divider">授 權 驗 證</div>
+      <input type="password" id="pw-input" placeholder="請輸入密碼" autocomplete="off">
+      <div id="pw-error"></div>
+      <div id="pw-attempts"></div>
+      <button class="pw-btn">驗 證 進 入</button>
+      <div id="pw-version">v13.0.0</div>
+    </div>
+  </div>
+
+  <!-- Toast 通知容器 -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- 主应用外框 -->
+  <div id="app-shell">
+
+    <!-- SIDEBAR -->
+    <div id="sidebar">
+      <div class="sb-logo">
+        <div class="sb-logo-icon">♠</div>
+        <div class="sb-logo-name sb-logo-text">博盈國際會</div>
+        <div class="sb-logo-text">洗碼管理系統</div>
+      </div>
+      <div class="sb-month" id="sidebar-month">2026-06</div>
+      <nav class="sb-nav" id="sb-nav">
+        <div class="sb-item active" data-page="overview"><span class="icon">📊</span><span>總覽</span></div>
+        <div class="sb-item" data-page="all"><span class="icon">📋</span><span>全部交易</span></div>
+        <div class="sb-item" data-page="query"><span class="icon">🔍</span><span>查詢</span></div>
+        <div class="sb-item" data-page="summary"><span class="icon">📈</span><span>統計</span></div>
+        <div class="sb-item" data-page="room"><span class="icon">🏨</span><span>房務系統</span></div>
+        <div class="sb-divider"></div>
+        <div class="sb-item" onclick="exportTxsCSV()"><span class="icon">📤</span><span>匯出CSV</span></div>
+        <div class="sb-item" onclick="document.getElementById('file-input').click()"><span class="icon">📥</span><span>匯入CSV</span></div>
+      </nav>
+      <div class="sb-toggle" title="摺疊/展開">◀</div>
+      <div class="sb-version" id="sb-version">v13.0.0</div>
+    </div>
+
+    <div id="sidebar-overlay"></div>
+
+    <!-- 手机版底部导航 -->
+    <div class="mobile-bottom-nav" id="mobile-bottom-nav">
+      <div class="nav-item active" data-page="overview"><span class="icon">📊</span>總覽</div>
+      <div class="nav-item" data-page="all"><span class="icon">📋</span>交易</div>
+      <div class="nav-item" data-page="query"><span class="icon">🔍</span>查詢</div>
+      <div class="nav-item" data-page="summary"><span class="icon">📈</span>統計</div>
+      <div class="nav-item" data-page="room"><span class="icon">🏨</span>房務</div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div id="main-content">
+
+      <!-- Topbar -->
+      <div id="topbar">
+        <div id="mobile-sb-btn" style="display:none;cursor:pointer;font-size:20px" onclick="toggleMobileSidebar()">☰</div>
+        <div id="topbar-title">總覽</div>
+        <div id="topbar-actions">
+          <button class="btn btn-primary btn-sm" onclick="Events.emit('tx:new')"><span>+ 新增</span></button>
+          <button class="btn btn-sm" onclick="doBackup()"><span>📦 備份</span></button>
+          <button class="btn btn-sm" onclick="syncUploadAll();showToast('同步中…','info')"><span>🔄 同步</span></button>
+          <button class="btn btn-sm" onclick="openModal('shortcut-help-modal')"><span>⌨️ 快捷鍵</span></button>
+        </div>
+      </div>
+
+      <!-- 页面区 -->
+      <div id="page-scroll">
+
+        <!-- 月份栏 -->
+        <div class="month-bar" id="month-bar">
+          <div id="month-badge">2026-06</div>
+          <div id="month-status">工作中</div>
+          <div id="sync-dot" class="connected"></div>
+          <div id="sync-text">已同步</div>
+          <button class="btn btn-sm" id="btn-close-month" onclick="closeCurrentMonth()">🔒 月末結算</button>
+          <div id="total-wallet-badge" style="margin-left:auto;font-size:13px;color:var(--gold-soft)">💰 總錢包: ¥0</div>
+        </div>
+
+        <!-- ===== 总览页 ===== -->
+        <div class="page active" id="page-overview">
+          <div class="quick-actions">
+            <button class="btn btn-sm" onclick="Events.emit('tx:new')">+ 新增交易</button>
+            <button class="btn btn-sm" onclick="RM.openModal()">+ 新增訂房</button>
+            <button class="btn btn-sm" onclick="showPage('summary')">📊 統計報表</button>
+          </div>
+          <div class="decorative-line"></div>
+
+          <div id="ov-kpi-grid"></div>
+
+          <div class="chart-full">
+            <canvas></canvas>
+          </div>
+
+          <div class="ov-two-col">
+            <div class="chart-full">
+              <canvas></canvas>
+            </div>
+            <div class="timeline-box"></div>
+          </div>
+        </div>
+
+        <!-- ===== 全部交易页 ===== -->
+        <div class="page" id="page-all">
+          <div id="all-kpi-mini"></div>
+          <div class="toolbar">
+            <input type="text" id="all-search" placeholder="搜索..." style="width:200px" oninput="renderAll()">
+            <button class="btn btn-sm btn-primary" onclick="Events.emit('tx:new')">+ 新增</button>
+            <button class="btn btn-sm" onclick="syncUploadAll()">🔄 同步</button>
+            <button class="btn btn-sm" onclick="exportTxsCSV()">📤 匯出CSV</button>
+            <button class="btn btn-sm" onclick="document.getElementById('file-input').click()">📥 匯入CSV</button>
+            <button class="btn btn-sm" onclick="openModal('agent-mgr-modal')">👥 代理管理</button>
+          </div>
+          <div id="all-msg" style="display:none;text-align:center;padding:40px;color:var(--text-muted)">暫無交易記錄</div>
+          <div class="table-scroll">
+            <table id="all-table">
+              <thead>
+                <tr>
+                  <th>類型</th><th>日期</th><th>代理</th><th>客戶</th><th>地點</th>
+                  <th>洗碼量</th><th>佣金</th><th>碼糧</th><th>已提領</th><th>未提領</th>
+                  <th>備註</th><th>操作</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ===== 查询页 ===== -->
+        <div class="page" id="page-query">
+          <div class="toolbar">
+            <select id="query-agent" onchange="doQuery()"><option value="">全部代理</option></select>
+            <select id="query-venue" onchange="doQuery()"><option value="">全部地點</option></select>
+            <select id="query-month" onchange="doQuery()"><option value="">全部月份</option></select>
+            <input type="text" id="query-search" placeholder="搜索..." style="width:160px" oninput="doQuery()">
+            <button class="btn btn-sm btn-primary" onclick="doQuery()">🔍 查詢</button>
+          </div>
+          <div id="query-kpi"></div>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>日期</th><th>代理</th><th>地點</th><th>洗碼量</th><th>碼糧</th><th>已提領</th><th>未提領</th><th>備註</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div style="margin-top:20px"><strong>代理帳務匯總</strong></div>
+          <div class="table-scroll" style="margin-top:8px">
+            <table class="agent-summary-table">
+              <thead><tr><th>代理</th><th>洗碼量</th><th>碼糧</th><th>已提領</th><th>未提領</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ===== 统计页 ===== -->
+        <div class="page" id="page-summary">
+          <div id="summary-kpi"></div>
+          <div class="table-scroll">
+            <table id="summary-table">
+              <thead><tr><th>代理</th><th>場地</th><th>洗碼量</th><th>碼糧</th><th>已提領</th><th>未提領</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ===== 房务系统页 ===== -->
+        <div class="page" id="page-room">
+          <div class="room-tabs">
+            <div class="room-tab active" onclick="switchRoomTab('booking',this)">📋 訂房管理</div>
+            <div class="room-tab" onclick="switchRoomTab('config',this)">⚙ 酒店設定</div>
+          </div>
+
+          <div class="room-tab-content active" id="room-tab-booking">
+            <div class="rm-dashboard">
+              <div class="rm-stat-card">
+                <div class="rm-stat-label">本月總洗碼量</div>
+                <div class="rm-stat-value rm-quota-volume">0萬</div>
+              </div>
+              <div class="rm-stat-card">
+                <div class="rm-stat-label">已使用轉碼數</div>
+                <div class="rm-stat-value rm-quota-used">0萬</div>
+              </div>
+              <div class="rm-stat-card">
+                <div class="rm-stat-label">剩餘轉碼數</div>
+                <div class="rm-stat-value rm-quota-rem">0萬</div>
+              </div>
+              <div class="rm-stat-card">
+                <div class="rm-stat-label">額度使用率</div>
+                <div class="rm-stat-value" style="color:var(--success)">0%</div>
+                <div class="rm-quota-bar-wrap"><div class="rm-quota-bar" style="width:0%"></div></div>
+              </div>
+            </div>
+            <div class="toolbar">
+              <select id="rm-agent-filter" onchange="RM.render()"><option value="">全部代理</option></select>
+              <select id="rm-month-filter" onchange="RM.render()"><option value="">全部月份</option></select>
+              <button class="btn btn-sm btn-primary" onclick="RM.openModal()">+ 新增訂房</button>
+              <button class="btn btn-sm" onclick="RM.exportCSV()">📤 匯出</button>
+              <button class="btn btn-sm" onclick="document.getElementById('rm-file-input').click()">📥 匯入</button>
+            </div>
+            <div class="table-scroll">
+              <table class="room-table">
+                <thead>
+                  <tr><th>日期</th><th>代理</th><th>客戶</th><th>體系</th><th>酒店</th><th>房型</th>
+                      <th>入住</th><th>退房</th><th>天數</th><th>單價</th><th>總費用</th><th>狀態</th><th>操作</th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="room-tab-content" id="room-tab-config">
+            <div class="hc-filter-bar">
+              <select id="hc-filter-casino" onchange="hcFilter()"><option value="">全部體系</option></select>
+              <select id="hc-filter-hotel" onchange="hcFilter()"><option value="">全部酒店</option></select>
+              <input type="text" id="hc-filter-search" placeholder="搜索..." style="width:160px" oninput="hcFilter()">
+              <button class="btn btn-sm btn-primary" onclick="hcOpenModal()">+ 新增房型</button>
+            </div>
+            <div class="table-scroll">
+              <table class="hc-table">
+                <thead><tr><th>體系</th><th>酒店</th><th>CODE</th><th>房型</th><th>平日價</th><th>週末價</th><th>特殊日</th><th>門檻(萬)</th><th>操作</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /page-scroll -->
+
+    </div><!-- /main-content -->
+
+  </div><!-- /app-shell -->
+
+  <!-- ===== MODALS ===== -->
+
+  <!-- 交易 Modal -->
+  <div class="modal-bg" id="modal">
+    <div class="modal-scroll">
+      <div class="modal">
+        <h3 id="modal-title">新增交易</h3>
+        <div id="draft-indicator" style="display:none;font-size:11px;color:var(--warning);margin-bottom:8px">📝 有未儲存的草稿</div>
+        <div class="form-row"><label>類型</label><select name="type" id="tx-type" onchange="toggleTypeFields()"><option value="rolling">轉碼</option><option value="cash">現金寄放</option></select></div>
+        <div class="form-row"><label>日期</label><input type="date" name="date" id="tx-date"></div>
+        <div class="form-row"><label>代理</label><select name="agent" id="tx-agent"><option value="">選擇代理</option></select></div>
+        <div class="form-row"><label>客戶</label><input type="text" name="client" id="tx-client"></div>
+        <div class="form-row"><label>地點</label><select name="venue" id="tx-venue"><option value="">選擇地點</option></select></div>
+        <div class="form-row"><label>洗碼量(萬)</label><input type="number" name="volume" id="tx-volume" step="0.01" oninput="calc()"></div>
+        <div class="form-row"><label>碼佣率(%)</label><input type="number" name="rate" id="tx-rate" step="0.01" oninput="calc()"></div>
+        <div class="form-row"><label>佣金</label><input type="number" name="comm" id="tx-comm" readonly></div>
+        <div class="form-row"><label>碼糧</label><input type="number" name="bonus" id="tx-bonus" oninput="calc()"></div>
+        <div class="form-row"><label>已提領</label><input type="number" name="drawn" id="tx-drawn" oninput="calc()"></div>
+        <div class="form-row"><label>未提領</label><input type="number" name="undrawn" id="tx-undrawn" readonly></div>
+        <div class="form-row"><label>公基金</label><input type="number" name="fund" id="tx-fund" readonly></div>
+        <div class="form-row"><label>現金寄放</label><input type="number" name="cash" id="tx-cash"></div>
+        <div class="form-row"><label>備註</label><input type="text" name="note" id="tx-note"></div>
+        <div class="form-actions">
+          <button class="btn btn-sm" onclick="closeModal()">取消</button>
+          <button class="btn btn-sm btn-primary" onclick="saveForm()">儲存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 公基金 Modal -->
+  <div class="modal-bg" id="fund-modal">
+    <div class="modal-scroll">
+      <div class="modal">
+        <h3>公基金</h3>
+        <div class="form-row"><label>日期</label><input type="date" id="fund-date"></div>
+        <div class="form-row"><label>類型</label><select id="fund-type"><option value="deposit">存入</option><option value="withdraw">提領</option></select></div>
+        <div class="form-row"><label>金額</label><input type="number" id="fund-amount"></div>
+        <div class="form-row"><label>備註</label><input type="text" id="fund-note"></div>
+        <div class="form-actions">
+          <button class="btn btn-sm" onclick="closeModal('fund-modal')">取消</button>
+          <button class="btn btn-sm btn-primary" onclick="saveFundForm()">儲存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 代理钱包 Modal -->
+  <div class="modal-bg" id="agent-wallet-modal">
+    <div class="modal-scroll">
+      <div class="modal">
+        <h3 id="wallet-title">代理錢包</h3>
+        <div class="form-row"><label>日期</label><input type="date" id="wallet-date"></div>
+        <div class="form-row"><label>類型</label><select id="wallet-type"><option value="deposit">存入</option><option value="cash_deposit">自存現金</option><option value="withdraw">提領</option></select></div>
+        <div class="form-row"><label>金額</label><input type="number" id="wallet-amount"></div>
+        <div class="form-row"><label>備註</label><input type="text" id="wallet-note"></div>
+        <div class="form-actions">
+          <button class="btn btn-sm" onclick="closeModal('agent-wallet-modal')">取消</button>
+          <button class="btn btn-sm btn-primary" onclick="saveAgentWalletForm()">儲存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 代理管理 Modal -->
+  <div class="modal-bg" id="agent-mgr-modal">
+    <div class="modal-scroll">
+      <div class="modal">
+        <h3>代理管理</h3>
+        <div class="form-row"><label>代理名稱</label><input type="text" id="mgr-agent-name"><button class="btn btn-sm btn-primary" onclick="addAgentFromMgr()">新增</button></div>
+        <div id="agent-mgr-list" style="max-height:300px;overflow-y:auto;margin-top:12px"></div>
+        <div class="form-actions">
+          <button class="btn btn-sm" onclick="closeModal('agent-mgr-modal')">關閉</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 快捷键帮助 Modal -->
+  <div class="modal-bg" id="shortcut-help-modal">
+    <div class="modal-scroll">
+      <div class="modal">
+        <h3>⌨️ 快捷鍵</h3>
+        <div id="shortcut-list"></div>
+        <div class="form-actions">
+          <button class="btn btn-sm" onclick="closeModal('shortcut-help-modal')">關閉</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 房务 Modal -->
+  <div id="rm-modal-bg">
+    <div class="rm-modal">
+      <h3 id="rm-modal-title">新增訂房</h3>
+      <div class="form-row"><label>代理</label><select id="rm-agent"><option value="">選擇代理</option></select></div>
+      <div class="form-row"><label>客戶</label><input type="text" id="rm-client"></div>
+      <div class="form-row"><label>體系</label><select id="rm-casino" onchange="rmOnCasinoChange()"><option value="">選擇體系</option></select></div>
+      <div class="form-row"><label>酒店</label><select id="rm-hotel" onchange="rmOnHotelChange()"><option value="">選擇酒店</option></select></div>
+      <div class="form-row"><label>房型</label><select id="rm-room" onchange="rmOnRoomChange()"><option value="">選擇房型</option></select></div>
+      <div class="form-row"><label>入住</label><input type="date" id="rm-checkin" onchange="rmCalcNights()"></div>
+      <div class="form-row"><label>退房</label><input type="date" id="rm-checkout" onchange="rmCalcNights()"></div>
+      <div class="form-row"><label>天數</label><input type="number" id="rm-nights" readonly></div>
+      <div class="form-row"><label>單價</label><input type="number" id="rm-price" onchange="rmCalcTotal()"></div>
+      <div class="form-row"><label>總費用</label><input type="number" id="rm-total" readonly></div>
+      <div class="form-row"><label>轉碼門檻(萬)</label><input type="number" id="rm-threshold" onchange="rmUpdatePrice()"></div>
+      <div class="form-row"><label>狀態</label><input type="text" id="rm-status" readonly></div>
+      <div class="form-row"><label>備註</label><input type="text" id="rm-note"></div>
+      <div class="form-actions">
+        <button class="btn btn-sm" onclick="rmCloseModal()">取消</button>
+        <button class="btn btn-sm btn-primary" onclick="rmSaveForm()">儲存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 酒店设定 Modal -->
+  <div id="hc-modal-bg">
+    <div class="hc-modal">
+      <h3 id="hc-modal-title">編輯房型</h3>
+      <div class="form-row"><label>體系</label><select id="hc-casino" onchange="hcOnCasinoChange()"><option value="">選擇體系</option></select></div>
+      <div class="form-row"><label>酒店</label><select id="hc-hotel"><option value="">選擇酒店</option></select></div>
+      <div class="form-row"><label>CODE</label><input type="text" id="hc-code"></div>
+      <div class="form-row"><label>房型</label><input type="text" id="hc-room"></div>
+      <div class="form-row"><label>平日價</label><input type="number" id="hc-weekday"></div>
+      <div class="form-row"><label>週末價</label><input type="number" id="hc-weekend"></div>
+      <div class="form-row"><label>特殊日價</label><input type="number" id="hc-special"></div>
+      <div class="form-row"><label>轉碼門檻(萬)</label><input type="number" id="hc-threshold"></div>
+      <div class="form-actions">
+        <button class="btn btn-sm" onclick="hcCloseModal()">取消</button>
+        <button class="btn btn-sm btn-primary" onclick="hcSaveModal()">儲存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 回到顶部 -->
+  <div id="back-to-top">↑</div>
+
+  <!-- 版本徽章 -->
+  <div id="version-badge">v13.0.0</div>
+
+  <!-- 隐藏文件上传 -->
+  <input type="file" id="file-input" accept=".csv" style="display:none" onchange="handleCSVImport(event)">
+  <input type="file" id="rm-file-input" accept=".csv" style="display:none" onchange="rmHandleImport(event)">
+
+  <!-- BUILD_INFO_PLACEHOLDER -->
+</body>
+</html>

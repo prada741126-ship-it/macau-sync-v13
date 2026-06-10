@@ -1,0 +1,328 @@
+/* ============================================================================
+ * v13 组件 CSS — 按钮/卡片/Modal/Toast/表单/搜索/加载动画
+ * ============================================================================ */
+
+/* 按钮 */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  transition: all var(--trans-base);
+  white-space: nowrap;
+}
+.btn:hover {
+  background: var(--bg-surface);
+  border-color: var(--tech-cyan);
+}
+.btn-primary {
+  background: var(--tech-cyan);
+  color: #000;
+  border-color: var(--tech-cyan);
+  font-weight: 600;
+}
+.btn-primary:hover {
+  background: #00b8e0;
+}
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+}
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+
+/* 卡片 */
+.card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+
+/* Modal */
+.modal-bg {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.65);
+  z-index: 200;
+  align-items: center;
+  justify-content: center;
+}
+.modal-scroll {
+  max-height: 85vh;
+  overflow-y: auto;
+  border-radius: var(--radius-lg);
+}
+.modal {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  min-width: 420px;
+  max-width: 600px;
+  box-shadow: var(--shadow-md);
+}
+.modal h3 {
+  font-size: 16px;
+  margin-bottom: 16px;
+  color: var(--text-primary);
+}
+.modal .form-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+  gap: 8px;
+}
+.modal .form-row label {
+  width: 80px;
+  min-width: 80px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-align: right;
+}
+.modal .form-row input,
+.modal .form-row select {
+  flex: 1;
+}
+.modal .form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* 房务 Modal */
+#rm-modal-bg {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.65);
+  z-index: 200;
+  align-items: center;
+  justify-content: center;
+}
+.rm-modal {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  min-width: 480px;
+  max-width: 700px;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-md);
+}
+
+/* 酒店设定 Modal */
+#hc-modal-bg {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.65);
+  z-index: 200;
+  align-items: center;
+  justify-content: center;
+}
+.hc-modal {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  min-width: 420px;
+  max-width: 550px;
+  box-shadow: var(--shadow-md);
+}
+
+/* Toast */
+#toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  pointer-events: none;
+}
+
+/* 加载动画 */
+#loading-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 250;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 16px;
+}
+.loading-spinner {
+  width: 40px; height: 40px;
+  border: 3px solid var(--border-subtle);
+  border-top-color: var(--tech-cyan);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { color: var(--text-secondary); font-size: 14px; }
+
+/* 密码遮罩 */
+#pw-overlay {
+  display: flex;
+  position: fixed;
+  inset: 0;
+  background: var(--bg-base);
+  z-index: 500;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+}
+#pw-box {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-gold);
+  border-radius: var(--radius-lg);
+  padding: 40px;
+  text-align: center;
+  min-width: 320px;
+  position: relative;
+}
+.pw-emblem-text { font-size: 11px; color: var(--gold-soft); letter-spacing: 4px; }
+.pw-subtitle { font-size: 10px; color: var(--text-muted); margin: 8px 0; letter-spacing: 2px; }
+.pw-title { font-size: 24px; font-weight: 700; color: var(--text-primary); letter-spacing: 4px; margin-bottom: 8px; }
+.pw-divider {
+  font-size: 12px; color: var(--text-muted);
+  padding: 8px 0 16px;
+  letter-spacing: 6px;
+  border-bottom: 1px solid var(--border-gold);
+}
+#pw-input {
+  width: 100%; padding: 10px 14px; font-size: 16px;
+  text-align: center; margin: 16px 0 8px;
+  letter-spacing: 4px;
+}
+.pw-btn {
+  width: 100%; padding: 10px;
+  background: var(--gold-soft); color: #000;
+  border: none; border-radius: var(--radius-sm);
+  font-size: 15px; font-weight: 600; cursor: pointer;
+  letter-spacing: 4px;
+  transition: background var(--trans-base);
+}
+.pw-btn:hover { background: var(--gold-light); }
+#pw-error { display: none; color: var(--danger); font-size: 12px; margin-top: 8px; }
+#pw-attempts { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+#pw-version { font-size: 10px; color: var(--text-muted); margin-top: 16px; }
+
+/* 版本徽章 */
+#version-badge {
+  position: fixed; bottom: 12px; right: 12px;
+  font-size: 10px; color: var(--text-muted);
+  background: var(--bg-elevated); padding: 4px 10px;
+  border-radius: 20px; border: 1px solid var(--border-subtle);
+  z-index: 50;
+}
+
+/* 回到顶部 */
+#back-to-top {
+  display: none;
+  position: fixed; bottom: 40px; right: 16px;
+  width: 36px; height: 36px;
+  background: var(--bg-elevated); color: var(--text-secondary);
+  border-radius: 50%; text-align: center; line-height: 36px;
+  cursor: pointer; font-size: 18px; z-index: 50;
+  border: 1px solid var(--border-subtle);
+  transition: all var(--trans-base);
+}
+#back-to-top:hover { color: var(--tech-cyan); border-color: var(--tech-cyan); }
+
+/* 房务页签 */
+.room-tabs {
+  display: flex; gap: 4px; margin-bottom: 16px;
+}
+.room-tab {
+  padding: 8px 20px; border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: var(--bg-surface); color: var(--text-secondary);
+  border: 1px solid var(--border-subtle); border-bottom: none;
+  cursor: pointer; font-size: 13px; transition: all var(--trans-base);
+}
+.room-tab.active {
+  background: var(--bg-elevated); color: var(--tech-cyan);
+  border-color: var(--border-subtle);
+}
+.room-tab-content { display: none; }
+.room-tab-content.active { display: block; }
+
+/* 时间筛选按钮 */
+.tf-btn {
+  padding: 4px 12px; font-size: 12px;
+  border-radius: 20px; border: 1px solid var(--border-subtle);
+  background: transparent; color: var(--text-secondary);
+  cursor: pointer; transition: all var(--trans-base);
+}
+.tf-btn:hover, .tf-btn.active {
+  background: rgba(0,212,255,0.12); color: var(--tech-cyan);
+  border-color: var(--tech-cyan);
+}
+
+/* 快捷操作 */
+.quick-actions {
+  display: flex; gap: 8px; margin-bottom: 16px;
+}
+
+/* 装饰线 */
+.decorative-line {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border-gold), transparent);
+  margin-bottom: 20px;
+}
+
+/* 房务仪表板 */
+.rm-dashboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.rm-stat-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  text-align: center;
+}
+.rm-stat-label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+.rm-stat-value { font-size: 18px; font-weight: 700; color: var(--tech-cyan); }
+.rm-quota-bar-wrap {
+  height: 8px; background: var(--bg-surface);
+  border-radius: 4px; overflow: hidden; margin-top: 8px;
+}
+.rm-quota-bar {
+  height: 100%; background: var(--success);
+  border-radius: 4px; transition: width 0.5s ease;
+}
+
+/* 酒店设定 */
+.hc-filter-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.hc-table-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+
+/* 手机底部导航 */
+.mobile-bottom-nav {
+  display: none;
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border-subtle);
+  z-index: 150;
+  padding: 6px 0;
+}
