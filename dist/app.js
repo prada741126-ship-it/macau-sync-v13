@@ -5807,8 +5807,9 @@ function _renderKPI(kpi) {
     var label = h('div', { className: 'kpi-label' }, c.label);
     label.style.cssText = 'font-size:12px;color:' + UI_COLORS.textSecondary + ';margin-bottom:8px';
 
-    var value = h('div', { className: 'kpi-value' }, c.value + (c.unit ? ' <span style="font-size:14px;color:' + UI_COLORS.textMuted + '">' + c.unit + '</span>' : ''));
+    var value = h('div', { className: 'kpi-value' });
     value.style.cssText = 'font-size:24px;font-weight:700;color:' + c.color;
+    value.innerHTML = c.value + (c.unit ? ' <span style="font-size:14px;color:' + UI_COLORS.textMuted + '">' + c.unit + '</span>' : '');
 
     card.appendChild(label);
     card.appendChild(value);
@@ -6496,6 +6497,7 @@ function rmImportCSV()       { RM.importCSV(); }
 var _trendChart = null;
 
 function renderTrendChart(txs, month) {
+  if (typeof Chart === 'undefined') return;
   var canvas = document.querySelector('#page-overview .chart-full canvas');
   if (!canvas) return;
 
@@ -6560,6 +6562,7 @@ function renderTrendChart(txs, month) {
 }
 
 function renderRankChart(txs) {
+  if (typeof Chart === 'undefined') return;
   var canvas = document.querySelector('#page-overview .ov-two-col canvas');
   if (!canvas) return;
 
@@ -6836,6 +6839,10 @@ function renderRoomChart(bookings, month) {
   // ========================================================================
   function initAppAfterLogin() {
     console.log('[v13:app] User authenticated, initializing app...');
+
+    // ★ 确保密码遮罩完全移除，避免阻挡点击
+    var pwOverlay = document.getElementById('pw-overlay');
+    if (pwOverlay) { pwOverlay.style.display = 'none'; pwOverlay.style.opacity = '0'; }
 
     // ★ 首先绑定交互: 先保侧栏能点、页面能切，再渲染数据
     _setupSidebar();

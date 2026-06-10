@@ -6,6 +6,7 @@
 var _trendChart = null;
 
 function renderTrendChart(txs, month) {
+  if (typeof Chart === 'undefined') return;
   var canvas = document.querySelector('#page-overview .chart-full canvas');
   if (!canvas) return;
 
@@ -70,6 +71,7 @@ function renderTrendChart(txs, month) {
 }
 
 function renderRankChart(txs) {
+  if (typeof Chart === 'undefined') return;
   var canvas = document.querySelector('#page-overview .ov-two-col canvas');
   if (!canvas) return;
 

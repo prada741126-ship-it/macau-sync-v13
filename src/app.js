@@ -157,6 +157,10 @@
   function initAppAfterLogin() {
     console.log('[v13:app] User authenticated, initializing app...');
 
+    // ★ 确保密码遮罩完全移除，避免阻挡点击
+    var pwOverlay = document.getElementById('pw-overlay');
+    if (pwOverlay) { pwOverlay.style.display = 'none'; pwOverlay.style.opacity = '0'; }
+
     // ★ 首先绑定交互: 先保侧栏能点、页面能切，再渲染数据
     _setupSidebar();
     _setupMonthBar();

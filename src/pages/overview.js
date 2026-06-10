@@ -59,8 +59,9 @@ function _renderKPI(kpi) {
     var label = h('div', { className: 'kpi-label' }, c.label);
     label.style.cssText = 'font-size:12px;color:' + UI_COLORS.textSecondary + ';margin-bottom:8px';
 
-    var value = h('div', { className: 'kpi-value' }, c.value + (c.unit ? ' <span style="font-size:14px;color:' + UI_COLORS.textMuted + '">' + c.unit + '</span>' : ''));
+    var value = h('div', { className: 'kpi-value' });
     value.style.cssText = 'font-size:24px;font-weight:700;color:' + c.color;
+    value.innerHTML = c.value + (c.unit ? ' <span style="font-size:14px;color:' + UI_COLORS.textMuted + '">' + c.unit + '</span>' : '');
 
     card.appendChild(label);
     card.appendChild(value);
