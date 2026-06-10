@@ -136,6 +136,9 @@
         <div class="sb-item" data-page="summary"><span class="icon">📈</span><span>統計</span></div>
         <div class="sb-item" data-page="room"><span class="icon">🏨</span><span>房務系統</span></div>
         <div class="sb-divider"></div>
+        <div class="sb-item" onclick="openModal('fund-modal')"><span class="icon">🏦</span><span>公基金</span></div>
+        <div class="sb-item" onclick="openWalletModal()"><span class="icon">💰</span><span>代理錢包</span></div>
+        <div class="sb-divider"></div>
         <div class="sb-item" onclick="exportTxsCSV()"><span class="icon">📤</span><span>匯出CSV</span></div>
         <div class="sb-item" onclick="document.getElementById('file-input').click()"><span class="icon">📥</span><span>匯入CSV</span></div>
       </nav>
@@ -401,6 +404,7 @@
     <div class="modal-scroll">
       <div class="modal">
         <h3 id="wallet-title">代理錢包</h3>
+        <div class="form-row"><label>代理</label><select id="wallet-agent"><option value="">選擇代理</option></select></div>
         <div class="form-row"><label>日期</label><input type="date" id="wallet-date"></div>
         <div class="form-row"><label>類型</label><select id="wallet-type"><option value="deposit">存入</option><option value="cash_deposit">自存現金</option><option value="withdraw">提領</option></select></div>
         <div class="form-row"><label>金額</label><input type="number" id="wallet-amount"></div>

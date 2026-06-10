@@ -7235,17 +7235,38 @@ var _walletAgentName = null;
 
 /** 打开代理钱包模态框 (供外部调用) */
 function openWalletModal(agentName) {
-  _walletAgentName = agentName;
+  _walletAgentName = agentName || '';
+  // 填充代理下拉
+  var agentSel = document.getElementById('wallet-agent');
+  if (agentSel) {
+    agentSel.innerHTML = '<option value="">選擇代理</option>';
+    var agents = getAllAgents();
+    for (var i = 0; i < agents.length; i++) {
+      var opt = document.createElement('option');
+      opt.value = agents[i];
+      opt.textContent = agents[i];
+      if (agents[i] === agentName) opt.selected = true;
+      agentSel.appendChild(opt);
+    }
+  }
   var title = document.getElementById('wallet-title');
-  if (title) title.textContent = '代理錢包 - ' + (agentName || '');
+  if (title) title.textContent = '代理錢包' + (agentName ? ' - ' + agentName : '');
   var dateEl = document.getElementById('wallet-date');
   if (dateEl) dateEl.value = nowStr();
+  var typeEl = document.getElementById('wallet-type');
+  if (typeEl) typeEl.value = 'deposit';
+  var amountEl = document.getElementById('wallet-amount');
+  if (amountEl) amountEl.value = '';
+  var noteEl = document.getElementById('wallet-note');
+  if (noteEl) noteEl.value = '';
   openModal('agent-wallet-modal');
 }
 
 function saveAgentWalletForm() {
-  if (!_walletAgentName) {
-    showToast('代理資訊缺失', 'error');
+  var agentSel = document.getElementById('wallet-agent');
+  var agent = (agentSel && agentSel.value) ? agentSel.value : _walletAgentName;
+  if (!agent) {
+    showToast('請選擇代理', 'warning');
     return;
   }
 
@@ -7261,7 +7282,7 @@ function saveAgentWalletForm() {
     return;
   }
 
-  var record = createWallet(_walletAgentName, data);
+  var record = createWallet(agent, data);
   if (record) {
     closeModal('agent-wallet-modal');
     refreshAllViews();
