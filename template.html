@@ -136,7 +136,7 @@
         <div class="sb-item" data-page="summary"><span class="icon">📈</span><span>統計</span></div>
         <div class="sb-item" data-page="room"><span class="icon">🏨</span><span>房務系統</span></div>
         <div class="sb-divider"></div>
-        <div class="sb-item" onclick="openModal('fund-modal')"><span class="icon">🏦</span><span>公基金</span></div>
+        <div class="sb-item" onclick="openFundModal()"><span class="icon">🏦</span><span>公基金</span></div>
         <div class="sb-item" onclick="openWalletModal()"><span class="icon">💰</span><span>代理錢包</span></div>
         <div class="sb-divider"></div>
         <div class="sb-item" onclick="exportTxsCSV()"><span class="icon">📤</span><span>匯出CSV</span></div>
@@ -260,18 +260,18 @@
           </div>
           <div id="query-kpi"></div>
           <div class="table-scroll">
-            <table>
-              <thead><tr><th>日期</th><th>代理</th><th>地點</th><th>洗碼量</th><th>碼糧</th><th>已提領</th><th>未提領</th><th>備註</th></tr></thead>
-              <tbody></tbody>
+            <table id="query-table">
+              <thead id="query-thead"><tr><th>日期</th><th>代理</th><th>地點</th><th>洗碼量</th><th>碼糧</th><th>已提領</th><th>未提領</th><th>備註</th></tr></thead>
+              <tbody id="query-tbody"></tbody>
             </table>
           </div>
-          <div style="margin-top:20px"><strong>代理帳務匯總</strong></div>
+          <div id="query-agent-summary-section" style="margin-top:20px"><strong>代理帳務匯總</strong>
           <div class="table-scroll" style="margin-top:8px">
             <table class="agent-summary-table">
               <thead><tr><th>代理</th><th>洗碼量</th><th>碼糧</th><th>已提領</th><th>未提領</th><th>💰 錢包餘額</th></tr></thead>
               <tbody></tbody>
             </table>
-          </div>
+          </div></div>
         </div>
 
         <!-- ===== 统计页 ===== -->

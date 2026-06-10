@@ -300,6 +300,43 @@ function saveFundForm() {
   }
 }
 
+/** 打开公基金模态框（重置表单） */
+function openFundModal() {
+  var dateEl = document.getElementById('fund-date');
+  if (dateEl) dateEl.value = nowStr();
+  var typeEl = document.getElementById('fund-type');
+  if (typeEl) typeEl.value = 'deposit';
+  var amountEl = document.getElementById('fund-amount');
+  if (amountEl) amountEl.value = '';
+  var noteEl = document.getElementById('fund-note');
+  if (noteEl) noteEl.value = '';
+  openModal('fund-modal');
+}
+
+/** 删除公基金记录（从查询页调用） */
+function deleteFundRecord(fbKey) {
+  if (!confirm('確定刪除此筆公基金記錄？')) return;
+  var result = deleteFund(fbKey);
+  if (result) {
+    showToast('已刪除', 'success');
+    refreshAllViews();
+  } else {
+    showToast('刪除失敗', 'error');
+  }
+}
+
+/** 删除代理钱包记录（从查询页调用） */
+function deleteAgentWallet(agent, fbKey) {
+  if (!confirm('確定刪除此筆錢包記錄？')) return;
+  var result = deleteWallet(agent, fbKey);
+  if (result) {
+    showToast('已刪除', 'success');
+    refreshAllViews();
+  } else {
+    showToast('刪除失敗', 'error');
+  }
+}
+
 // ============================================================================
 // 代理钱包表单桥接
 // ============================================================================
