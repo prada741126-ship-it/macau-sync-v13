@@ -6928,15 +6928,15 @@ function calc() {
     var undrawn = calcUndrawn(bonus, drawn);
 
     var commEl = document.getElementById('tx-comm');
-    if (commEl) commEl.value = comm.toFixed(2);
+    if (commEl) commEl.value = Math.round(comm).toString();
 
     var fundEl = document.getElementById('tx-fund');
-    if (fundEl) fundEl.value = fund.toFixed(2);
+    if (fundEl) fundEl.value = Math.round(fund).toString();
 
     var undrawnEl = document.getElementById('tx-undrawn');
-    if (undrawnEl) undrawnEl.value = undrawn.toFixed(2);
+    if (undrawnEl) undrawnEl.value = Math.round(undrawn).toString();
 
-    console.log('[calc] vol=' + vol + ' rate=' + rate + ' → comm=' + comm.toFixed(2) + ' fund=' + fund.toFixed(2) + ' undrawn=' + undrawn.toFixed(2));
+    console.log('[calc] vol=' + vol + ' rate=' + rate + ' → comm=' + Math.round(comm) + ' fund=' + Math.round(fund) + ' undrawn=' + Math.round(undrawn));
 
     // 保存草稿
     if (typeof saveDraft === 'function') {
