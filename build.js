@@ -145,9 +145,14 @@ function build() {
   const css = buildCSS();
   html = html.replace('<!-- CSS_PLACEHOLDER -->', '<style>\n' + css + '\n</style>');
 
-  // 合并 JS
+  // 合并 JS → 输出为外部 app.js（避免 </script> 在 JS 字符串中导致 HTML 解析错误）
   const js = buildJS();
-  html = html.replace('<!-- JS_PLACEHOLDER -->', '<script>\n' + js + '\n</script>');
+  const APP_JS_PATH = path.join(BASE_DIR, 'app.js');
+  const DIST_APP_JS = path.join(DIST_DIR, 'app.js');
+  fs.writeFileSync(APP_JS_PATH, js, 'utf-8');
+  if (!fs.existsSync(DIST_DIR)) fs.mkdirSync(DIST_DIR, { recursive: true });
+  fs.writeFileSync(DIST_APP_JS, js, 'utf-8');
+  console.log('  ✓ app.js written:', (fs.statSync(APP_JS_PATH).size / 1024).toFixed(1), 'KB');
 
   // 版本替换
   const verPattern = /v\d+\.\d+(\.\d+)?/g;
