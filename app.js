@@ -5308,6 +5308,7 @@ function syncDownloadAll() {
     if (funds.length > 0) {
       State.set('fundWithdrawals', funds);
       Store.saveFund(funds);
+      Events.emit(EVENTS.FUND_LOADED, funds);
     }
   });
 
@@ -5316,6 +5317,7 @@ function syncDownloadAll() {
     if (list && Array.isArray(list)) {
       State.set('agentList', list);
       Store.saveAgentList(list);
+      Events.emit(EVENTS.AGENT_LIST_UPDATED, list);
     }
   });
 
@@ -5324,6 +5326,7 @@ function syncDownloadAll() {
     if (Object.keys(wallets).length > 0) {
       State.set('agentWallets', wallets);
       Store.saveWallets(wallets);
+      Events.emit(EVENTS.WALLETS_LOADED, wallets);
     }
   });
 
@@ -5332,6 +5335,7 @@ function syncDownloadAll() {
     if (month) {
       State.set('workingMonth', month);
       Store.saveWorkingMonth(month);
+      Events.emit(EVENTS.MONTH_CHANGED, month);
     }
   });
 
@@ -5340,6 +5344,7 @@ function syncDownloadAll() {
     if (bookings.length > 0) {
       State.set('bookings', bookings);
       Store.saveBookings(bookings);
+      Events.emit(EVENTS.BOOKINGS_LOADED, bookings);
     }
   });
 
@@ -9753,6 +9758,23 @@ Events.on(EVENTS.HC_CONFIG_UPDATED, function() {
         showPage(page, this);
       });
     }
+
+    // ★ 手机底部导航绑定
+    var mobileNavItems = document.querySelectorAll('.nav-item[data-page]');
+    for (var mi = 0; mi < mobileNavItems.length; mi++) {
+      mobileNavItems[mi].addEventListener('click', function() {
+        var page = this.getAttribute('data-page');
+        showPage(page);
+      });
+    }
+
+    // 手机底部导航 active 状态同步
+    Events.on(EVENTS.PAGE_CHANGED, function(pageName) {
+      var items = document.querySelectorAll('.nav-item[data-page]');
+      for (var ni = 0; ni < items.length; ni++) {
+        items[ni].classList.toggle('active', items[ni].getAttribute('data-page') === pageName);
+      }
+    });
 
     // 手机侧边栏
     var overlay = $('#sidebar-overlay');
