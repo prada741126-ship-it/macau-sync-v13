@@ -8096,7 +8096,7 @@ function _renderFundCard() {
   });
 
   // 渲染卡片 — 复用代理钱包卡片样式 (.wallet-agent-card 系列)，视觉统一
-  var html = '<div class="wallet-agent-card">' +
+  var html = '<div class="wallet-agent-grid"><div class="wallet-agent-card">' +
     '<div class="wallet-agent-card-header">' +
       '<span class="wa-name">🏦 公基金</span>' +
       '<span class="wa-balance">' + fmtMoney(balance) + '</span>' +
@@ -8136,7 +8136,7 @@ function _renderFundCard() {
     html += '</tbody></table></div>';
   }
 
-  html += '</div>';
+  html += '</div></div>';  // 关闭 .wallet-agent-card 和 .wallet-agent-grid
 
   container.innerHTML = html;
 }
