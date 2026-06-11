@@ -183,7 +183,27 @@ var Store = (function() {
     save(STORAGE_KEYS.RM_BOOKINGS, bookings, false);
   }
   function loadBookings() {
-    return load(STORAGE_KEYS.RM_BOOKINGS, false) || [];
+    var bookings = load(STORAGE_KEYS.RM_BOOKINGS, false) || [];
+    // 数据迁移：修正旧数据中 month 字段格式 (YYYY/MM → YYYY-MM)
+    var fixed = 0;
+    for (var i = 0; i < bookings.length; i++) {
+      if (bookings[i].month && bookings[i].month.indexOf('/') >= 0) {
+        bookings[i].month = bookings[i].month.replace(/\//g, '-');
+        fixed++;
+      }
+      if (bookings[i].checkIn && bookings[i].checkIn.indexOf('/') >= 0) {
+        bookings[i].checkIn = bookings[i].checkIn.replace(/\//g, '-');
+      }
+      if (bookings[i].checkOut && bookings[i].checkOut.indexOf('/') >= 0) {
+        bookings[i].checkOut = bookings[i].checkOut.replace(/\//g, '-');
+      }
+    }
+    if (fixed > 0) {
+      console.log('[v13:store] Migrated ' + fixed + ' bookings: month format YYYY/MM → YYYY-MM');
+      // 保存修正后的数据
+      save(STORAGE_KEYS.RM_BOOKINGS, bookings, false);
+    }
+    return bookings;
   }
   function saveBookingLastId(id) {
     localStorage.setItem(STORAGE_KEYS.RM_LAST_ID, String(id));
@@ -198,6 +218,12 @@ var Store = (function() {
   }
   function loadHCConfig() {
     return load(STORAGE_KEYS.HC_CONFIG, false) || [];
+  }
+  function saveHCPresetVersion(ver) {
+    localStorage.setItem(STORAGE_KEYS.HC_PRESET_VERSION, String(ver));
+  }
+  function loadHCPresetVersion() {
+    return localStorage.getItem(STORAGE_KEYS.HC_PRESET_VERSION) || '';
   }
 
   // --- 版本 ---
@@ -307,6 +333,8 @@ var Store = (function() {
     loadBookingLastId:  loadBookingLastId,
     saveHCConfig:       saveHCConfig,
     loadHCConfig:       loadHCConfig,
+    saveHCPresetVersion:saveHCPresetVersion,
+    loadHCPresetVersion:loadHCPresetVersion,
     saveAppVersion:     saveAppVersion,
     loadAppVersion:     loadAppVersion,
     // 全量

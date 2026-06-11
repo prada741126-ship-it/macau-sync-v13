@@ -1,108 +1,396 @@
 /* ============================================================================
  * v13 移动端响应式 CSS
- * 对照档第五节 — 断点 ≤700px 手机, 701-1023 平板, ≥1024 桌面
+ * 断点: ≤700px 手机 / 701-1023 平板 / ≥1024 桌面 / ≥1400 大屏
  * ============================================================================ */
 
+/* ═══════════════════════════════════════════════════════
+ * 手机端 (≤700px)
+ * ═══════════════════════════════════════════════════════ */
+
 @media (max-width: 700px) {
-  /* Sidebar → 隐藏，用 overlay */
+
+  /* ── Sidebar → 抽屉式 ── */
   #sidebar {
     transform: translateX(-100%);
-    width: 220px;
+    width: 240px;
     position: fixed;
     z-index: 101;
+    box-shadow: 4px 0 24px rgba(0,0,0,0.5);
   }
   #sidebar.open {
     transform: translateX(0);
   }
   #sidebar-overlay {
-    display: block; /* 通过 JS 控制 visibility */
+    display: block;
   }
 
+  /* ── Main Content ── */
   #main-content {
     margin-left: 0 !important;
-    padding-bottom: 60px; /* 底部导航空间 */
+    padding-bottom: 68px;  /* 底部导航空间 + safe area */
   }
 
-  /* Topbar 简化 */
-  #topbar { padding: 0 12px; }
+  /* ── Topbar ── */
+  #topbar {
+    padding: 0 12px;
+    height: 48px;
+  }
   #topbar-title { font-size: 14px; }
-  #mobile-sb-btn { display: block !important; }
+  #mobile-sb-btn {
+    display: block !important;
+    padding: 4px;
+    cursor: pointer;
+  }
 
-  /* 底部导航 */
+  /* 隐藏 topbar 按钮文字，仅图标 */
+  #topbar-actions .btn {
+    padding: 6px 8px;
+    font-size: 12px;
+    gap: 4px;
+  }
+  #topbar-actions .btn span { display: none; }
+
+  /* ── 底部导航 ── */
   .mobile-bottom-nav {
     display: flex;
     justify-content: space-around;
   }
   .nav-item {
-    flex: 1; text-align: center;
-    padding: 8px 4px; font-size: 10px;
-    color: var(--text-muted); cursor: pointer;
-    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    flex: 1;
+    text-align: center;
+    padding: 8px 4px 6px;
+    font-size: 10px;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    transition: color var(--trans-base);
   }
   .nav-item .icon { font-size: 18px; }
   .nav-item.active { color: var(--tech-cyan); }
+  .nav-item:active { transform: scale(0.95); }
 
-  /* Page padding */
-  #page-scroll { padding: 12px; }
+  /* ── Page Content ── */
+  #page-scroll {
+    padding: 12px;
+    -webkit-overflow-scrolling: touch;
+  }
 
-  /* Modal 全屏 */
+  /* ── Month Bar ── */
+  .month-bar {
+    padding: 10px 12px;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 12px;
+  }
+  #month-badge { font-size: 13px; }
+  #total-wallet-badge { font-size: 11px; margin-left: 0; width: 100%; text-align: right; }
+
+  /* ── KPI Grid → 2列 ── */
+  .kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .kpi-card { padding: 12px; }
+  .kpi-card-value { font-size: 20px; }
+
+  /* ── 仪表板 Grid → 2列 ── */
+  .dash-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .dash-card { padding: 10px; }
+  .dash-card-value { font-size: 17px; }
+
+  /* ── Two Column → 单列 ── */
+  .two-col,
+  .two-col-3-7,
+  .two-col-7-3 {
+    grid-template-columns: 1fr;
+  }
+
+  /* ── 图表容器 ── */
+  .chart-container.sm,
+  .chart-container.md { height: 220px; }
+  .chart-container.lg { height: 280px; }
+
+  /* ── 表格 ── */
+  .table-scroll {
+    font-size: 12px;
+    -webkit-overflow-scrolling: touch;
+    border-radius: var(--radius-sm);
+  }
+  th, td {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+
+  /* 操作栏 sticky 右固定 */
+  .table-scroll th:last-child,
+  .table-scroll td:last-child {
+    position: sticky;
+    right: 0;
+    background: var(--bg-surface);
+    box-shadow: -4px 0 8px rgba(0,0,0,0.3);
+    z-index: 2;
+    min-width: 54px;
+    text-align: center;
+  }
+  .table-scroll thead th:last-child {
+    z-index: 4;
+  }
+  .table-scroll tr:nth-child(even) td:last-child {
+    background: var(--bg-elevated);
+  }
+
+  /* ── Modal 全屏化 ── */
   .modal {
     min-width: unset !important;
-    max-width: 95vw !important;
-    width: 95vw;
-    padding: 16px;
-    max-height: 90vh;
+    max-width: 94vw !important;
+    width: 94vw;
+    padding: 18px;
+    max-height: 88vh;
+    border-radius: var(--radius-md);
   }
-  .modal .form-row { flex-direction: column; align-items: flex-start; }
-  .modal .form-row label { width: auto; text-align: left; }
+  .modal .form-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .modal .form-row label {
+    width: auto;
+    text-align: left;
+    font-size: 12px;
+  }
   .modal .form-row input,
-  .modal .form-row select { width: 100%; }
-  .rm-modal { min-width: unset; max-width: 95vw; width: 95vw; padding: 16px; }
+  .modal .form-row select {
+    width: 100%;
+  }
+  .rm-modal {
+    min-width: unset;
+    max-width: 94vw;
+    width: 94vw;
+    padding: 18px;
+  }
+  .hc-modal {
+    min-width: unset;
+    max-width: 94vw;
+    width: 94vw;
+    padding: 18px;
+  }
 
-  /* KPI Grid 单列 */
-  #ov-kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  /* ── 房务页签 ── */
+  .room-tab {
+    padding: 7px 14px;
+    font-size: 12px;
+  }
 
-  /* Two Col → 单列 */
-  .ov-two-col { grid-template-columns: 1fr; }
+  /* ── 时间筛选按钮 ── */
+  .tf-row {
+    padding: 8px 10px;
+    gap: 6px;
+  }
+  .tf-btn {
+    padding: 5px 12px;
+    font-size: 11px;
+    min-width: 48px;
+  }
 
-  /* 表格横向滚动 */
-  .table-scroll { font-size: 12px; }
-  th, td { padding: 6px 8px; font-size: 11px; }
+  /* ── Toolbar ── */
+  .toolbar {
+    gap: 6px;
+  }
+  .toolbar > input,
+  .toolbar > select {
+    min-width: 100px;
+    font-size: 12px;
+  }
 
-  /* Month Bar 简化 */
-  .month-bar { padding: 8px 12px; gap: 8px; }
+  /* ── 钱包页 ── */
+  .wallet-overview {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .wallet-kpi-card { padding: 12px; }
+  .wallet-kpi-card .wk-value { font-size: 18px; }
+  .wallet-agent-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
 
-  /* KPI mini 简化 */
-  #all-kpi-mini { flex-direction: column; }
-  #all-kpi-mini > div { flex: unset; }
+  /* ── 快捷操作 ── */
+  .quick-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
 
-  /* Topbar actions 简化 */
-  #topbar-actions .btn span { display: none; } /* 只显示图标 */
+  /* ── Toast 位置 ── */
+  #toast-container {
+    top: 12px;
+    left: 12px;
+    right: 12px;
+    align-items: stretch;
+  }
+  .toast {
+    max-width: unset;
+    font-size: 12px;
+  }
+
+  /* ── 版本徽章 ── */
+  #version-badge {
+    bottom: 68px;
+    right: 8px;
+    font-size: 9px;
+    padding: 3px 8px;
+  }
+
+  /* ── 回到顶部 ── */
+  #back-to-top {
+    bottom: 78px;
+    right: 10px;
+    width: 34px;
+    height: 34px;
+    line-height: 34px;
+    font-size: 16px;
+  }
+
+  /* ── 密码框 ── */
+  #pw-box {
+    min-width: 280px;
+    padding: 28px 20px;
+  }
+  .pw-title { font-size: 20px; }
+
+  /* ── 酒店设定批量栏 ── */
+  #hc-batch-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  /* ── 日期选择组 ── */
+  .date-sel-group select {
+    width: 72px !important;
+  }
 }
 
-/* 平板 */
+/* ═══════════════════════════════════════════════════════
+ * 平板端 (701-1023px)
+ * ═══════════════════════════════════════════════════════ */
+
 @media (min-width: 701px) and (max-width: 1023px) {
-  #sidebar { width: 56px; }
+  /* Sidebar 折叠 */
+  #sidebar {
+    width: var(--sidebar-collapsed);
+  }
   #sidebar .sb-logo-text,
   #sidebar .sb-item span,
   #sidebar .sb-version,
   #sidebar .sb-divider { display: none; }
 
-  #main-content { margin-left: 56px; }
+  #main-content {
+    margin-left: var(--sidebar-collapsed);
+  }
 
-  #ov-kpi-grid { grid-template-columns: repeat(3, 1fr); }
+  /* KPI Grid → 3列 */
+  .kpi-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .dash-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  /* Two Column → 单列（平板竖屏时空间有限）*/
+  .two-col-3-7,
+  .two-col-7-3 {
+    grid-template-columns: 1fr;
+  }
+
+  .modal { min-width: 380px; max-width: 600px; }
 }
 
-/* 桌面 */
+/* ═══════════════════════════════════════════════════════
+ * 桌面端 (≥1024px)
+ * ═══════════════════════════════════════════════════════ */
+
 @media (min-width: 1024px) {
-  #ov-kpi-grid { grid-template-columns: repeat(3, 1fr); }
+  .kpi-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
   #sidebar { width: var(--sidebar-w); }
   #main-content { margin-left: var(--sidebar-w); }
 }
 
-/* 桌面大屏 */
+/* ═══════════════════════════════════════════════════════
+ * 大屏 (≥1400px)
+ * ═══════════════════════════════════════════════════════ */
+
 @media (min-width: 1400px) {
-  #ov-kpi-grid { grid-template-columns: repeat(6, 1fr); }
-  .ov-two-col { gap: 24px; }
-  .modal { min-width: 500px; max-width: 700px; }
+  .kpi-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+  .dash-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+  .two-col { gap: 24px; }
+  .modal { min-width: 500px; max-width: 750px; }
+
+  #page-scroll {
+    padding: 28px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+ * 超小屏 (≤380px) — iPhone SE 级别
+ * ═══════════════════════════════════════════════════════ */
+
+@media (max-width: 380px) {
+  .kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+  .kpi-card { padding: 10px; }
+  .kpi-card-value { font-size: 18px; }
+  .kpi-card-label { font-size: 10px; }
+
+  .dash-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+
+  .wallet-overview {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+
+  #page-scroll { padding: 8px; }
+  #topbar { padding: 0 8px; }
+}
+
+/* ═══════════════════════════════════════════════════════
+ * 触摸设备优化
+ * ═══════════════════════════════════════════════════════ */
+
+@media (hover: none) and (pointer: coarse) {
+  /* 增大触摸目标 */
+  .btn,
+  .nav-item,
+  .sb-item,
+  .room-tab,
+  .tf-btn {
+    min-height: 44px;
+  }
+
+  /* 移除 hover 依赖的动画 */
+  .kpi-card:hover::before { opacity: 0; }
+  .sb-item::after { display: none; }
+
+  /* 脉冲反馈替代 */
+  .btn:active,
+  .nav-item:active,
+  .tf-btn:active {
+    transform: scale(0.95);
+  }
 }

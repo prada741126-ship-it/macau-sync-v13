@@ -21,20 +21,19 @@ function _renderSummaryKPI(txs) {
   if (!el) return;
   var kpi = calcKPI(txs);
   el.innerHTML = '';
-  el.style.cssText = 'display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap';
 
   var items = [
-    { label: '總筆數', value: kpi.txCount, color: UI_COLORS.techCyan },
-    { label: '代理數', value: kpi.agentCount, color: UI_COLORS.electricViolet },
-    { label: TERMS.volume, value: fmt(kpi.totalVolume) + '萬', color: UI_COLORS.skyBlue },
-    { label: TERMS.undrawn, value: fmtMoney(kpi.totalUndrawn), color: UI_COLORS.warning },
+    { label: '總筆數', value: kpi.txCount, accent: 'cyan',   color: UI_COLORS.techCyan },
+    { label: '代理數', value: kpi.agentCount, accent: 'violet', color: UI_COLORS.electricViolet },
+    { label: TERMS.volume, value: fmt(kpi.totalVolume) + '萬', accent: 'blue',    color: UI_COLORS.skyBlue },
+    { label: TERMS.undrawn, value: fmtMoney(kpi.totalUndrawn), accent: 'orange',  color: UI_COLORS.warning },
   ];
 
   for (var i = 0; i < items.length; i++) {
-    var card = h('div');
-    card.style.cssText = 'flex:1;min-width:120px;background:' + UI_COLORS.bgElevated + ';padding:12px;border-radius:8px;border:1px solid ' + UI_COLORS.borderSubtle + ';border-left:3px solid ' + items[i].color;
-    card.innerHTML = '<div style="font-size:11px;color:' + UI_COLORS.textMuted + '">' + items[i].label + '</div>' +
-                     '<div style="font-size:20px;font-weight:700;color:' + items[i].color + '">' + items[i].value + '</div>';
+    var card = h('div', { className: 'kpi-card' });
+    card.style.borderLeft = '3px solid ' + items[i].color;
+    card.innerHTML = '<div class="kpi-card-label">' + items[i].label + '</div>' +
+                     '<div class="kpi-card-value ' + items[i].accent + '">' + items[i].value + '</div>';
     el.appendChild(card);
   }
 }

@@ -255,8 +255,8 @@ test('CASINO_ORDER 有 6 个体系', function() {
   assertEqual(CASINO_ORDER.length, 6);
 });
 
-test('PAGES 有 5 个页面', function() {
-  assertEqual(PAGES.length, 5);
+test('PAGES 有 6 个页面', function() {
+  assertEqual(PAGES.length, 6);
 });
 
 // ============================================================================
@@ -272,7 +272,7 @@ test('APP.VERSION 非空', function() {
 test('STORAGE_KEYS 有 16 个 key', function() {
   var count = 0;
   for (var k in STORAGE_KEYS) { if (STORAGE_KEYS.hasOwnProperty(k)) count++; }
-  assertEqual(count, 17); // 17 with APP_VERSION
+  assertEqual(count, 18); // 16 original + APP_VERSION + HC_PRESET_VERSION
 });
 
 test('FB_PATH 有 7 条路径', function() {
@@ -296,8 +296,8 @@ test('UI_COLORS 包含关键颜色', function() {
   }
 });
 
-test('SHORTCUTS 有 10 个快捷键', function() {
-  assertEqual(SHORTCUTS.length, 10);
+test('SHORTCUTS 有 11 个快捷键', function() {
+  assertEqual(SHORTCUTS.length, 11);
 });
 
 // ============================================================================

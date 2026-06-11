@@ -246,15 +246,22 @@ function calcTotalWallet(txs, fundWithdrawals, agentWallets) {
  */
 function calcRoomQuota(bookings, txs, month) {
   var totalVolume = 0;
+  // 月份归一化 ("2026/06" → "2026-06")
+  var normMonth = month ? month.replace(/\//g, '-') : '';
+
   for (var i = 0; i < txs.length; i++) {
-    if (!month || txs[i].date.indexOf(month) === 0) {
+    // 日期归一化后再匹配 (支持 "YYYY-MM-DD" 和 "YYYY/MM/DD")
+    var txDate = (txs[i].date || '').replace(/\//g, '-');
+    if (!normMonth || txDate.indexOf(normMonth) === 0) {
       totalVolume += toNum(txs[i].volume);
     }
   }
 
   var usedThreshold = 0;
   for (var j = 0; j < bookings.length; j++) {
-    if (!month || bookings[j].month === month) {
+    // month 字段归一化后再匹配
+    var bkMonth = (bookings[j].month || '').replace(/\//g, '-');
+    if (!normMonth || bkMonth === normMonth) {
       usedThreshold += toNum(bookings[j].threshold) || 0;
     }
   }

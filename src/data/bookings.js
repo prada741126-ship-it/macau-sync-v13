@@ -13,6 +13,15 @@
 // ============================================================================
 
 /**
+ * 归一化日期字符串为 YYYY-MM 格式 (用于 month 字段)
+ * 支持 YYYY/MM/DD 和 YYYY-MM-DD 输入
+ */
+function normalizeMonth(dateStr) {
+  if (!dateStr) return nowStr().substring(0, 7); // "YYYY-MM"
+  return dateStr.replace(/\//g, '-').substring(0, 7);
+}
+
+/**
  * 新增订房
  * @param {object} data
  * @returns {object}
@@ -27,7 +36,7 @@ function createBooking(data) {
     id:            State.nextId('booking'),
     _fbKey:        fbKey,
     date:          data.date || nowStr(),
-    month:         (data.checkIn || nowStr()).substring(0, 7),
+    month:         normalizeMonth(data.checkIn),
     agent:         data.agent || '',
     client:        data.client || '',
     casino:        data.casino || '',
@@ -80,7 +89,7 @@ function updateBooking(fbKey, data) {
         // 重算
         b.nights = calcNights(b.checkIn, b.checkOut);
         b.totalCost = b.nights * b.pricePerNight;
-        b.month = b.checkIn.substring(0, 7);
+        b.month = normalizeMonth(b.checkIn);
         updated = b;
         break;
       }

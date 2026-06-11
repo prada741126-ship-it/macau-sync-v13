@@ -75,6 +75,7 @@ const JS_FILES = [
   'src/pages/query.js',
   'src/pages/summary.js',
   'src/pages/room.js',
+  'src/pages/wallet.js',
   'src/charts/trend.js',
 
   // Phase 7: Bridge (HTML onclick → JS glue, 最后加载)

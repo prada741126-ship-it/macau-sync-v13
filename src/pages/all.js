@@ -28,20 +28,19 @@ function _renderAllKPI(txs) {
   var _totalFund = totalFund(txs);
 
   mini.innerHTML = '';
-  mini.style.cssText = 'display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap';
 
   var items = [
-    { label: TERMS.volume, value: fmt(_totalVol) + '萬', color: UI_COLORS.techCyan },
-    { label: TERMS.comm,   value: fmtMoney(_totalComm),  color: UI_COLORS.skyBlue },
-    { label: TERMS.bonus,  value: fmtMoney(_totalBonus), color: UI_COLORS.electricViolet },
-    { label: TERMS.fund,   value: fmtMoney(_totalFund),  color: UI_COLORS.goldSoft },
+    { label: TERMS.volume, value: fmt(_totalVol) + '萬', accent: 'cyan',  color: UI_COLORS.techCyan },
+    { label: TERMS.comm,   value: fmtMoney(_totalComm),  accent: 'blue',  color: UI_COLORS.skyBlue },
+    { label: TERMS.bonus,  value: fmtMoney(_totalBonus), accent: 'violet',color: UI_COLORS.electricViolet },
+    { label: TERMS.fund,   value: fmtMoney(_totalFund),  accent: 'gold',  color: UI_COLORS.goldSoft },
   ];
 
   for (var i = 0; i < items.length; i++) {
-    var item = h('div');
-    item.style.cssText = 'background:' + UI_COLORS.bgElevated + ';padding:10px 16px;border-radius:8px;border:1px solid ' + UI_COLORS.borderSubtle + ';border-left:3px solid ' + items[i].color;
-    item.innerHTML = '<div style="font-size:11px;color:' + UI_COLORS.textMuted + ';margin-bottom:4px">' + items[i].label + '</div>' +
-                     '<div style="font-size:16px;font-weight:700;color:' + items[i].color + '">' + items[i].value + '</div>';
+    var item = h('div', { className: 'kpi-card' });
+    item.style.borderLeft = '3px solid ' + items[i].color;
+    item.innerHTML = '<div class="kpi-card-label">' + items[i].label + '</div>' +
+                     '<div class="kpi-card-value ' + items[i].accent + '" style="font-size:18px">' + items[i].value + '</div>';
     mini.appendChild(item);
   }
 }
@@ -60,51 +59,55 @@ function _renderAllTable(txs) {
 
   tbody.innerHTML = '';
   for (var i = 0; i < txs.length; i++) {
-    var tx = txs[i];
-    var tr = h('tr', {
-      'data-fbkey': tx._fbKey,
-      onclick: function() {
-        var key = this.getAttribute('data-fbkey');
-        Events.emit('tx:edit:request', key);
-      }
-    });
-    tr.style.cursor = 'pointer';
-
-    var cells = [
-      tx.type === 'cash' ? '現金' : '轉碼',
-      tx.date,
-      tx.agent,
-      tx.client || '-',
-      tx.venue || '-',
-      fmt(tx.volume) + '萬',
-      fmtMoney(tx.comm),
-      fmtMoney(tx.bonus),
-      fmtMoney(tx.drawn),
-      fmtMoney(tx.undrawn),
-      tx.note || '-',
-    ];
-
-    for (var j = 0; j < cells.length; j++) {
-      var td = h('td', {}, cells[j]);
-      tr.appendChild(td);
-    }
-
-    // 操作按钮
-    var tdBtn = h('td');
-    var delBtn = h('button', {
-      style: 'background:' + UI_COLORS.danger + ';color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px',
-      onclick: function(e) {
-        e.stopPropagation();
-        if (confirm('確定刪除這筆交易？')) {
-          deleteTx(tx._fbKey);
-          toastCRUDDone();
-          renderAll();
+    (function(tx) {
+      var tr = h('tr', {
+        'data-fbkey': tx._fbKey,
+        onclick: function() {
+          var key = this.getAttribute('data-fbkey');
+          Events.emit('tx:edit:request', key);
         }
-      }
-    }, '刪除');
-    tdBtn.appendChild(delBtn);
-    tr.appendChild(tdBtn);
+      });
+      tr.style.cursor = 'pointer';
 
-    tbody.appendChild(tr);
+      var cells = [
+        tx.type === 'cash' ? '現金' : '轉碼',
+        tx.date,
+        tx.agent,
+        tx.client || '-',
+        tx.venue || '-',
+        fmt(tx.volume) + '萬',
+        fmtMoney(tx.comm),
+        fmtMoney(tx.bonus),
+        fmtMoney(tx.drawn),
+        fmtMoney(tx.undrawn),
+        tx.note || '-',
+      ];
+
+      for (var j = 0; j < cells.length; j++) {
+        var td = h('td', {}, cells[j]);
+        tr.appendChild(td);
+      }
+
+      // 操作按钮 — 用 IIFE 捕捉当前 tx，避免闭包陷阱
+      var fbKey = tx._fbKey;
+      var tdBtn = h('td');
+      var delBtn = h('button', {
+        style: 'background:' + UI_COLORS.danger + ';color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px'
+      }, '刪除');
+      delBtn.onclick = (function(key) {
+        return function(e) {
+          e.stopPropagation();
+          if (confirm('確定刪除這筆交易？')) {
+            deleteTx(key);
+            toastCRUDDone();
+            renderAll();
+          }
+        };
+      })(fbKey);
+      tdBtn.appendChild(delBtn);
+      tr.appendChild(tdBtn);
+
+      tbody.appendChild(tr);
+    })(txs[i]);
   }
 }

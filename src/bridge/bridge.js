@@ -318,7 +318,7 @@ function deleteFundRecord(fbKey) {
   if (!confirm('確定刪除此筆公基金記錄？')) return;
   var result = deleteFund(fbKey);
   if (result) {
-    showToast('已刪除', 'success');
+    toastCRUDDone();
     refreshAllViews();
   } else {
     showToast('刪除失敗', 'error');
@@ -330,7 +330,7 @@ function deleteAgentWallet(agent, fbKey) {
   if (!confirm('確定刪除此筆錢包記錄？')) return;
   var result = deleteWallet(agent, fbKey);
   if (result) {
-    showToast('已刪除', 'success');
+    toastCRUDDone();
     refreshAllViews();
   } else {
     showToast('刪除失敗', 'error');
@@ -665,3 +665,345 @@ Events.on('tx:edit:request', function(fbKey) {
 // 监听交易创建/更新/删除后保存草稿
 Events.on(EVENTS.TX_CREATED, function() { clearDraft(null); });
 Events.on(EVENTS.TX_UPDATED, function() { clearDraft(null); });
+
+/**
+ * 手動重置為最新預設數據 (UI 按鈕調用)
+ */
+function hcResetPreset() {
+  if (!confirm('確定要重置為最新預設數據嗎？\n這會刪除現有所有酒店設定（' + State.get('hotelConfig').length + ' 筆），並載入 ' + PRESET_CONFIG.length + ' 筆預設數據。此操作無法復原！')) return;
+  try {
+    var count = resetHCToPreset();
+    showToast('已重置 ' + count + ' 筆酒店預設數據', 'success');
+    _hcSelected = {};
+    _hcLastClicked = null;
+    hcRender();
+  } catch(e) {
+    console.error('[v13:hc] reset preset error:', e);
+    showToast('重置失敗', 'error');
+  }
+}
+
+/** 批量選取狀態: { fbKey: true } */
+var _hcSelected = {};
+/** 最後一次點擊的 fbKey (用於 Shift 範圍選取) */
+var _hcLastClicked = null;
+
+/**
+ * 渲染酒店设定列表 (hc-table tbody)
+ * 可选: 按 casino/hotel/search 筛选
+ */
+function hcRender(filterCasino, filterHotel, filterSearch) {
+  var tbody = document.querySelector('.hc-table tbody');
+  if (!tbody) return;
+
+  var config = getAllHC();
+
+  // 填充筛选下拉 (体系)
+  var casSel = document.getElementById('hc-filter-casino');
+  if (casSel) {
+    var curCas = casSel.value;
+    casSel.innerHTML = '<option value="">全部體系</option>';
+    var seenCas = {};
+    for (var k = 0; k < config.length; k++) {
+      if (!seenCas[config[k].casino]) {
+        seenCas[config[k].casino] = true;
+        var co = document.createElement('option');
+        co.value = config[k].casino;
+        co.textContent = config[k].casino;
+        if (config[k].casino === curCas) co.selected = true;
+        casSel.appendChild(co);
+      }
+    }
+  }
+
+  // 填充筛选下拉 (酒店)
+  var hotSel = document.getElementById('hc-filter-hotel');
+  if (hotSel) {
+    var curHot = hotSel.value;
+    hotSel.innerHTML = '<option value="">全部酒店</option>';
+    var seenHot = {};
+    var casFil = casSel ? casSel.value : '';
+    for (var m = 0; m < config.length; m++) {
+      if ((!casFil || config[m].casino === casFil) && !seenHot[config[m].hotel]) {
+        seenHot[config[m].hotel] = true;
+        var ho = document.createElement('option');
+        ho.value = config[m].hotel;
+        ho.textContent = config[m].hotel;
+        if (config[m].hotel === curHot) ho.selected = true;
+        hotSel.appendChild(ho);
+      }
+    }
+  }
+
+  // 读取当前筛选条件
+  var fCasino = filterCasino != null ? filterCasino : (casSel ? casSel.value : '');
+  var fHotel  = filterHotel  != null ? filterHotel  : (hotSel ? hotSel.value : '');
+  var fSearch = filterSearch != null ? filterSearch : (document.getElementById('hc-filter-search') || {}).value || '';
+  var fSearchLower = fSearch.toLowerCase();
+
+  // 筛选
+  var filtered = config.filter(function(c) {
+    if (fCasino && c.casino !== fCasino) return false;
+    if (fHotel  && c.hotel  !== fHotel)  return false;
+    if (fSearchLower) {
+      var hay = (c.casino + c.hotel + c.code + c.room).toLowerCase();
+      if (hay.indexOf(fSearchLower) < 0) return false;
+    }
+    return true;
+  });
+
+  tbody.innerHTML = '';
+  if (filtered.length === 0) {
+    var emptyTr = document.createElement('tr');
+    var emptyTd = document.createElement('td');
+    emptyTd.colSpan = 10;
+    emptyTd.style.cssText = 'text-align:center;padding:24px;color:' + UI_COLORS.textMuted;
+    emptyTd.textContent = '暫無資料';
+    emptyTr.appendChild(emptyTd);
+    tbody.appendChild(emptyTr);
+    hcUpdateBatchBar();
+    return;
+  }
+
+  // 收集當前可見行的 fbKey 列表 (用於 Shift 範圍選取)
+  var visibleKeys = [];
+  for (var i = 0; i < filtered.length; i++) {
+    visibleKeys.push(filtered[i]._fbKey);
+  }
+
+  for (var i = 0; i < filtered.length; i++) {
+    (function(entry, rowIndex) {
+      var tr = document.createElement('tr');
+      tr.setAttribute('data-hc-key', entry._fbKey);
+
+      // 高亮已選行
+      if (_hcSelected[entry._fbKey]) {
+        tr.style.background = '#fff8e1';
+      }
+
+      // checkbox 列
+      var tdChk = document.createElement('td');
+      tdChk.style.cssText = 'text-align:center;padding:4px';
+      var chk = document.createElement('input');
+      chk.type = 'checkbox';
+      chk.checked = !!_hcSelected[entry._fbKey];
+      chk.setAttribute('data-hc-key', entry._fbKey);
+      chk.onclick = function(e) {
+        e.stopPropagation();
+        hcToggleRow(entry._fbKey, chk.checked, e);
+      };
+      tdChk.appendChild(chk);
+      tr.appendChild(tdChk);
+
+      var cells = [
+        entry.casino, entry.hotel, entry.code, entry.room,
+        '¥' + entry.weekday, '¥' + entry.weekend, '¥' + entry.special,
+        entry.threshold + '萬'
+      ];
+      for (var j = 0; j < cells.length; j++) {
+        var td = document.createElement('td');
+        td.textContent = cells[j] != null ? String(cells[j]) : '';
+        tr.appendChild(td);
+      }
+      // 操作列
+      var tdOp = document.createElement('td');
+      var editBtn = document.createElement('button');
+      editBtn.textContent = '編輯';
+      editBtn.style.cssText = 'background:' + UI_COLORS.goldSoft + ';color:white;border:none;padding:2px 8px;border-radius:4px;cursor:pointer;font-size:11px;margin-right:4px';
+      editBtn.onclick = function() { hcOpenModal(entry._fbKey); };
+
+      var delBtn = document.createElement('button');
+      delBtn.textContent = '刪';
+      delBtn.style.cssText = 'background:' + UI_COLORS.danger + ';color:white;border:none;padding:2px 8px;border-radius:4px;cursor:pointer;font-size:11px';
+      delBtn.onclick = function() {
+        if (!confirm('確定刪除「' + entry.room + '」？')) return;
+        var deleted = deleteHC(entry._fbKey);
+        if (deleted) {
+          delete _hcSelected[entry._fbKey];
+          showToast('已刪除', 'success');
+          hcRender();
+        } else {
+          showToast('刪除失敗', 'error');
+        }
+      };
+
+      tdOp.appendChild(editBtn);
+      tdOp.appendChild(delBtn);
+      tr.appendChild(tdOp);
+      tbody.appendChild(tr);
+    })(filtered[i], i);
+  }
+
+  // 更新全選 checkbox 狀態
+  hcUpdateSelectAllState(visibleKeys);
+  hcUpdateBatchBar();
+}
+
+/** 更新全選 checkbox 的三態 (全選/半選/未選) */
+function hcUpdateSelectAllState(visibleKeys) {
+  var sa = document.getElementById('hc-select-all');
+  if (!sa) return;
+  if (!visibleKeys) {
+    // 從 DOM 收集
+    var rows = document.querySelectorAll('.hc-table tbody tr[data-hc-key]');
+    visibleKeys = [];
+    for (var r = 0; r < rows.length; r++) {
+      visibleKeys.push(rows[r].getAttribute('data-hc-key'));
+    }
+  }
+  var selCount = 0;
+  for (var i = 0; i < visibleKeys.length; i++) {
+    if (_hcSelected[visibleKeys[i]]) selCount++;
+  }
+  if (selCount === 0) {
+    sa.checked = false;
+    sa.indeterminate = false;
+  } else if (selCount === visibleKeys.length && visibleKeys.length > 0) {
+    sa.checked = true;
+    sa.indeterminate = false;
+  } else {
+    sa.checked = false;
+    sa.indeterminate = true;
+  }
+}
+
+/** 更新批量操作欄顯示狀態 */
+function hcUpdateBatchBar() {
+  var bar = document.getElementById('hc-batch-bar');
+  var countEl = document.getElementById('hc-batch-count');
+  if (!bar) return;
+  var count = Object.keys(_hcSelected).length;
+  if (count > 0) {
+    bar.style.display = 'flex';
+    if (countEl) countEl.textContent = '已選 ' + count + ' 項';
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+/** 全選 / 取消全選 */
+function hcToggleSelectAll(checked) {
+  var rows = document.querySelectorAll('.hc-table tbody tr[data-hc-key]');
+  if (checked) {
+    for (var i = 0; i < rows.length; i++) {
+      var key = rows[i].getAttribute('data-hc-key');
+      _hcSelected[key] = true;
+    }
+  } else {
+    _hcSelected = {};
+  }
+  // 刷新列表 (保留篩選狀態)
+  hcRender();
+}
+
+/** 切換單行選取 (支援 Shift 範圍選取) */
+function hcToggleRow(fbKey, checked, event) {
+  if (event && event.shiftKey && _hcLastClicked) {
+    // Shift 範圍選取：選取 _hcLastClicked 到 fbKey 之間的所有行
+    var rows = document.querySelectorAll('.hc-table tbody tr[data-hc-key]');
+    var keys = [];
+    for (var i = 0; i < rows.length; i++) {
+      keys.push(rows[i].getAttribute('data-hc-key'));
+    }
+    var idxA = keys.indexOf(_hcLastClicked);
+    var idxB = keys.indexOf(fbKey);
+    if (idxA >= 0 && idxB >= 0) {
+      var from = Math.min(idxA, idxB);
+      var to   = Math.max(idxA, idxB);
+      for (var j = from; j <= to; j++) {
+        _hcSelected[keys[j]] = checked;
+      }
+    }
+  } else {
+    _hcSelected[fbKey] = checked;
+    if (!checked) delete _hcSelected[fbKey];
+  }
+  _hcLastClicked = fbKey;
+  // 刷新列表 (保留篩選狀態)
+  hcRender();
+}
+
+/** 清除所有選取 */
+function hcClearSelection() {
+  _hcSelected = {};
+  _hcLastClicked = null;
+  var sa = document.getElementById('hc-select-all');
+  if (sa) { sa.checked = false; sa.indeterminate = false; }
+  hcRender();
+}
+
+/** 批量刪除所選項目 */
+function hcBatchDelete() {
+  var keys = Object.keys(_hcSelected);
+  if (keys.length === 0) {
+    showToast('請先選取要刪除的項目', 'warning');
+    return;
+  }
+  if (!confirm('確定要批量刪除 ' + keys.length + ' 筆酒店設定？此操作無法復原！')) return;
+
+  var deleted = 0;
+  for (var i = 0; i < keys.length; i++) {
+    var result = deleteHC(keys[i]);
+    if (result) deleted++;
+  }
+  _hcSelected = {};
+  _hcLastClicked = null;
+  showToast('已刪除 ' + deleted + ' 筆', deleted > 0 ? 'success' : 'error');
+  hcRender();
+}
+
+/**
+ * 酒店设定筛选 (HTML onchange/oninput 调用)
+ * 筛选变更时自动清除选取 (避免跨筛选混淆)
+ */
+function hcFilter() {
+  _hcSelected = {};
+  _hcLastClicked = null;
+  hcRender();
+}
+
+// ============================================================================
+// 登入桥接
+// ============================================================================
+
+/**
+ * 登入按钮回调 — 读取密码调用 checkPassword，显示错误/剩余次数
+ */
+function _v13LoginFallback() {
+  var inputEl = document.getElementById('pw-input');
+  var errorEl = document.getElementById('pw-error');
+  var attemptsEl = document.getElementById('pw-attempts');
+  var pw = inputEl ? inputEl.value : '';
+
+  if (!pw) {
+    if (errorEl) errorEl.textContent = '請輸入密碼';
+    if (attemptsEl) attemptsEl.textContent = '';
+    return;
+  }
+
+  var result = (typeof checkPassword === 'function') ? checkPassword(pw) : { success: false, error: '認證模組未載入' };
+
+  if (result.success) {
+    if (errorEl) errorEl.textContent = '';
+    if (attemptsEl) attemptsEl.textContent = '';
+  } else {
+    if (errorEl) errorEl.textContent = result.error || '驗證失敗';
+    // 自动从 _pwAttempts(若可访问) 或直接隐藏
+    if (attemptsEl) {
+      var maxAttempts = (typeof CONFIG !== 'undefined' && CONFIG.MAX_PW_ATTEMPTS) ? CONFIG.MAX_PW_ATTEMPTS : 3;
+      attemptsEl.textContent = '剩餘 ' + maxAttempts + ' 次機會';
+    }
+  }
+}
+
+// 监听 HC 更新事件，自动刷新列表
+Events.on(EVENTS.HC_CONFIG_UPDATED, function() {
+  var panel = document.getElementById('room-tab-config');
+  if (panel && (panel.style.display !== 'none' && panel.classList.contains('active'))) {
+    hcRender();
+  }
+  // 同时刷新订房表单中的体系下拉
+  if (typeof RM !== 'undefined' && RM.populateCasinoDropdown) {
+    RM.populateCasinoDropdown();
+  }
+});

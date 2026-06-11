@@ -96,6 +96,25 @@
         State.set('workingMonth', currentMonth());
       }
 
+      // 酒店设定预设版本检测: 版本变化时自动重置（覆盖旧数据）
+      var currentPresetVer = Store.loadHCPresetVersion();
+      if (currentPresetVer !== PRESET_VERSION) {
+        try {
+          var presetCount = resetHCToPreset();
+          console.log('[v13:app] Hotel preset updated: v' + currentPresetVer + ' → v' + PRESET_VERSION + ', loaded ' + presetCount + ' entries');
+        } catch(e) {
+          console.error('[v13:app] Failed to update hotel preset:', e);
+        }
+      } else if (State.get('hotelConfig').length === 0) {
+        // 首次使用（空数据）也加载预设
+        try {
+          var presetCount = resetHCToPreset();
+          console.log('[v13:app] Hotel config preset loaded: ' + presetCount + ' entries');
+        } catch(e) {
+          console.error('[v13:app] Failed to load hotel preset:', e);
+        }
+      }
+
       console.log('[v13:app] Local data loaded ✓');
       return true;
     } catch (e) {
@@ -183,6 +202,11 @@
 
     // 初始化房务系统
     try { if (typeof RM !== 'undefined') RM.init(); } catch(e) { console.error('[v13:app] RM.init error:', e); }
+
+    try { if (typeof renderWallet === 'function') renderWallet(); } catch(e) { console.error('[v13:app] renderWallet error:', e); }
+
+    // 更新 topbar 总钱包
+    try { _updateTopbarWallet(); } catch(e) {}
 
     // 每日自动备份
     try { autoBackupCheck(); } catch(e) {}
@@ -273,15 +297,36 @@
       if (page === 'all') renderAll();
       if (page === 'query') doQuery();
       if (page === 'summary') renderSummary();
+      _updateTopbarWallet();
     });
 
-    Events.on(EVENTS.TX_CREATED, function() { renderAll(); renderOverview(); });
-    Events.on(EVENTS.TX_UPDATED, function() { renderAll(); renderOverview(); });
-    Events.on(EVENTS.TX_DELETED, function() { renderAll(); renderOverview(); });
+    Events.on(EVENTS.TX_CREATED, function() { renderAll(); renderOverview(); _updateTopbarWallet(); if (typeof renderWallet === 'function') renderWallet(); });
+    Events.on(EVENTS.TX_UPDATED, function() { renderAll(); renderOverview(); _updateTopbarWallet(); if (typeof renderWallet === 'function') renderWallet(); });
+    Events.on(EVENTS.TX_DELETED, function() { renderAll(); renderOverview(); _updateTopbarWallet(); if (typeof renderWallet === 'function') renderWallet(); });
 
-    Events.on(EVENTS.FUND_CREATED, function() { renderOverview(); });
-    Events.on(EVENTS.FUND_UPDATED, function() { renderOverview(); });
-    Events.on(EVENTS.FUND_DELETED, function() { renderOverview(); });
+    Events.on(EVENTS.FUND_CREATED, function() { renderOverview(); _updateTopbarWallet(); });
+    Events.on(EVENTS.FUND_UPDATED, function() { renderOverview(); _updateTopbarWallet(); });
+    Events.on(EVENTS.FUND_DELETED, function() { renderOverview(); _updateTopbarWallet(); });
+
+    // 钱包变更 → 刷新总钱包页
+    Events.on(EVENTS.FUND_CREATED, function() { if (typeof renderWallet === 'function') renderWallet(); });
+    Events.on(EVENTS.FUND_UPDATED, function() { if (typeof renderWallet === 'function') renderWallet(); });
+    Events.on(EVENTS.FUND_DELETED, function() { if (typeof renderWallet === 'function') renderWallet(); });
+    Events.on(EVENTS.WALLET_CREATED, function() { if (typeof renderWallet === 'function') renderWallet(); _updateTopbarWallet(); });
+    Events.on(EVENTS.WALLET_UPDATED, function() { if (typeof renderWallet === 'function') renderWallet(); _updateTopbarWallet(); });
+    Events.on(EVENTS.WALLET_DELETED, function() { if (typeof renderWallet === 'function') renderWallet(); _updateTopbarWallet(); });
+    Events.on(EVENTS.TXS_LOADED, function() { if (typeof renderWallet === 'function') renderWallet(); });
+  }
+
+  function _updateTopbarWallet() {
+    try {
+      var badge = document.getElementById('total-wallet-badge');
+      if (!badge) return;
+      var total = getTotalWallet();
+      badge.textContent = '💰 總錢包: ' + fmtMoney(total);
+    } catch (e) {
+      console.error('[v13:app] _updateTopbarWallet error:', e);
+    }
   }
 
   // ========================================================================

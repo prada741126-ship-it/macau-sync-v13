@@ -61,6 +61,7 @@ var STORAGE_KEYS = {
   RM_BOOKINGS:       'rm_bookings',            // 订房资料
   RM_LAST_ID:        'rm_last_id',             // 最后订房ID
   HC_CONFIG:         'hc_config',              // 酒店设定
+  HC_PRESET_VERSION: 'hc_preset_version',      // 酒店预设版本号
   APP_VERSION:       'macau_app_version',      // 版本快取清除
 };
 
@@ -203,6 +204,7 @@ var PAGES = [
   { id: 'page-query',     name: 'query',     label: '查詢',      icon: '\uD83D\uDD0D', shortcut: '3' },
   { id: 'page-summary',   name: 'summary',   label: '統計',      icon: '\uD83D\uDCCA', shortcut: '4' },
   { id: 'page-room',      name: 'room',      label: '房務系統',   icon: '\uD83C\uDFE8', shortcut: '5' },
+  { id: 'page-wallet',    name: 'wallet',    label: '總錢包',     icon: '\uD83D\uDCB3', shortcut: '6' },
 ];
 
 // ============================================================================
@@ -214,6 +216,7 @@ var SHORTCUTS = [
   { keys: 'Ctrl+3',    desc: '切換到查詢頁',        action: 'page:query' },
   { keys: 'Ctrl+4',    desc: '切換到統計頁',        action: 'page:summary' },
   { keys: 'Ctrl+5',    desc: '切換到房務系統頁',    action: 'page:room' },
+  { keys: 'Ctrl+6',    desc: '切換到總錢包頁',      action: 'page:wallet' },
   { keys: 'Ctrl+N',    desc: '新增交易',            action: 'tx:new' },
   { keys: 'Ctrl+S',    desc: '儲存資料',            action: 'sync:manual' },
   { keys: 'Ctrl+F',    desc: '快速搜索',            action: 'search:focus' },

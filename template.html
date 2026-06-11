@@ -107,7 +107,7 @@
       <div class="pw-subtitle">BOYING INTERNATIONAL CLUB</div>
       <div class="pw-title">博盈國際會</div>
       <div class="pw-divider">授 權 驗 證</div>
-      <input type="password" id="pw-input" placeholder="請輸入密碼" autocomplete="off">
+      <input type="password" id="pw-input" placeholder="請輸入密碼" autocomplete="off" onkeydown="if(event.key==='Enter')_v13LoginFallback()">
       <div id="pw-error"></div>
       <div id="pw-attempts"></div>
       <button class="pw-btn" onclick="_v13LoginFallback()">驗 證 進 入</button>
@@ -135,6 +135,7 @@
         <div class="sb-item" data-page="query"><span class="icon">🔍</span><span>查詢</span></div>
         <div class="sb-item" data-page="summary"><span class="icon">📈</span><span>統計</span></div>
         <div class="sb-item" data-page="room"><span class="icon">🏨</span><span>房務系統</span></div>
+        <div class="sb-item" data-page="wallet"><span class="icon">💳</span><span>總錢包</span></div>
         <div class="sb-divider"></div>
         <div class="sb-item" onclick="openFundModal()"><span class="icon">🏦</span><span>公基金</span></div>
         <div class="sb-item" onclick="openWalletModal()"><span class="icon">💰</span><span>代理錢包</span></div>
@@ -155,6 +156,7 @@
       <div class="nav-item" data-page="query"><span class="icon">🔍</span>查詢</div>
       <div class="nav-item" data-page="summary"><span class="icon">📈</span>統計</div>
       <div class="nav-item" data-page="room"><span class="icon">🏨</span>房務</div>
+      <div class="nav-item" data-page="wallet"><span class="icon">💳</span>錢包</div>
     </div>
 
     <!-- MAIN CONTENT -->
@@ -194,14 +196,14 @@
           </div>
           <div class="decorative-line"></div>
 
-          <div id="ov-kpi-grid"></div>
+          <div id="ov-kpi-grid" class="kpi-grid"></div>
 
-          <div class="chart-full">
+          <div class="chart-container md chart-full">
             <canvas></canvas>
           </div>
 
-          <div class="ov-two-col">
-            <div class="chart-full">
+          <div class="two-col ov-two-col">
+            <div class="chart-container sm chart-full">
               <canvas></canvas>
             </div>
             <div class="timeline-box"></div>
@@ -210,7 +212,7 @@
 
         <!-- ===== 全部交易页 ===== -->
         <div class="page" id="page-all">
-          <div id="all-kpi-mini"></div>
+          <div id="all-kpi-mini" class="kpi-grid"></div>
           <div class="toolbar">
             <input type="text" id="all-search" placeholder="搜索..." style="width:200px" oninput="renderAll()">
             <button class="btn btn-sm btn-primary" onclick="Events.emit('tx:new')">+ 新增</button>
@@ -258,7 +260,7 @@
             <input type="text" id="query-search" placeholder="搜索..." style="width:160px" oninput="doQuery()">
             <button class="btn btn-sm btn-primary" onclick="doQuery()">🔍 查詢</button>
           </div>
-          <div id="query-kpi"></div>
+          <div id="query-kpi" class="kpi-grid"></div>
           <div class="table-scroll">
             <table id="query-table">
               <thead id="query-thead"><tr><th>日期</th><th>代理</th><th>地點</th><th>洗碼量</th><th>碼糧</th><th>已提領</th><th>未提領</th><th>備註</th></tr></thead>
@@ -276,7 +278,7 @@
 
         <!-- ===== 统计页 ===== -->
         <div class="page" id="page-summary">
-          <div id="summary-kpi"></div>
+          <div id="summary-kpi" class="kpi-grid"></div>
           <div class="table-scroll">
             <table id="summary-table">
               <thead><tr><th>代理</th><th>場地</th><th>洗碼量</th><th>碼糧</th><th>已提領</th><th>未提領</th></tr></thead>
@@ -293,7 +295,7 @@
           </div>
 
           <div class="room-tab-content active" id="room-tab-booking">
-            <div class="rm-dashboard">
+            <div class="rm-dashboard dash-grid">
               <div class="rm-stat-card">
                 <div class="rm-stat-label">本月總洗碼量</div>
                 <div class="rm-stat-value rm-quota-volume">0萬</div>
@@ -303,12 +305,16 @@
                 <div class="rm-stat-value rm-quota-used">0萬</div>
               </div>
               <div class="rm-stat-card">
+                <div class="rm-stat-label">本月訂房數</div>
+                <div class="rm-stat-value rm-booking-count" style="color:var(--sky-blue)">0間</div>
+              </div>
+              <div class="rm-stat-card">
                 <div class="rm-stat-label">剩餘轉碼數</div>
                 <div class="rm-stat-value rm-quota-rem">0萬</div>
               </div>
               <div class="rm-stat-card">
                 <div class="rm-stat-label">額度使用率</div>
-                <div class="rm-stat-value" style="color:var(--success)">0%</div>
+                <div class="rm-stat-value rm-quota-rate" style="color:var(--success)">0%</div>
                 <div class="rm-quota-bar-wrap"><div class="rm-quota-bar" style="width:0%"></div></div>
               </div>
             </div>
@@ -336,12 +342,69 @@
               <select id="hc-filter-hotel" onchange="hcFilter()"><option value="">全部酒店</option></select>
               <input type="text" id="hc-filter-search" placeholder="搜索..." style="width:160px" oninput="hcFilter()">
               <button class="btn btn-sm btn-primary" onclick="hcOpenModal()">+ 新增房型</button>
+              <button class="btn btn-sm" onclick="hcResetPreset()" title="重新載入最新預設數據" style="background:#6c757d;color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px">🔄 重置預設</button>
+            </div>
+            <div id="hc-batch-bar" style="display:none;background:#fff3cd;padding:6px 10px;margin-bottom:6px;border-radius:6px;border:1px solid #ffc107;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <span id="hc-batch-count" style="font-weight:bold;color:#856404">已選 0 項</span>
+              <button class="btn btn-sm btn-danger" onclick="hcBatchDelete()" style="background:#dc3545;color:#fff;border:none;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px">批量刪除</button>
+              <button class="btn btn-sm" onclick="hcClearSelection()" style="background:#6c757d;color:#fff;border:none;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px">取消選取</button>
             </div>
             <div class="table-scroll">
               <table class="hc-table">
-                <thead><tr><th>體系</th><th>酒店</th><th>CODE</th><th>房型</th><th>平日價</th><th>週末價</th><th>特殊日</th><th>門檻(萬)</th><th>操作</th></tr></thead>
+                <thead><tr><th style="width:36px"><input type="checkbox" id="hc-select-all" onchange="hcToggleSelectAll(this.checked)" title="全選/取消全選"></th><th>體系</th><th>酒店</th><th>CODE</th><th>房型</th><th>平日價</th><th>週末價</th><th>特殊日</th><th>門檻(萬)</th><th>操作</th></tr></thead>
                 <tbody></tbody>
               </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===== 总钱包页 ===== -->
+        <div class="page" id="page-wallet">
+          <div class="wallet-overview" id="wallet-overview"></div>
+          <div class="decorative-line"></div>
+
+          <!-- 时间筛选器 -->
+          <div class="toolbar" style="margin-bottom:0">
+            <div class="tf-row">
+              <span class="tf-row-label">📅 時間篩選</span>
+              <button class="btn btn-sm tf-btn" onclick="walletQuickFilter('lastWeek')">上週</button>
+              <button class="btn btn-sm tf-btn" onclick="walletQuickFilter('thisWeek')">本週</button>
+              <button class="btn btn-sm tf-btn" onclick="walletQuickFilter('thisMonth')">本月</button>
+              <button class="btn btn-sm tf-btn" onclick="walletQuickFilter('lastMonth')">上月</button>
+              <button class="btn btn-sm tf-btn" onclick="walletQuickFilter('thisYear')">年度</button>
+              <button class="btn btn-sm tf-btn" onclick="walletQuickFilter('custom')">自訂</button>
+              <span style="display:none" id="wallet-date-range">
+                從 <input type="date" id="wallet-date-from" style="width:130px" onchange="renderWallet()">
+                到 <input type="date" id="wallet-date-to" style="width:130px" onchange="renderWallet()">
+              </span>
+              <span id="wallet-date-display" style="margin-left:8px;font-size:12px;color:var(--text-muted)"></span>
+            </div>
+          </div>
+
+          <div class="wallet-sections">
+            <!-- 总钱包流水（合并所有金流） -->
+            <div class="wallet-section">
+              <h3 class="wallet-section-title">📊 總錢包流水</h3>
+              <div class="table-scroll">
+                <table id="wallet-flow-table">
+                  <thead><tr><th style="width:100px">日期</th><th style="width:90px">來源</th><th>類型</th><th style="text-align:right;width:110px">金額</th><th>備註</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <div id="wallet-flow-empty" style="display:none;text-align:center;padding:20px;color:var(--text-muted)">暫無流水記錄</div>
+            </div>
+
+            <!-- 公基金卡片 -->
+            <div class="wallet-section">
+              <h3 class="wallet-section-title">🏦 公基金</h3>
+              <div id="wallet-fund-card"></div>
+            </div>
+
+            <!-- 代理钱包明细 -->
+            <div class="wallet-section">
+              <h3 class="wallet-section-title">💰 代理錢包明細</h3>
+              <div id="wallet-agent-cards"></div>
+              <div id="wallet-agent-empty" style="display:none;text-align:center;padding:20px;color:var(--text-muted)">暫無代理錢包記錄</div>
             </div>
           </div>
         </div>
@@ -453,8 +516,22 @@
       <div class="form-row"><label>體系</label><select id="rm-casino" onchange="rmOnCasinoChange()"><option value="">選擇體系</option></select></div>
       <div class="form-row"><label>酒店</label><select id="rm-hotel" onchange="rmOnHotelChange()"><option value="">選擇酒店</option></select></div>
       <div class="form-row"><label>房型</label><select id="rm-room" onchange="rmOnRoomChange()"><option value="">選擇房型</option></select></div>
-      <div class="form-row"><label>入住</label><input type="date" id="rm-checkin" onchange="rmCalcNights()"></div>
-      <div class="form-row"><label>退房</label><input type="date" id="rm-checkout" onchange="rmCalcNights()"></div>
+      <div class="form-row"><label>入住</label>
+        <span class="date-sel-group">
+          <select id="rm-checkin-y" onchange="rmCalcNights()" style="width:85px"></select>
+          <select id="rm-checkin-m" onchange="rmCalcNights()" style="width:68px"></select>
+          <select id="rm-checkin-d" onchange="rmCalcNights()" style="width:68px"></select>
+        </span>
+        <input type="hidden" id="rm-checkin">
+      </div>
+      <div class="form-row"><label>退房</label>
+        <span class="date-sel-group">
+          <select id="rm-checkout-y" onchange="rmCalcNights()" style="width:85px"></select>
+          <select id="rm-checkout-m" onchange="rmCalcNights()" style="width:68px"></select>
+          <select id="rm-checkout-d" onchange="rmCalcNights()" style="width:68px"></select>
+        </span>
+        <input type="hidden" id="rm-checkout">
+      </div>
       <div class="form-row"><label>天數</label><input type="number" id="rm-nights" readonly></div>
       <div class="form-row"><label>單價</label><input type="number" id="rm-price" onchange="rmCalcTotal()"></div>
       <div class="form-row"><label>總費用</label><input type="number" id="rm-total" readonly></div>

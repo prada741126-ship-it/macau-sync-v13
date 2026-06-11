@@ -1,29 +1,38 @@
 /* ============================================================================
- * v13 中国风主题 (隐性克制)
- * 对照档第五节 — 30% 中国风，非侵入式
- * 
- * 手法: 极淡山水线稿背景 (<1.5% 透明度)、窗棂线条、印章感元素
+ * v13 中国风主题 (隐性克制·30%)
+ *
+ * 手法: 极淡山水线稿背景 (<1.5% 透明度)、窗棂线条、印章感、水墨点缀
  * 避免: 龙纹/祥云/牡丹/宫廷风/厚重发光/俗艳渐变
  * ============================================================================ */
 
-/* 极淡山水线稿背景 */
+/* ═══════════════════════════════════════════════════════
+ * 远山水墨背景
+ * ═══════════════════════════════════════════════════════ */
+
 #app-shell::before {
   content: '';
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  opacity: 0.01;
+  opacity: 0.012;
   background:
-    /* 远山轮廓 */
-    radial-gradient(ellipse 60% 30% at 20% 85%, rgba(201,168,76,0.02) 0%, transparent 70%),
-    radial-gradient(ellipse 50% 25% at 70% 88%, rgba(201,168,76,0.015) 0%, transparent 70%),
-    /* 云雾 */
-    radial-gradient(ellipse 80% 15% at 50% 80%, rgba(255,255,255,0.008) 0%, transparent 60%);
+    /* 远山第一层 */
+    radial-gradient(ellipse 55% 28% at 18% 84%, rgba(201,168,76,0.02) 0%, transparent 70%),
+    radial-gradient(ellipse 48% 22% at 65% 87%, rgba(201,168,76,0.015) 0%, transparent 65%),
+    /* 远山第二层 */
+    radial-gradient(ellipse 40% 20% at 35% 90%, rgba(201,168,76,0.012) 0%, transparent 60%),
+    radial-gradient(ellipse 35% 18% at 80% 92%, rgba(201,168,76,0.01) 0%, transparent 55%),
+    /* 云雾层 */
+    radial-gradient(ellipse 75% 12% at 50% 78%, rgba(255,255,255,0.006) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 10% at 30% 82%, rgba(255,255,255,0.004) 0%, transparent 50%);
 }
 
-/* 窗棂几何线 (hover 时 1px) */
-.sb-item:hover::after {
+/* ═══════════════════════════════════════════════════════
+ * 窗棂几何装饰 — 侧栏 Hover
+ * ═══════════════════════════════════════════════════════ */
+
+.sb-item::after {
   content: '';
   position: absolute;
   right: 12px;
@@ -32,65 +41,161 @@
   border: 1px solid rgba(201,168,76,0.15);
   border-radius: 2px;
   opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.sb-item:hover::after {
+  opacity: 1;
   animation: latticeReveal 0.4s ease forwards;
 }
-@keyframes latticeReveal { to { opacity: 1; } }
+@keyframes latticeReveal {
+  0% { transform: rotate(0deg) scale(0.8); }
+  100% { transform: rotate(0deg) scale(1); }
+}
 .sb-item { position: relative; }
 
-/* 登录画面印章感 */
-#pw-box {
-  position: relative;
-}
+/* ═══════════════════════════════════════════════════════
+ * 印章感 — 登录画面
+ * ═══════════════════════════════════════════════════════ */
+
 #pw-box::before {
   content: '';
   position: absolute;
-  top: 16px; right: 16px;
-  width: 28px; height: 28px;
-  border: 1px solid rgba(201,168,76,0.12);
-  border-radius: 4px;
+  top: 18px; right: 18px;
+  width: 26px; height: 26px;
+  border: 1.5px solid rgba(201,168,76,0.15);
+  border-radius: 3px;
   transform: rotate(15deg);
-  opacity: 0.5;
+  opacity: 0.4;
+}
+#pw-box::after {
+  content: '印';
+  position: absolute;
+  top: 22px; right: 22px;
+  font-size: 14px;
+  color: rgba(201,168,76,0.15);
+  font-family: 'STKaiti', 'KaiTi', serif;
+  transform: rotate(15deg);
 }
 
-/* 登录画面角落装饰 */
-.pw-corners { display: none; } /* 旧版有 .tl/.tr/.bl/.br，新版用 box-shadow */
+/* ═══════════════════════════════════════════════════════
+ * 月度结算按钮 — 朱砂色
+ * ═══════════════════════════════════════════════════════ */
 
-/* 月度结算按钮朱砂红 */
 #btn-close-month {
   background: transparent;
-  border-color: var(--vermilion);
+  border-color: rgba(192,57,43,0.3);
   color: var(--vermilion);
 }
 #btn-close-month:hover {
   background: rgba(192,57,43,0.1);
+  border-color: var(--vermilion);
+  box-shadow: 0 0 12px rgba(192,57,43,0.15);
 }
 
-/* 代理排行第一条金色 */
-tr:first-child td:first-child::before {
+/* ═══════════════════════════════════════════════════════
+ * 三甲标识 — 金/银/铜
+ * ═══════════════════════════════════════════════════════ */
+
+tr.rank-1 td:first-child::before {
   content: '🥇 ';
   font-size: 12px;
 }
-tr:nth-child(2) td:first-child::before {
+tr.rank-2 td:first-child::before {
   content: '🥈 ';
   font-size: 12px;
 }
-tr:nth-child(3) td:first-child::before {
+tr.rank-3 td:first-child::before {
   content: '🥉 ';
   font-size: 12px;
 }
+tr.rank-1 td {
+  background: rgba(201,168,76,0.04);
+}
 
-/* 装饰性分割线 */
+/* ═══════════════════════════════════════════════════════
+ * 装饰性分割线
+ * ═══════════════════════════════════════════════════════ */
+
 .decorative-line {
-  background: linear-gradient(90deg, transparent, rgba(201,168,76,0.15), transparent);
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(201,168,76,0.06) 20%,
+    rgba(201,168,76,0.12) 50%,
+    rgba(201,168,76,0.06) 80%,
+    transparent 100%
+  );
 }
 
-/* 总览页 KPI 卡片金色微边 */
+/* ═══════════════════════════════════════════════════════
+ * 金边微光 — KPI 卡片悬浮
+ * ═══════════════════════════════════════════════════════ */
+
 .kpi-card:hover {
-  box-shadow: 0 0 0 1px rgba(201,168,76,0.1), var(--shadow-sm);
+  box-shadow: 0 0 0 1px rgba(201,168,76,0.08), 0 4px 20px rgba(0,0,0,0.3);
+}
+.dash-card:hover {
+  box-shadow: 0 0 0 1px rgba(201,168,76,0.06), 0 2px 12px rgba(0,0,0,0.25);
 }
 
-/* 版本号小印章 */
+/* ═══════════════════════════════════════════════════════
+ * 印章体版本号
+ * ═══════════════════════════════════════════════════════ */
+
 #version-badge {
   font-family: 'STKaiti', 'KaiTi', serif;
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
 }
+
+/* ═══════════════════════════════════════════════════════
+ * 登录画面标题 — 楷体优先
+ * ═══════════════════════════════════════════════════════ */
+
+.pw-title {
+  font-family: 'STKaiti', 'KaiTi', 'PingFang TC', serif;
+}
+.pw-emblem-text {
+  font-family: 'STKaiti', 'KaiTi', serif;
+}
+
+/* ═══════════════════════════════════════════════════════
+ * 侧栏 Logo — 中式排版
+ * ═══════════════════════════════════════════════════════ */
+
+.sb-logo-name {
+  font-family: 'STKaiti', 'KaiTi', 'PingFang TC', serif;
+  letter-spacing: 3px;
+}
+
+/* ═══════════════════════════════════════════════════════
+ * 水墨笔触 — Modal 顶部装饰线
+ * ═══════════════════════════════════════════════════════ */
+
+.modal h3::after {
+  content: '';
+  display: block;
+  width: 32px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--tech-cyan), transparent);
+  margin-top: 8px;
+  border-radius: 1px;
+}
+
+/* ═══════════════════════════════════════════════════════
+ * 金箔斑驳 — 卡片边框微光
+ * ═══════════════════════════════════════════════════════ */
+
+.content-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(201,168,76,0.08) 50%,
+    transparent 100%
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.content-card:hover::before { opacity: 1; }
+.content-card { position: relative; overflow: hidden; }

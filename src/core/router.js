@@ -7,7 +7,7 @@
 
 /**
  * 切换到指定页面
- * @param {string} pageName - 'overview'|'all'|'query'|'summary'|'room'
+ * @param {string} pageName - 'overview'|'all'|'query'|'summary'|'room'|'wallet'
  * @param {Element} [sidebarEl] - 侧边栏点击的元素
  */
 function showPage(pageName, sidebarEl) {
@@ -86,6 +86,9 @@ function _refreshPage(pageName) {
       break;
     case 'room':
       if (typeof RM !== 'undefined' && RM.render) RM.render();
+      break;
+    case 'wallet':
+      if (typeof renderWallet === 'function') renderWallet();
       break;
   }
 }

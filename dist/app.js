@@ -62,6 +62,7 @@ var STORAGE_KEYS = {
   RM_BOOKINGS:       'rm_bookings',            // 订房资料
   RM_LAST_ID:        'rm_last_id',             // 最后订房ID
   HC_CONFIG:         'hc_config',              // 酒店设定
+  HC_PRESET_VERSION: 'hc_preset_version',      // 酒店预设版本号
   APP_VERSION:       'macau_app_version',      // 版本快取清除
 };
 
@@ -204,6 +205,7 @@ var PAGES = [
   { id: 'page-query',     name: 'query',     label: '查詢',      icon: '\uD83D\uDD0D', shortcut: '3' },
   { id: 'page-summary',   name: 'summary',   label: '統計',      icon: '\uD83D\uDCCA', shortcut: '4' },
   { id: 'page-room',      name: 'room',      label: '房務系統',   icon: '\uD83C\uDFE8', shortcut: '5' },
+  { id: 'page-wallet',    name: 'wallet',    label: '總錢包',     icon: '\uD83D\uDCB3', shortcut: '6' },
 ];
 
 // ============================================================================
@@ -215,6 +217,7 @@ var SHORTCUTS = [
   { keys: 'Ctrl+3',    desc: '切換到查詢頁',        action: 'page:query' },
   { keys: 'Ctrl+4',    desc: '切換到統計頁',        action: 'page:summary' },
   { keys: 'Ctrl+5',    desc: '切換到房務系統頁',    action: 'page:room' },
+  { keys: 'Ctrl+6',    desc: '切換到總錢包頁',      action: 'page:wallet' },
   { keys: 'Ctrl+N',    desc: '新增交易',            action: 'tx:new' },
   { keys: 'Ctrl+S',    desc: '儲存資料',            action: 'sync:manual' },
   { keys: 'Ctrl+F',    desc: '快速搜索',            action: 'search:focus' },
@@ -1637,7 +1640,27 @@ var Store = (function() {
     save(STORAGE_KEYS.RM_BOOKINGS, bookings, false);
   }
   function loadBookings() {
-    return load(STORAGE_KEYS.RM_BOOKINGS, false) || [];
+    var bookings = load(STORAGE_KEYS.RM_BOOKINGS, false) || [];
+    // 数据迁移：修正旧数据中 month 字段格式 (YYYY/MM → YYYY-MM)
+    var fixed = 0;
+    for (var i = 0; i < bookings.length; i++) {
+      if (bookings[i].month && bookings[i].month.indexOf('/') >= 0) {
+        bookings[i].month = bookings[i].month.replace(/\//g, '-');
+        fixed++;
+      }
+      if (bookings[i].checkIn && bookings[i].checkIn.indexOf('/') >= 0) {
+        bookings[i].checkIn = bookings[i].checkIn.replace(/\//g, '-');
+      }
+      if (bookings[i].checkOut && bookings[i].checkOut.indexOf('/') >= 0) {
+        bookings[i].checkOut = bookings[i].checkOut.replace(/\//g, '-');
+      }
+    }
+    if (fixed > 0) {
+      console.log('[v13:store] Migrated ' + fixed + ' bookings: month format YYYY/MM → YYYY-MM');
+      // 保存修正后的数据
+      save(STORAGE_KEYS.RM_BOOKINGS, bookings, false);
+    }
+    return bookings;
   }
   function saveBookingLastId(id) {
     localStorage.setItem(STORAGE_KEYS.RM_LAST_ID, String(id));
@@ -1652,6 +1675,12 @@ var Store = (function() {
   }
   function loadHCConfig() {
     return load(STORAGE_KEYS.HC_CONFIG, false) || [];
+  }
+  function saveHCPresetVersion(ver) {
+    localStorage.setItem(STORAGE_KEYS.HC_PRESET_VERSION, String(ver));
+  }
+  function loadHCPresetVersion() {
+    return localStorage.getItem(STORAGE_KEYS.HC_PRESET_VERSION) || '';
   }
 
   // --- 版本 ---
@@ -1761,6 +1790,8 @@ var Store = (function() {
     loadBookingLastId:  loadBookingLastId,
     saveHCConfig:       saveHCConfig,
     loadHCConfig:       loadHCConfig,
+    saveHCPresetVersion:saveHCPresetVersion,
+    loadHCPresetVersion:loadHCPresetVersion,
     saveAppVersion:     saveAppVersion,
     loadAppVersion:     loadAppVersion,
     // 全量
@@ -2018,15 +2049,22 @@ function calcTotalWallet(txs, fundWithdrawals, agentWallets) {
  */
 function calcRoomQuota(bookings, txs, month) {
   var totalVolume = 0;
+  // 月份归一化 ("2026/06" → "2026-06")
+  var normMonth = month ? month.replace(/\//g, '-') : '';
+
   for (var i = 0; i < txs.length; i++) {
-    if (!month || txs[i].date.indexOf(month) === 0) {
+    // 日期归一化后再匹配 (支持 "YYYY-MM-DD" 和 "YYYY/MM/DD")
+    var txDate = (txs[i].date || '').replace(/\//g, '-');
+    if (!normMonth || txDate.indexOf(normMonth) === 0) {
       totalVolume += toNum(txs[i].volume);
     }
   }
 
   var usedThreshold = 0;
   for (var j = 0; j < bookings.length; j++) {
-    if (!month || bookings[j].month === month) {
+    // month 字段归一化后再匹配
+    var bkMonth = (bookings[j].month || '').replace(/\//g, '-');
+    if (!normMonth || bkMonth === normMonth) {
       usedThreshold += toNum(bookings[j].threshold) || 0;
     }
   }
@@ -3531,6 +3569,15 @@ function addAgentFromMgr() {
 // ============================================================================
 
 /**
+ * 归一化日期字符串为 YYYY-MM 格式 (用于 month 字段)
+ * 支持 YYYY/MM/DD 和 YYYY-MM-DD 输入
+ */
+function normalizeMonth(dateStr) {
+  if (!dateStr) return nowStr().substring(0, 7); // "YYYY-MM"
+  return dateStr.replace(/\//g, '-').substring(0, 7);
+}
+
+/**
  * 新增订房
  * @param {object} data
  * @returns {object}
@@ -3545,7 +3592,7 @@ function createBooking(data) {
     id:            State.nextId('booking'),
     _fbKey:        fbKey,
     date:          data.date || nowStr(),
-    month:         (data.checkIn || nowStr()).substring(0, 7),
+    month:         normalizeMonth(data.checkIn),
     agent:         data.agent || '',
     client:        data.client || '',
     casino:        data.casino || '',
@@ -3598,7 +3645,7 @@ function updateBooking(fbKey, data) {
         // 重算
         b.nights = calcNights(b.checkIn, b.checkOut);
         b.totalCost = b.nights * b.pricePerNight;
-        b.month = b.checkIn.substring(0, 7);
+        b.month = normalizeMonth(b.checkIn);
         updated = b;
         break;
       }
@@ -3672,18 +3719,143 @@ function getAllBookings() {
  * 事件: emit hcConfig:updated
  */
 
+var PRESET_VERSION = '2';
+
 // ============================================================================
 // 预设数据 (对照档模块20)
+// 数据来源：用户提供的三张酒店房价图片
 // ============================================================================
 var PRESET_CONFIG = [
-  { casino: '新濠天地', hotel: '摩柏斯',    code: 'KP1', room: '標準套房', weekday: 2000, weekend: 2500, special: 3000, threshold: 80 },
-  { casino: '新濠天地', hotel: '摩柏斯',    code: 'KP2', room: '豪華套房', weekday: 2800, weekend: 3500, special: 4200, threshold: 120 },
-  { casino: '新濠影滙', hotel: '新濠影滙',  code: 'ST1', room: '標準房',   weekday: 1500, weekend: 2000, special: 2500, threshold: 60 },
-  { casino: '金沙',     hotel: '威尼斯人',  code: 'VN1', room: '標準套房', weekday: 1800, weekend: 2200, special: 2800, threshold: 80 },
-  { casino: '金沙',     hotel: '巴黎人',    code: 'PR1', room: '標準套房', weekday: 1600, weekend: 2000, special: 2500, threshold: 70 },
-  { casino: '銀河',     hotel: '銀河酒店',  code: 'GL1', room: '標準套房', weekday: 2000, weekend: 2500, special: 3000, threshold: 100 },
-  { casino: '永利',     hotel: '永利澳門',  code: 'WL1', room: '標準套房', weekday: 2200, weekend: 2800, special: 3500, threshold: 100 },
-  { casino: '上葡京',   hotel: '上葡京',    code: 'GP1', room: '標準套房', weekday: 1800, weekend: 2200, special: 2800, threshold: 80 },
+  // ========= 新濠天地 — 摩珀斯 (6) =========
+  { casino: '新濠天地', hotel: '摩珀斯', code: 'MPK',   room: '摩珀斯套房(大床)',       weekday: 1500,  weekend: 1800,  special: 2700,  threshold: 80 },
+  { casino: '新濠天地', hotel: '摩珀斯', code: 'MPPK',  room: '摩珀斯套房(雙床)',       weekday: 1500,  weekend: 1800,  special: 2700,  threshold: 80 },
+  { casino: '新濠天地', hotel: '摩珀斯', code: 'MPT',   room: '摩珀斯豪華套房',         weekday: 2720,  weekend: 3000,  special: 4200,  threshold: 180 },
+  { casino: '新濠天地', hotel: '摩珀斯', code: 'MCPT',  room: '摩珀斯2房奢房',          weekday: 4200,  weekend: 4500,  special: 6000,  threshold: 500 },
+  { casino: '新濠天地', hotel: '摩珀斯', code: 'MPS',   room: '摩珀斯3房奢房',          weekday: 6000,  weekend: 6500,  special: 8900,  threshold: 1000 },
+  { casino: '新濠天地', hotel: '摩珀斯', code: 'MES',   room: '摩珀斯總統套房',         weekday: 10000, weekend: 11000, special: 13800, threshold: 3000 },
+
+  // ========= 新濠天地 — 頣居 (8) =========
+  { casino: '新濠天地', hotel: '頣居',  code: 'NPK',   room: '頣居客房(大床)',         weekday: 1200,  weekend: 1500,  special: 2200,  threshold: 80 },
+  { casino: '新濠天地', hotel: '頣居',  code: 'NPKV',  room: '頣居客房(雙床)',         weekday: 1200,  weekend: 1500,  special: 2200,  threshold: 80 },
+  { casino: '新濠天地', hotel: '頣居',  code: 'NPQ',   room: '頣居豪華客房',           weekday: 1800,  weekend: 2000,  special: 3000,  threshold: 180 },
+  { casino: '新濠天地', hotel: '頣居',  code: 'NPQV',  room: '頣居豪華客房(雙床)',     weekday: 1800,  weekend: 2000,  special: 3000,  threshold: 180 },
+  { casino: '新濠天地', hotel: '頣居',  code: 'NDS',   room: '頣居套房',               weekday: 3000,  weekend: 3200,  special: 4500,  threshold: 500 },
+  { casino: '新濠天地', hotel: '頣居',  code: 'NCDS',  room: '頣居豪華套房',           weekday: 4500,  weekend: 5000,  special: 6500,  threshold: 1000 },
+  { casino: '新濠天地', hotel: '頣居',  code: 'NPS',   room: '頣居2房奢房',            weekday: 6000,  weekend: 6500,  special: 8000,  threshold: 3000 },
+  { casino: '新濠天地', hotel: '頣居',  code: 'NPSV',  room: '頣居3房奢房',            weekday: 8000,  weekend: 8500,  special: 10000, threshold: 3000 },
+
+  // ========= 新濠影滙 — 明星滙 (6) =========
+  { casino: '新濠影滙', hotel: '明星滙', code: 'CRC',   room: '明星滙客房(大床)',       weekday: 1200,  weekend: 1500,  special: 2200,  threshold: 80 },
+  { casino: '新濠影滙', hotel: '明星滙', code: 'CRT',   room: '明星滙客房(雙床)',       weekday: 1200,  weekend: 1500,  special: 2200,  threshold: 80 },
+  { casino: '新濠影滙', hotel: '明星滙', code: 'CDX',   room: '明星滙豪華客房',         weekday: 1800,  weekend: 2000,  special: 3000,  threshold: 180 },
+  { casino: '新濠影滙', hotel: '明星滙', code: 'CDT',   room: '明星滙豪華客房(雙床)',   weekday: 1800,  weekend: 2000,  special: 3000,  threshold: 180 },
+  { casino: '新濠影滙', hotel: '明星滙', code: 'CSS',   room: '明星滙套房',             weekday: 3000,  weekend: 3200,  special: 4500,  threshold: 300 },
+  { casino: '新濠影滙', hotel: '明星滙', code: 'SDK',   room: '明星滙豪華套房',         weekday: 4500,  weekend: 5000,  special: 6500,  threshold: 1000 },
+
+  // ========= 新濠影滙 — 巨星滙 (4) =========
+  { casino: '新濠影滙', hotel: '巨星滙', code: 'SDT',   room: '巨星滙套房(雙床)',       weekday: 1200,  weekend: 1500,  special: 2200,  threshold: 80 },
+  { casino: '新濠影滙', hotel: '巨星滙', code: 'STS',   room: '巨星滙豪華客房',         weekday: 3000,  weekend: 3200,  special: 4500,  threshold: 300 },
+  { casino: '新濠影滙', hotel: '巨星滙', code: 'SPS',   room: '巨星滙豪華套房',         weekday: 4500,  weekend: 5000,  special: 6500,  threshold: 1000 },
+  { casino: '新濠影滙', hotel: '巨星滙', code: 'SGS',   room: '巨星滙總統套房',         weekday: 8000,  weekend: 8500,  special: 10000, threshold: 3000 },
+
+  // ========= 新濠影滙 — 映星滙 (7) =========
+  { casino: '新濠影滙', hotel: '映星滙',  code: 'EDK',   room: '映星滙客房(大床)',         weekday: 1500,  weekend: 1800,  special: 2700,  threshold: 80 },
+  { casino: '新濠影滙', hotel: '映星滙',  code: 'EDT',   room: '映星滙客房(雙床)',         weekday: 1500,  weekend: 1800,  special: 2700,  threshold: 80 },
+  { casino: '新濠影滙', hotel: '映星滙',  code: 'EG1',   room: '映星滙套房',               weekday: 2700,  weekend: 3000,  special: 4200,  threshold: 180 },
+  { casino: '新濠影滙', hotel: '映星滙',  code: 'EO1',   room: '映星滙豪華客房',           weekday: 4200,  weekend: 4500,  special: 6900,  threshold: 350 },
+  { casino: '新濠影滙', hotel: '映星滙',  code: 'EG2',   room: '映星滙2房奢房',            weekday: 6800,  weekend: 6500,  special: 8000,  threshold: 1000 },
+  { casino: '新濠影滙', hotel: '映星滙',  code: 'ES2',   room: '映星滙3房奢房',            weekday: 8000,  weekend: 8500,  special: 10000, threshold: 3000 },
+  { casino: '新濠影滙', hotel: '映星滙',  code: 'EP3',   room: '映星滙總統套房',           weekday: 16000, weekend: 16000, special: 18000, threshold: 3000 },
+
+  // ========= 新濠天地 — 君悅 (12) =========
+  { casino: '新濠天地', hotel: '君悅',  code: 'KING',  room: '君悅客房(大床)',         weekday: 1200,  weekend: 1500,  special: 2200,  threshold: 80 },
+  { casino: '新濠天地', hotel: '君悅',  code: 'TWIN',  room: '君悅客房(雙床)',         weekday: 1200,  weekend: 1500,  special: 2200,  threshold: 80 },
+  { casino: '新濠天地', hotel: '君悅',  code: 'DLXX',  room: '君悅豪華客房(大床)',     weekday: 1800,  weekend: 2000,  special: 3000,  threshold: 180 },
+  { casino: '新濠天地', hotel: '君悅',  code: 'DLXT',  room: '君悅豪華客房(雙床)',     weekday: 1800,  weekend: 2000,  special: 3000,  threshold: 180 },
+  { casino: '新濠天地', hotel: '君悅',  code: 'CLDK',  room: '君悅角套房(大床)',       weekday: 3000,  weekend: 3200,  special: 4500,  threshold: 350 },
+  { casino: '新濠天地', hotel: '君悅',  code: 'CLDT',  room: '君悅角套房(雙床)',       weekday: 3000,  weekend: 3200,  special: 4500,  threshold: 350 },
+  { casino: '新濠天地', hotel: '君悅',  code: 'GRSK',  room: '君悅豪華套房',           weekday: 4500,  weekend: 5000,  special: 6500,  threshold: 1000 },
+  { casino: '新濠天地', hotel: '君悅',  code: 'GRXS',  room: '君悅行政套房',           weekday: 6000,  weekend: 6500,  special: 8000,  threshold: 3000 },
+  { casino: '新濠天地', hotel: '君悅',  code: 'PREM',  room: '君悅總理套房',           weekday: 10000, weekend: 11000, special: 13000, threshold: 3000 },
+  { casino: '新濠天地', hotel: '君悅',  code: 'DIPL',  room: '君悅外交套房',           weekday: 15000, weekend: 16500, special: 18600, threshold: 3000 },
+  { casino: '新濠天地', hotel: '君悅',  code: 'PRES',  room: '君悅總統套房',           weekday: 20000, weekend: 22000, special: 26000, threshold: 3000 },
+  { casino: '新濠天地', hotel: '君悅',  code: 'CHHN',  room: '君悅主席套房',           weekday: 30000, weekend: 32000, special: 36000, threshold: 3000 },
+
+  // ========= 金沙 — 倫敦人名滙 (11) =========
+  { casino: '金沙',     hotel: '倫敦人名滙',   code: 'R2',    room: '倫敦人名滙客房(大床)',         weekday: 1200,  weekend: 1500,  special: 2200,  threshold: 60 },
+  { casino: '金沙',     hotel: '倫敦人名滙',   code: 'RK',    room: '倫敦人名滙客房(雙床)',         weekday: 1200,  weekend: 1500,  special: 2200,  threshold: 60 },
+  { casino: '金沙',     hotel: '倫敦人名滙',   code: 'V2',    room: '倫敦人名滙豪華客房(大床)',     weekday: 1800,  weekend: 2000,  special: 3000,  threshold: 150 },
+  { casino: '金沙',     hotel: '倫敦人名滙',   code: 'VK',    room: '倫敦人名滙豪華客房(雙床)',     weekday: 1800,  weekend: 2000,  special: 3000,  threshold: 150 },
+  { casino: '金沙',     hotel: '倫敦人名滙',   code: 'LS2',   room: '倫敦人名滙套房(大床)',         weekday: 3000,  weekend: 3200,  special: 4500,  threshold: 150 },
+  { casino: '金沙',     hotel: '倫敦人名滙',   code: 'LSK',   room: '倫敦人名滙套房(雙床)',         weekday: 3000,  weekend: 3200,  special: 4500,  threshold: 150 },
+  { casino: '金沙',     hotel: '倫敦人名滙',   code: 'GS2',   room: '倫敦人名滙行政套房',           weekday: 4500,  weekend: 5000,  special: 6500,  threshold: 300 },
+  { casino: '金沙',     hotel: '倫敦人名滙',   code: 'GSK',   room: '倫敦人名滙行政套房(雙床)',     weekday: 4500,  weekend: 5000,  special: 6500,  threshold: 300 },
+  { casino: '金沙',     hotel: '倫敦人名滙',   code: 'CS2',   room: '倫敦人名滙主席套房',           weekday: 8000,  weekend: 8500,  special: 10000, threshold: 300 },
+  { casino: '金沙',     hotel: '倫敦人名滙',   code: 'GC2',   room: '倫敦人名滙總理套房',           weekday: 10000, weekend: 11000, special: 13000, threshold: 300 },
+  { casino: '金沙',     hotel: '倫敦人名滙',   code: 'TS',    room: '倫敦人名滙總統套房',           weekday: 15000, weekend: 16000, special: 18000, threshold: 300 },
+
+  // ========= 金沙 — 倫敦人 (7) =========
+  { casino: '金沙',     hotel: '倫敦人', code: 'KC',    room: '倫敦人客房(大床)',       weekday: 1200,  weekend: 1500,  special: 2200,  threshold: 60 },
+  { casino: '金沙',     hotel: '倫敦人', code: 'TC',    room: '倫敦人客房(雙床)',       weekday: 1200,  weekend: 1500,  special: 2200,  threshold: 60 },
+  { casino: '金沙',     hotel: '倫敦人', code: 'KS',    room: '倫敦人套房(大床)',       weekday: 3000,  weekend: 3200,  special: 4500,  threshold: 150 },
+  { casino: '金沙',     hotel: '倫敦人', code: 'TS2',   room: '倫敦人套房(雙床)',       weekday: 3000,  weekend: 3200,  special: 4500,  threshold: 150 },
+  { casino: '金沙',     hotel: '倫敦人', code: 'DBK1',  room: '倫敦人雙床套房',         weekday: 4500,  weekend: 5000,  special: 6500,  threshold: 150 },
+  { casino: '金沙',     hotel: '倫敦人', code: 'DBKD2', room: '倫敦人2房套房',          weekday: 6000,  weekend: 6500,  special: 8000,  threshold: 300 },
+  { casino: '金沙',     hotel: '倫敦人', code: 'DBKQD3',room: '倫敦人3房套房',          weekday: 8000,  weekend: 8500,  special: 10000, threshold: 300 },
+
+  // ========= 金沙 — 御園 (8) =========
+  { casino: '金沙',     hotel: '御園',   code: 'CM1',   room: '御園客房(大床)',         weekday: 1800,  weekend: 2000,  special: 3000,  threshold: 150 },
+  { casino: '金沙',     hotel: '御園',   code: 'CG1',   room: '御園客房(雙床)',         weekday: 1800,  weekend: 2000,  special: 3000,  threshold: 150 },
+  { casino: '金沙',     hotel: '御園',   code: 'CGD1',  room: '御園豪華客房(大床)',     weekday: 3000,  weekend: 3200,  special: 4500,  threshold: 150 },
+  { casino: '金沙',     hotel: '御園',   code: 'CMD1',  room: '御園豪華客房(雙床)',     weekday: 3000,  weekend: 3200,  special: 4500,  threshold: 150 },
+  { casino: '金沙',     hotel: '御園',   code: 'CK2',   room: '御園套房',               weekday: 4500,  weekend: 5000,  special: 6500,  threshold: 300 },
+  { casino: '金沙',     hotel: '御園',   code: 'CKD2',  room: '御園2房套房',            weekday: 6000,  weekend: 6500,  special: 8000,  threshold: 300 },
+  { casino: '金沙',     hotel: '御園',   code: 'CV3',   room: '御園3房套房',            weekday: 8000,  weekend: 8500,  special: 10000, threshold: 300 },
+  { casino: '金沙',     hotel: '御園',   code: 'CVS4',  room: '御園4房套房',            weekday: 10000, weekend: 11000, special: 13000, threshold: 300 },
+
+  // ========= 銀河 — 銀河酒店 (6) =========
+  { casino: '銀河',     hotel: '銀河酒店', code: 'GM01',  room: '銀河客房(大床)',       weekday: 1200,  weekend: 1500,  special: 2200,  threshold: 80 },
+  { casino: '銀河',     hotel: '銀河酒店', code: 'GM01T', room: '銀河客房(雙床)',       weekday: 1200,  weekend: 1500,  special: 2200,  threshold: 80 },
+  { casino: '銀河',     hotel: '銀河酒店', code: 'GM04',  room: '銀河豪華套房(大床)',   weekday: 1800,  weekend: 2000,  special: 3000,  threshold: 200 },
+  { casino: '銀河',     hotel: '銀河酒店', code: 'GM06',  room: '銀河套房',             weekday: 3000,  weekend: 3200,  special: 4500,  threshold: 400 },
+  { casino: '銀河',     hotel: '銀河酒店', code: 'GM07',  room: '銀河豪華套房',         weekday: 4500,  weekend: 5000,  special: 6500,  threshold: 400 },
+  { casino: '銀河',     hotel: '銀河酒店', code: 'GM08',  room: '銀河總統套房',         weekday: 8000,  weekend: 8500,  special: 10000, threshold: 400 },
+
+  // ========= 銀河 — 大倉 (6) =========
+  { casino: '銀河',     hotel: '大倉',    code: 'OK01',  room: '大倉客房(大床)',       weekday: 1500,  weekend: 1800,  special: 2700,  threshold: 80 },
+  { casino: '銀河',     hotel: '大倉',    code: 'OK02',  room: '大倉客房(雙床)',       weekday: 1500,  weekend: 1800,  special: 2700,  threshold: 80 },
+  { casino: '銀河',     hotel: '大倉',    code: 'OK03',  room: '大倉豪華套房',         weekday: 2700,  weekend: 3000,  special: 4200,  threshold: 200 },
+  { casino: '銀河',     hotel: '大倉',    code: 'OK05',  room: '大倉套房',             weekday: 4200,  weekend: 4500,  special: 6000,  threshold: 400 },
+  { casino: '銀河',     hotel: '大倉',    code: 'OK06',  room: '大倉豪華套房',         weekday: 6000,  weekend: 6500,  special: 8000,  threshold: 400 },
+  { casino: '銀河',     hotel: '大倉',    code: 'OK07',  room: '大倉總統套房',         weekday: 10000, weekend: 11000, special: 13000, threshold: 400 },
+
+  // ========= 銀河 — 悦榕莊 (5) =========
+  { casino: '銀河',     hotel: '悦榕莊',  code: 'BT01',  room: '悦榕莊客房(大床)',     weekday: 1800,  weekend: 2000,  special: 3000,  threshold: 80 },
+  { casino: '銀河',     hotel: '悦榕莊',  code: 'BT02',  room: '悦榕莊客房(雙床)',     weekday: 1800,  weekend: 2000,  special: 3000,  threshold: 80 },
+  { casino: '銀河',     hotel: '悦榕莊',  code: 'BT03',  room: '悦榕莊套房',           weekday: 3000,  weekend: 3200,  special: 4500,  threshold: 200 },
+  { casino: '銀河',     hotel: '悦榕莊',  code: 'BT05',  room: '悦榕莊別墅',           weekday: 8000,  weekend: 8500,  special: 10000, threshold: 400 },
+  { casino: '銀河',     hotel: '悦榕莊',  code: 'BT06',  room: '悦榕莊海景別墅',       weekday: 10000, weekend: 11000, special: 13000, threshold: 400 },
+
+  // ========= 銀河 — JW萬豪 (6) =========
+  { casino: '銀河',     hotel: 'JW萬豪',    code: 'JW01',  room: 'JW萬豪客房(大床)',       weekday: 1500,  weekend: 1800,  special: 2700,  threshold: 80 },
+  { casino: '銀河',     hotel: 'JW萬豪',    code: 'JW02',  room: 'JW萬豪客房(雙床)',       weekday: 1500,  weekend: 1800,  special: 2700,  threshold: 80 },
+  { casino: '銀河',     hotel: 'JW萬豪',    code: 'JW03',  room: 'JW萬豪豪華客房',         weekday: 2700,  weekend: 3000,  special: 4200,  threshold: 200 },
+  { casino: '銀河',     hotel: 'JW萬豪',    code: 'JW05',  room: 'JW萬豪套房',             weekday: 4200,  weekend: 4500,  special: 6000,  threshold: 200 },
+  { casino: '銀河',     hotel: 'JW萬豪',    code: 'JW06',  room: 'JW萬豪行政套房',         weekday: 6000,  weekend: 6500,  special: 8000,  threshold: 200 },
+  { casino: '銀河',     hotel: 'JW萬豪',    code: 'JW08',  room: 'JW萬豪總統套房',         weekday: 15000, weekend: 16000, special: 18000, threshold: 200 },
+
+  // ========= 銀河 — 麗絲卡爾登 (5) =========
+  { casino: '銀河',     hotel: '麗絲卡爾登', code: 'RC01', room: '麗絲卡爾登客房(大床)',   weekday: 1800,  weekend: 2000,  special: 3000,  threshold: 200 },
+  { casino: '銀河',     hotel: '麗絲卡爾登', code: 'RC03', room: '麗絲卡爾登客房(雙床)',   weekday: 1800,  weekend: 2000,  special: 3000,  threshold: 200 },
+  { casino: '銀河',     hotel: '麗絲卡爾登', code: 'RC05', room: '麗絲卡爾登套房',         weekday: 4500,  weekend: 5000,  special: 6500,  threshold: 200 },
+  { casino: '銀河',     hotel: '麗絲卡爾登', code: 'RC06', room: '麗絲卡爾登豪華套房',     weekday: 8000,  weekend: 8500,  special: 10000, threshold: 200 },
+  { casino: '銀河',     hotel: '麗絲卡爾登', code: 'RC07', room: '麗絲卡爾登總統套房',     weekday: 16000, weekend: 16000, special: 18000, threshold: 200 },
+
+  // ========= 永利 — 保留原预设 =========
+  { casino: '永利',     hotel: '永利皇宮',   code: 'WL1', room: '標準套房', weekday: 2200, weekend: 2800, special: 3500, threshold: 100 },
+
+  // ========= 上葡京 — 保留原预设 =========
+  { casino: '上葡京',   hotel: '上葡京',     code: 'GP1', room: '標準套房', weekday: 1800, weekend: 2200, special: 2800, threshold: 80 },
 ];
 
 // ============================================================================
@@ -3788,6 +3960,7 @@ function resetHCToPreset() {
   State.set('hotelConfig', preset);
   State.resetNextId('hc', preset.length + 1);
   Store.saveHCConfig(preset);
+  Store.saveHCPresetVersion(PRESET_VERSION);
   Events.emit(EVENTS.HC_CONFIG_UPDATED, preset);
   return preset.length;
 }
@@ -5528,7 +5701,7 @@ function initKeyboard() {
 
 /**
  * 切换到指定页面
- * @param {string} pageName - 'overview'|'all'|'query'|'summary'|'room'
+ * @param {string} pageName - 'overview'|'all'|'query'|'summary'|'room'|'wallet'
  * @param {Element} [sidebarEl] - 侧边栏点击的元素
  */
 function showPage(pageName, sidebarEl) {
@@ -5607,6 +5780,9 @@ function _refreshPage(pageName) {
       break;
     case 'room':
       if (typeof RM !== 'undefined' && RM.render) RM.render();
+      break;
+    case 'wallet':
+      if (typeof renderWallet === 'function') renderWallet();
       break;
   }
 }
@@ -5822,26 +5998,24 @@ function _renderKPI(kpi) {
   }
 
   var cards = [
-    { label: TERMS.volume,      value: fmt(kpi.totalVolume),  unit: '萬', color: UI_COLORS.techCyan },
-    { label: TERMS.comm,        value: fmtMoney(kpi.totalComm),   color: UI_COLORS.skyBlue },
-    { label: TERMS.bonus,       value: fmtMoney(kpi.totalBonus),  color: UI_COLORS.electricViolet },
-    { label: TERMS.fund,        value: fmtMoney(kpi.totalFund),   color: UI_COLORS.goldSoft },
-    { label: TERMS.drawn,       value: fmtMoney(kpi.totalDrawn),  color: UI_COLORS.warning },
-    { label: TERMS.undrawn,     value: fmtMoney(kpi.totalUndrawn),color: UI_COLORS.danger },
+    { label: TERMS.volume,  value: fmt(kpi.totalVolume),  unit: '萬', accent: 'cyan', color: UI_COLORS.techCyan },
+    { label: TERMS.comm,    value: fmtMoney(kpi.totalComm),   accent: 'blue',  color: UI_COLORS.skyBlue },
+    { label: TERMS.bonus,   value: fmtMoney(kpi.totalBonus),  accent: 'violet',color: UI_COLORS.electricViolet },
+    { label: TERMS.fund,    value: fmtMoney(kpi.totalFund),   accent: 'gold',  color: UI_COLORS.goldSoft },
+    { label: TERMS.drawn,   value: fmtMoney(kpi.totalDrawn),  accent: 'orange',color: UI_COLORS.warning },
+    { label: TERMS.undrawn, value: fmtMoney(kpi.totalUndrawn),accent: 'red',   color: UI_COLORS.danger },
   ];
 
   grid.innerHTML = '';
   for (var i = 0; i < cards.length; i++) {
     var c = cards[i];
     var card = h('div', { className: 'kpi-card', 'data-kpi': c.label.toLowerCase() });
-    card.style.cssText = 'background:' + UI_COLORS.bgElevated + ';border:1px solid ' + UI_COLORS.borderSubtle + ';border-radius:12px;padding:16px;cursor:pointer;transition:all 0.2s ease;border-left:3px solid ' + c.color;
+    // 仅保留动态颜色（border-left 随 KPI 类型变化）
+    card.style.borderLeft = '3px solid ' + c.color;
 
-    var label = h('div', { className: 'kpi-label' }, c.label);
-    label.style.cssText = 'font-size:12px;color:' + UI_COLORS.textSecondary + ';margin-bottom:8px';
-
-    var value = h('div', { className: 'kpi-value' });
-    value.style.cssText = 'font-size:24px;font-weight:700;color:' + c.color;
-    value.innerHTML = c.value + (c.unit ? ' <span style="font-size:14px;color:' + UI_COLORS.textMuted + '">' + c.unit + '</span>' : '');
+    var label = h('div', { className: 'kpi-card-label' }, c.label);
+    var value = h('div', { className: 'kpi-card-value ' + c.accent });
+    value.innerHTML = c.value + (c.unit ? ' <span style="font-size:14px;opacity:0.6">' + c.unit + '</span>' : '');
 
     card.appendChild(label);
     card.appendChild(value);
@@ -5856,7 +6030,7 @@ function _renderKPI(kpi) {
 
   // 笔数/代理数
   var info = h('div', { className: 'kpi-info' });
-  info.style.cssText = 'grid-column:1/-1;text-align:center;padding:8px;font-size:12px;color:' + UI_COLORS.textMuted;
+  info.style.cssText = 'grid-column:1/-1;text-align:center;padding:10px 0;font-size:12px;color:var(--text-muted)';
   info.textContent = '共 ' + kpi.txCount + ' 筆交易 · ' + kpi.agentCount + ' 位代理';
   grid.appendChild(info);
 }
@@ -5926,20 +6100,19 @@ function _renderAllKPI(txs) {
   var _totalFund = totalFund(txs);
 
   mini.innerHTML = '';
-  mini.style.cssText = 'display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap';
 
   var items = [
-    { label: TERMS.volume, value: fmt(_totalVol) + '萬', color: UI_COLORS.techCyan },
-    { label: TERMS.comm,   value: fmtMoney(_totalComm),  color: UI_COLORS.skyBlue },
-    { label: TERMS.bonus,  value: fmtMoney(_totalBonus), color: UI_COLORS.electricViolet },
-    { label: TERMS.fund,   value: fmtMoney(_totalFund),  color: UI_COLORS.goldSoft },
+    { label: TERMS.volume, value: fmt(_totalVol) + '萬', accent: 'cyan',  color: UI_COLORS.techCyan },
+    { label: TERMS.comm,   value: fmtMoney(_totalComm),  accent: 'blue',  color: UI_COLORS.skyBlue },
+    { label: TERMS.bonus,  value: fmtMoney(_totalBonus), accent: 'violet',color: UI_COLORS.electricViolet },
+    { label: TERMS.fund,   value: fmtMoney(_totalFund),  accent: 'gold',  color: UI_COLORS.goldSoft },
   ];
 
   for (var i = 0; i < items.length; i++) {
-    var item = h('div');
-    item.style.cssText = 'background:' + UI_COLORS.bgElevated + ';padding:10px 16px;border-radius:8px;border:1px solid ' + UI_COLORS.borderSubtle + ';border-left:3px solid ' + items[i].color;
-    item.innerHTML = '<div style="font-size:11px;color:' + UI_COLORS.textMuted + ';margin-bottom:4px">' + items[i].label + '</div>' +
-                     '<div style="font-size:16px;font-weight:700;color:' + items[i].color + '">' + items[i].value + '</div>';
+    var item = h('div', { className: 'kpi-card' });
+    item.style.borderLeft = '3px solid ' + items[i].color;
+    item.innerHTML = '<div class="kpi-card-label">' + items[i].label + '</div>' +
+                     '<div class="kpi-card-value ' + items[i].accent + '" style="font-size:18px">' + items[i].value + '</div>';
     mini.appendChild(item);
   }
 }
@@ -5958,52 +6131,56 @@ function _renderAllTable(txs) {
 
   tbody.innerHTML = '';
   for (var i = 0; i < txs.length; i++) {
-    var tx = txs[i];
-    var tr = h('tr', {
-      'data-fbkey': tx._fbKey,
-      onclick: function() {
-        var key = this.getAttribute('data-fbkey');
-        Events.emit('tx:edit:request', key);
-      }
-    });
-    tr.style.cursor = 'pointer';
-
-    var cells = [
-      tx.type === 'cash' ? '現金' : '轉碼',
-      tx.date,
-      tx.agent,
-      tx.client || '-',
-      tx.venue || '-',
-      fmt(tx.volume) + '萬',
-      fmtMoney(tx.comm),
-      fmtMoney(tx.bonus),
-      fmtMoney(tx.drawn),
-      fmtMoney(tx.undrawn),
-      tx.note || '-',
-    ];
-
-    for (var j = 0; j < cells.length; j++) {
-      var td = h('td', {}, cells[j]);
-      tr.appendChild(td);
-    }
-
-    // 操作按钮
-    var tdBtn = h('td');
-    var delBtn = h('button', {
-      style: 'background:' + UI_COLORS.danger + ';color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px',
-      onclick: function(e) {
-        e.stopPropagation();
-        if (confirm('確定刪除這筆交易？')) {
-          deleteTx(tx._fbKey);
-          toastCRUDDone();
-          renderAll();
+    (function(tx) {
+      var tr = h('tr', {
+        'data-fbkey': tx._fbKey,
+        onclick: function() {
+          var key = this.getAttribute('data-fbkey');
+          Events.emit('tx:edit:request', key);
         }
-      }
-    }, '刪除');
-    tdBtn.appendChild(delBtn);
-    tr.appendChild(tdBtn);
+      });
+      tr.style.cursor = 'pointer';
 
-    tbody.appendChild(tr);
+      var cells = [
+        tx.type === 'cash' ? '現金' : '轉碼',
+        tx.date,
+        tx.agent,
+        tx.client || '-',
+        tx.venue || '-',
+        fmt(tx.volume) + '萬',
+        fmtMoney(tx.comm),
+        fmtMoney(tx.bonus),
+        fmtMoney(tx.drawn),
+        fmtMoney(tx.undrawn),
+        tx.note || '-',
+      ];
+
+      for (var j = 0; j < cells.length; j++) {
+        var td = h('td', {}, cells[j]);
+        tr.appendChild(td);
+      }
+
+      // 操作按钮 — 用 IIFE 捕捉当前 tx，避免闭包陷阱
+      var fbKey = tx._fbKey;
+      var tdBtn = h('td');
+      var delBtn = h('button', {
+        style: 'background:' + UI_COLORS.danger + ';color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px'
+      }, '刪除');
+      delBtn.onclick = (function(key) {
+        return function(e) {
+          e.stopPropagation();
+          if (confirm('確定刪除這筆交易？')) {
+            deleteTx(key);
+            toastCRUDDone();
+            renderAll();
+          }
+        };
+      })(fbKey);
+      tdBtn.appendChild(delBtn);
+      tr.appendChild(tdBtn);
+
+      tbody.appendChild(tr);
+    })(txs[i]);
   }
 }
 
@@ -6022,7 +6199,32 @@ function renderQuery() {
   doQuery();
 }
 
-/** 填充查詢頁下拉：代理、地點、月份 */
+/**
+ * 从交易数据中自动检测所有出现的年份
+ * @returns {number[]} 降序排列的年份列表
+ */
+function _detectYears() {
+  var txs = State.get('txs');
+  var years = {};
+  var now = new Date();
+  var currentYear = now.getFullYear();
+  // 确保至少有当前年
+  years[currentYear] = true;
+
+  for (var i = 0; i < txs.length; i++) {
+    var d = txs[i].date;
+    if (d && d.length >= 4) {
+      var y = parseInt(d.substring(0, 4));
+      if (!isNaN(y) && y >= 2020) years[y] = true;
+    }
+  }
+
+  var result = Object.keys(years).map(Number);
+  result.sort(function(a, b) { return b - a; }); // 降序：最新在前
+  return result;
+}
+
+/** 填充查詢頁下拉：代理、地點、月份（多年份） */
 function _populateQueryFilters() {
   // ---- 代理 ----
   var agentSel = document.getElementById('query-agent');
@@ -6056,18 +6258,8 @@ function _populateQueryFilters() {
     }
   }
 
-  // ---- 月份（1月-12月） ----
-  var monthSel = document.getElementById('query-month');
-  if (monthSel) {
-    monthSel.innerHTML = '<option value="">全部月份</option>';
-    for (var m = 1; m <= 12; m++) {
-      var mStr = m < 10 ? '0' + m : '' + m;
-      var opt = document.createElement('option');
-      opt.value = '2026-' + mStr;
-      opt.textContent = m + '月';
-      monthSel.appendChild(opt);
-    }
-  }
+  // ---- 月份（动态检测年份） ----
+  _refreshMonthDropdown();
 }
 
 /** 设定月份下拉默认值为当前月，默认填入日期范围为当月 */
@@ -6080,15 +6272,19 @@ function _setDefaultMonth() {
 
   var monthSel = document.getElementById('query-month');
   if (monthSel) {
+    // 尝试选中当前月份
+    var found = false;
     var opts = monthSel.options;
-    for (var i = 1; i < opts.length; i++) {
-      var text = opts[i].textContent;
-      var mm = parseInt(text);
-      var mmStr = mm < 10 ? '0' + mm : '' + mm;
-      opts[i].value = year + '-' + mmStr;
+    for (var i = 0; i < opts.length; i++) {
       if (opts[i].value === monthValue) {
         monthSel.selectedIndex = i;
+        found = true;
+        break;
       }
+    }
+    // 如果当前月份不在列表中（没有该年数据），默认不选
+    if (!found) {
+      monthSel.selectedIndex = 0;
     }
   }
 
@@ -6115,11 +6311,52 @@ function _highlightQuickBtn(type) {
 }
 
 function _quickBtnLabel(type) {
+  var now = new Date();
+  var y = now.getFullYear();
+  var m = now.getMonth() + 1;
   var map = {
     lastWeek: '上週', thisWeek: '本週', thisMonth: '本月',
     lastMonth: '上月', thisYear: '年度', custom: '自訂'
   };
   return map[type] || '';
+}
+
+/** 更新月份下拉的 option value 和选中状态（跨年支持）*/
+function _refreshMonthDropdown() {
+  var monthSel = document.getElementById('query-month');
+  if (!monthSel) return;
+
+  var currentValue = monthSel.value;  // 记住当前选择
+  var years = _detectYears();
+
+  monthSel.innerHTML = '<option value="">全部月份</option>';
+  for (var yi = 0; yi < years.length; yi++) {
+    var yr = years[yi];
+    var groupOpt = document.createElement('option');
+    groupOpt.value = '';
+    groupOpt.textContent = '── ' + yr + ' 年 ──';
+    groupOpt.disabled = true;
+    groupOpt.style.cssText = 'color:var(--tech-cyan);font-weight:700;font-size:12px;';
+    monthSel.appendChild(groupOpt);
+
+    for (var m = 1; m <= 12; m++) {
+      var mStr = m < 10 ? '0' + m : '' + m;
+      var monOpt = document.createElement('option');
+      monOpt.value = yr + '-' + mStr;
+      monOpt.textContent = '  ' + m + '月';
+      monthSel.appendChild(monOpt);
+    }
+  }
+
+  // 恢复选择
+  if (currentValue) {
+    for (var i = 0; i < monthSel.options.length; i++) {
+      if (monthSel.options[i].value === currentValue) {
+        monthSel.selectedIndex = i;
+        break;
+      }
+    }
+  }
 }
 
 /** 执行查询 — 根据代理选择路由到不同渲染模式 */
@@ -6205,20 +6442,19 @@ function _renderQueryKPI(txs) {
   var totalWallet = getTotalWallet();
 
   el.innerHTML = '';
-  el.style.cssText = 'display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap';
 
   var items = [
-    { label: TERMS.volume,  value: fmt(vol) + '萬', color: UI_COLORS.techCyan },
-    { label: TERMS.comm,    value: fmtMoney(comm), color: UI_COLORS.skyBlue },
-    { label: TERMS.undrawn, value: fmtMoney(undrawn), color: UI_COLORS.warning },
-    { label: '💰 總錢包',   value: fmtMoney(totalWallet), color: UI_COLORS.goldSoft },
+    { label: TERMS.volume,  value: fmt(vol) + '萬', accent: 'cyan',   color: UI_COLORS.techCyan },
+    { label: TERMS.comm,    value: fmtMoney(comm), accent: 'blue',    color: UI_COLORS.skyBlue },
+    { label: TERMS.undrawn, value: fmtMoney(undrawn), accent: 'orange', color: UI_COLORS.warning },
+    { label: '💰 總錢包',   value: fmtMoney(totalWallet), accent: 'gold',   color: UI_COLORS.goldSoft },
   ];
 
   for (var i = 0; i < items.length; i++) {
-    var card = h('div');
-    card.style.cssText = 'flex:1;background:' + UI_COLORS.bgElevated + ';padding:12px;border-radius:8px;border:1px solid ' + UI_COLORS.borderSubtle + ';border-left:3px solid ' + items[i].color;
-    card.innerHTML = '<div style="font-size:11px;color:' + UI_COLORS.textMuted + ';margin-bottom:4px">' + items[i].label + '</div>' +
-                     '<div style="font-size:20px;font-weight:700;color:' + items[i].color + '">' + items[i].value + '</div>';
+    var card = h('div', { className: 'kpi-card' });
+    card.style.borderLeft = '3px solid ' + items[i].color;
+    card.innerHTML = '<div class="kpi-card-label">' + items[i].label + '</div>' +
+                     '<div class="kpi-card-value ' + items[i].accent + '" style="font-size:20px">' + items[i].value + '</div>';
     el.appendChild(card);
   }
 
@@ -6356,7 +6592,6 @@ function _renderFundLedger() {
   var kpiEl = document.getElementById('query-kpi');
   if (kpiEl) {
     kpiEl.innerHTML = '';
-    kpiEl.style.cssText = 'display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap;align-items:center';
 
     var kpiItems = [
       { label: '公基金總額', value: fmtMoney(totalFundIncome), color: UI_COLORS.goldSoft },
@@ -6364,19 +6599,19 @@ function _renderFundLedger() {
       { label: '可提餘額',    value: fmtMoney(balance),         color: UI_COLORS.warning },
     ];
     if (totalCDep > 0) {
-      kpiItems.splice(1, 0, { label: '自存現金', value: fmtMoney(totalCDep), color: UI_COLORS.orange || '#e67e22' });
+      kpiItems.splice(1, 0, { label: '自存現金', value: fmtMoney(totalCDep), color: UI_COLORS.cashOrange });
     }
 
     for (var i = 0; i < kpiItems.length; i++) {
-      var card = h('div');
-      card.style.cssText = 'flex:1;background:' + UI_COLORS.bgElevated + ';padding:12px;border-radius:8px;border:1px solid ' + UI_COLORS.borderSubtle + ';border-left:3px solid ' + kpiItems[i].color;
-      card.innerHTML = '<div style="font-size:11px;color:' + UI_COLORS.textMuted + ';margin-bottom:4px">' + kpiItems[i].label + '</div>' +
-                       '<div style="font-size:20px;font-weight:700;color:' + kpiItems[i].color + '">' + kpiItems[i].value + '</div>';
+      var card = h('div', { className: 'kpi-card' });
+      card.style.borderLeft = '3px solid ' + kpiItems[i].color;
+      card.innerHTML = '<div class="kpi-card-label">' + kpiItems[i].label + '</div>' +
+                       '<div class="kpi-card-value" style="font-size:20px;color:' + kpiItems[i].color + '">' + kpiItems[i].value + '</div>';
       kpiEl.appendChild(card);
     }
 
     // ＋ 提领 按钮
-    var btnDiv = h('div');
+    var btnDiv = h('div', { className: 'kpi-card', style: 'display:flex;align-items:center;justify-content:center;border-left:3px solid transparent' });
     btnDiv.innerHTML = '<button class="btn btn-sm btn-primary" onclick="openFundModal()">＋ 提領</button>';
     kpiEl.appendChild(btnDiv);
   }
@@ -6395,8 +6630,8 @@ function _renderFundLedger() {
   // 上月累计行
   if (!skipMonthFilter && preBalance > 0) {
     var pr = h('tr');
-    pr.style.cssText = 'background:rgba(201,168,76,0.08);';
-    pr.innerHTML = '<td>' + (queryMonth || dateFrom).substring(0, 7) + '-01</td><td style="color:#c9a84c;font-weight:600;">上月累計</td><td class="num"></td><td class="num"></td><td></td><td class="num" style="font-weight:700;color:#c9a84c;">' + fmtMoney(preBalance) + '</td>';
+    pr.style.cssText = 'background:rgba(201,168,76,0.08);'; // derived from UI_COLORS.goldSoft
+    pr.innerHTML = '<td>' + (queryMonth || dateFrom).substring(0, 7) + '-01</td><td style="color:' + UI_COLORS.goldSoft + ';font-weight:600;">上月累計</td><td class="num"></td><td class="num"></td><td></td><td class="num" style="font-weight:700;color:' + UI_COLORS.goldSoft + ';">' + fmtMoney(preBalance) + '</td>';
     tbody.appendChild(pr);
   }
 
@@ -6421,7 +6656,7 @@ function _renderFundLedger() {
     }
 
     var tr = h('tr');
-    var typeClr = e.type === '提領' ? 'color:#f85149;font-weight:600;' : (e.type === '存入' ? 'color:#58a6ff;' : (e.type === '自存現金' ? 'color:#e67e22;font-weight:600;' : 'color:#c9a84c;'));
+    var typeClr = e.type === '提領' ? 'color:#f85149;font-weight:600;' : (e.type === '存入' ? 'color:#58a6ff;' : (e.type === '自存現金' ? 'color:#e67e22;font-weight:600;' : 'color:' + UI_COLORS.goldSoft + ';'));
 
     var delBtn = e.source === 'fund'
       ? '<button class="btn-red" onclick="deleteFundRecord(\'' + (e._fbKey || e.id) + '\')">刪除</button>'
@@ -6432,7 +6667,7 @@ function _renderFundLedger() {
 
     tr.innerHTML = '<td>' + e.date + '</td>' +
       '<td style="' + typeClr + '">' + e.desc + '</td>' +
-      '<td class="num" style="color:#c9a84c;">' + inVal + '</td>' +
+      '<td class="num" style="color:' + UI_COLORS.goldSoft + ';">' + inVal + '</td>' +
       '<td class="num" style="color:#f85149;">' + outVal + '</td>' +
       '<td>' + delBtn + '</td>' +
       '<td class="num" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
@@ -6601,33 +6836,32 @@ function _renderAgentLedger(agent, filteredTxs, queryMonth) {
   var kpiEl = document.getElementById('query-kpi');
   if (kpiEl) {
     kpiEl.innerHTML = '';
-    kpiEl.style.cssText = 'display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap;align-items:center';
 
     var kpiItems = [
       { label: '碼糧總額', value: fmtMoney(allBonus), color: UI_COLORS.goldSoft },
     ];
     if (allCash > 0) {
-      kpiItems.push({ label: '現金寄放', value: fmtMoney(allCash), color: UI_COLORS.orange || '#e67e22' });
+      kpiItems.push({ label: '現金寄放', value: fmtMoney(allCash), color: UI_COLORS.cashOrange });
     }
     if (awDep > 0) {
       kpiItems.push({ label: '錢包存入', value: fmtMoney(awDep), color: UI_COLORS.skyBlue });
     }
     if (awCDep > 0) {
-      kpiItems.push({ label: '自存現金', value: fmtMoney(awCDep), color: UI_COLORS.orange || '#e67e22' });
+      kpiItems.push({ label: '自存現金', value: fmtMoney(awCDep), color: UI_COLORS.cashOrange });
     }
     kpiItems.push({ label: '已提領', value: fmtMoney(allDrawn), color: UI_COLORS.danger });
     kpiItems.push({ label: '未提領', value: fmtMoney(awBalance), color: UI_COLORS.warning });
 
     for (var i = 0; i < kpiItems.length; i++) {
-      var card = h('div');
-      card.style.cssText = 'flex:1;background:' + UI_COLORS.bgElevated + ';padding:12px;border-radius:8px;border:1px solid ' + UI_COLORS.borderSubtle + ';border-left:3px solid ' + kpiItems[i].color;
-      card.innerHTML = '<div style="font-size:11px;color:' + UI_COLORS.textMuted + ';margin-bottom:4px">' + kpiItems[i].label + '</div>' +
-                       '<div style="font-size:20px;font-weight:700;color:' + kpiItems[i].color + '">' + kpiItems[i].value + '</div>';
+      var card = h('div', { className: 'kpi-card' });
+      card.style.borderLeft = '3px solid ' + kpiItems[i].color;
+      card.innerHTML = '<div class="kpi-card-label">' + kpiItems[i].label + '</div>' +
+                       '<div class="kpi-card-value" style="font-size:20px;color:' + kpiItems[i].color + '">' + kpiItems[i].value + '</div>';
       kpiEl.appendChild(card);
     }
 
     // ＋ 異动 按钮
-    var btnDiv = h('div');
+    var btnDiv = h('div', { className: 'kpi-card', style: 'display:flex;align-items:center;justify-content:center;border-left:3px solid transparent' });
     btnDiv.innerHTML = '<button class="btn btn-sm btn-primary" onclick="openWalletModal(\'' + agent.replace(/'/g, "\\'") + '\')">＋ 異動</button>';
     kpiEl.appendChild(btnDiv);
   }
@@ -6645,14 +6879,14 @@ function _renderAgentLedger(agent, filteredTxs, queryMonth) {
 
   // 标题行
   var titleRow = h('tr');
-  titleRow.innerHTML = '<td colspan="6" style="padding:8px 0;font-weight:700;color:#c9a84c;font-size:14px;">💼 ' + agent + ' 代理對帳單</td>';
+  titleRow.innerHTML = '<td colspan="6" style="padding:8px 0;font-weight:700;color:' + UI_COLORS.goldSoft + ';font-size:14px;">💼 ' + agent + ' 代理對帳單</td>';
   tbody.appendChild(titleRow);
 
   // 上月累计行
   if (!skipMonthFilter && preRunning > 0) {
     var pr = h('tr');
-    pr.style.cssText = 'background:rgba(201,168,76,0.08);';
-    pr.innerHTML = '<td>' + filterStart.substring(0, 7) + '-01</td><td style="color:#c9a84c;font-weight:600;">上月累計</td><td class="num"></td><td class="num"></td><td></td><td class="num" style="font-weight:700;color:#c9a84c;">' + fmtMoney(preRunning) + '</td>';
+    pr.style.cssText = 'background:rgba(201,168,76,0.08);'; // derived from UI_COLORS.goldSoft
+    pr.innerHTML = '<td>' + filterStart.substring(0, 7) + '-01</td><td style="color:' + UI_COLORS.goldSoft + ';font-weight:600;">上月累計</td><td class="num"></td><td class="num"></td><td></td><td class="num" style="font-weight:700;color:' + UI_COLORS.goldSoft + ';">' + fmtMoney(preRunning) + '</td>';
     tbody.appendChild(pr);
   }
 
@@ -6711,7 +6945,7 @@ function _renderAgentLedger(agent, filteredTxs, queryMonth) {
       tr.innerHTML = '<td>' + e.date + '</td>' +
         '<td>' + (e.venue || '') + '(' + (e.client || '') + ')</td>' +
         '<td class="num">' + volStr + '</td>' +
-        '<td class="num" style="color:#c9a84c;">' + fmtMoney(e.bonus) + '</td>' +
+        '<td class="num" style="color:' + UI_COLORS.goldSoft + ';">' + fmtMoney(e.bonus) + '</td>' +
         '<td><span style="color:#6e7681;font-size:11px;">自動</span></td>' +
         '<td class="num" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
     }
@@ -6732,8 +6966,8 @@ function _renderAgentLedger(agent, filteredTxs, queryMonth) {
 
 function _appendTotalRow(tbody, running) {
   var tr = h('tr');
-  tr.style.cssText = 'background:rgba(22,27,34,0.8);font-weight:700;color:#c9a84c;';
-  tr.innerHTML = '<td></td><td style="color:#e6edf3;">合計</td><td class="num"></td><td class="num"></td><td></td><td class="num" style="font-size:15px;">' + fmtMoney(Math.max(0, running)) + '</td>';
+  tr.style.cssText = 'background:rgba(22,27,34,0.8);font-weight:700;color:' + UI_COLORS.goldSoft + ';'; // bgElevated at 80% opacity
+  tr.innerHTML = '<td></td><td style="color:' + UI_COLORS.textPrimary + ';">合計</td><td class="num"></td><td class="num"></td><td></td><td class="num" style="font-size:15px;">' + fmtMoney(Math.max(0, running)) + '</td>';
   tbody.appendChild(tr);
 }
 
@@ -6836,20 +7070,19 @@ function _renderSummaryKPI(txs) {
   if (!el) return;
   var kpi = calcKPI(txs);
   el.innerHTML = '';
-  el.style.cssText = 'display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap';
 
   var items = [
-    { label: '總筆數', value: kpi.txCount, color: UI_COLORS.techCyan },
-    { label: '代理數', value: kpi.agentCount, color: UI_COLORS.electricViolet },
-    { label: TERMS.volume, value: fmt(kpi.totalVolume) + '萬', color: UI_COLORS.skyBlue },
-    { label: TERMS.undrawn, value: fmtMoney(kpi.totalUndrawn), color: UI_COLORS.warning },
+    { label: '總筆數', value: kpi.txCount, accent: 'cyan',   color: UI_COLORS.techCyan },
+    { label: '代理數', value: kpi.agentCount, accent: 'violet', color: UI_COLORS.electricViolet },
+    { label: TERMS.volume, value: fmt(kpi.totalVolume) + '萬', accent: 'blue',    color: UI_COLORS.skyBlue },
+    { label: TERMS.undrawn, value: fmtMoney(kpi.totalUndrawn), accent: 'orange',  color: UI_COLORS.warning },
   ];
 
   for (var i = 0; i < items.length; i++) {
-    var card = h('div');
-    card.style.cssText = 'flex:1;min-width:120px;background:' + UI_COLORS.bgElevated + ';padding:12px;border-radius:8px;border:1px solid ' + UI_COLORS.borderSubtle + ';border-left:3px solid ' + items[i].color;
-    card.innerHTML = '<div style="font-size:11px;color:' + UI_COLORS.textMuted + '">' + items[i].label + '</div>' +
-                     '<div style="font-size:20px;font-weight:700;color:' + items[i].color + '">' + items[i].value + '</div>';
+    var card = h('div', { className: 'kpi-card' });
+    card.style.borderLeft = '3px solid ' + items[i].color;
+    card.innerHTML = '<div class="kpi-card-label">' + items[i].label + '</div>' +
+                     '<div class="kpi-card-value ' + items[i].accent + '">' + items[i].value + '</div>';
     el.appendChild(card);
   }
 }
@@ -6879,6 +7112,89 @@ function _renderSummaryTable(txs) {
  *        utils/format.js, utils/dom.js, calc/finance.js (calcRoomQuota)
  * 对照档: 第七节模块18 (24 方法)
  */
+
+// ============================================================================
+// 日期下拉辅助 (年/月/日 三联动 select)
+// ============================================================================
+
+/** 填充年月日三个 select。prefix: 'rm-checkin' or 'rm-checkout' */
+function rmInitDateSels(prefix, defYear, defMonth, defDay) {
+  var yEl = $('#' + prefix + '-y');
+  var mEl = $('#' + prefix + '-m');
+  var dEl = $('#' + prefix + '-d');
+  if (!yEl || !mEl || !dEl) return;
+
+  var today = new Date();
+  var curYear  = today.getFullYear();
+  // 若未指定默认值，默认使用今天
+  if (defYear  == null) defYear  = curYear;
+  if (defMonth == null) defMonth = (today.getMonth() + 1 < 10 ? '0' : '') + (today.getMonth() + 1);
+  if (defDay   == null) defDay   = (today.getDate() < 10 ? '0' : '') + today.getDate();
+
+  // 年：当年（默认选中）前后各1年 (总计 3 年)，force rebuild
+  yEl.innerHTML = '';
+  var yOpt0 = document.createElement('option');
+  yOpt0.value = ''; yOpt0.textContent = '年'; yEl.appendChild(yOpt0);
+  for (var y = curYear - 1; y <= curYear + 1; y++) {
+    var yo = document.createElement('option');
+    yo.value = y; yo.textContent = y + '年';
+    if (y == defYear) yo.selected = true;
+    yEl.appendChild(yo);
+  }
+  // 月
+  mEl.innerHTML = '';
+  var mOpt0 = document.createElement('option');
+  mOpt0.value = ''; mOpt0.textContent = '月'; mEl.appendChild(mOpt0);
+  for (var m = 1; m <= 12; m++) {
+    var mv = (m < 10 ? '0' : '') + m;
+    var mo = document.createElement('option');
+    mo.value = mv;
+    mo.textContent = m + '月';
+    if (mv == defMonth) mo.selected = true;
+    mEl.appendChild(mo);
+  }
+  // 日
+  dEl.innerHTML = '';
+  var dOpt0 = document.createElement('option');
+  dOpt0.value = ''; dOpt0.textContent = '日'; dEl.appendChild(dOpt0);
+  for (var d = 1; d <= 31; d++) {
+    var dv = (d < 10 ? '0' : '') + d;
+    var doo = document.createElement('option');
+    doo.value = dv;
+    doo.textContent = d + '日';
+    if (dv == defDay) doo.selected = true;
+    dEl.appendChild(doo);
+  }
+  // 同步到 hidden input
+  rmReadDateSels(prefix);
+}
+
+/** 读取三个 select 合成 YYYY-MM-DD 字符串，并同步 hidden input */
+function rmReadDateSels(prefix) {
+  var y = ($('#' + prefix + '-y') || {}).value;
+  var m = ($('#' + prefix + '-m') || {}).value;
+  var d = ($('#' + prefix + '-d') || {}).value;
+  var val = (y && m && d) ? (y + '-' + m + '-' + d) : '';
+  var hidden = $('#' + prefix);
+  if (hidden) hidden.value = val;
+  return val;
+}
+
+/** 根据 YYYY/MM/DD 字符串反填三个 select */
+function rmSetDateSels(prefix, dateStr) {
+  if (!dateStr) return;
+  // 支持 YYYY/MM/DD 和 YYYY-MM-DD
+  var parts = dateStr.replace(/-/g, '/').split('/');
+  if (parts.length !== 3) return;
+  var yEl = $('#' + prefix + '-y');
+  var mEl = $('#' + prefix + '-m');
+  var dEl = $('#' + prefix + '-d');
+  if (yEl) yEl.value = parts[0];
+  if (mEl) mEl.value = parts[1].length === 1 ? '0' + parts[1] : parts[1];
+  if (dEl) dEl.value = parts[2].length === 1 ? '0' + parts[2] : parts[2];
+  var hidden = $('#' + prefix);
+  if (hidden) hidden.value = dateStr;
+}
 
 var RM = {
   bookings: [],
@@ -6964,10 +7280,17 @@ var RM = {
 
   // ===== 联动 =====
   onCasinoChange: function() {
-    var casino = $('#rm-casino').value;
+    var casino = ($('#rm-casino') || {}).value;
     RM.populateHotelDropdown(casino);
-    $('#rm-hotel').value = '';
-    $('#rm-room').innerHTML = '<option value="">選擇房型</option>';
+    // 自动选第一间酒店（跳过「選擇酒店」空选项）
+    var hotelSel = $('#rm-hotel');
+    if (hotelSel && hotelSel.options.length > 1) {
+      hotelSel.selectedIndex = 1;
+      RM.onHotelChange();
+    } else {
+      if (hotelSel) hotelSel.value = '';
+      if ($('#rm-room')) $('#rm-room').innerHTML = '<option value="">選擇房型</option>';
+    }
   },
 
   onHotelChange: function() {
@@ -6989,8 +7312,9 @@ var RM = {
 
   // ===== 计算 =====
   calcNights: function() {
-    var checkIn = ($('#rm-checkin') || {}).value;
-    var checkOut = ($('#rm-checkout') || {}).value;
+    // 先从三联动 select 合成日期并写入 hidden input
+    var checkIn  = rmReadDateSels('rm-checkin');
+    var checkOut = rmReadDateSels('rm-checkout');
     var nights = calcNights(checkIn, checkOut);
     if ($('#rm-nights')) $('#rm-nights').value = nights;
     RM.calcTotal();
@@ -7016,12 +7340,18 @@ var RM = {
     RM.populateAgentDropdown();
 
     if (id) {
+      // 编辑：先初始化日期下拉，再用订房数据覆盖
+      rmInitDateSels('rm-checkin');
+      rmInitDateSels('rm-checkout');
       var b = getBookingById(id);
       if (b) {
         RM._fillForm(b);
       }
     } else {
+      // 新建：先清空表单，再初始化日期下拉（默认为今天）
       RM._resetForm();
+      rmInitDateSels('rm-checkin');
+      rmInitDateSels('rm-checkout');
     }
 
     var modal = $('#rm-modal-bg');
@@ -7035,6 +7365,10 @@ var RM = {
   },
 
   saveForm: function() {
+    // 先合成日期值到 hidden input
+    rmReadDateSels('rm-checkin');
+    rmReadDateSels('rm-checkout');
+
     var data = {
       agent:    ($('#rm-agent') || {}).value,
       client:   ($('#rm-client') || {}).value,
@@ -7131,9 +7465,25 @@ var RM = {
   },
 
   _updateQuota: function(month) {
-    var quota = calcRoomQuota(RM.bookings, State.get('txs'), month);
+    var txs = State.get('txs');
+    var quota = calcRoomQuota(RM.bookings, txs, month);
+
+    // 当月订房计数
+    var normMonth = month ? month.replace(/\//g, '-') : '';
+    var roomCount = 0;
+    for (var i = 0; i < RM.bookings.length; i++) {
+      var bm = (RM.bookings[i].month || '').replace(/\//g, '-');
+      if (!normMonth || bm === normMonth) { roomCount++; }
+    }
+
+    // 调试日志
+    console.log('[v13:room] _updateQuota month=' + month + ' txs=' + (txs ? txs.length : 0) + ' totalVol=' + quota.totalVolume + ' usedThr=' + quota.usedThreshold + ' rooms=' + roomCount);
+
     var el = $('.rm-quota-bar');
     if (el) el.style.width = quota.usageRate.toFixed(1) + '%';
+
+    var rateEl = $('.rm-quota-rate');
+    if (rateEl) rateEl.textContent = quota.usageRate.toFixed(1) + '%';
 
     var volEl = $('.rm-quota-volume');
     if (volEl) volEl.textContent = fmt(quota.totalVolume) + '萬';
@@ -7143,6 +7493,9 @@ var RM = {
 
     var remEl = $('.rm-quota-rem');
     if (remEl) remEl.textContent = fmt(quota.remainingThreshold) + '萬';
+
+    var countEl = $('.rm-booking-count');
+    if (countEl) countEl.textContent = roomCount + '間';
   },
 
   // ===== 辅助 =====
@@ -7156,6 +7509,9 @@ var RM = {
       var el = $('#' + id);
       if (el) el.value = fields[id] != null ? fields[id] : '';
     }
+    // 日期反填到三联动 select
+    rmSetDateSels('rm-checkin',  b.checkIn);
+    rmSetDateSels('rm-checkout', b.checkOut);
     // 联动
     RM.populateHotelDropdown(b.casino);
     if ($('#rm-hotel')) $('#rm-hotel').value = b.hotel;
@@ -7170,6 +7526,12 @@ var RM = {
     for (var i = 0; i < ids.length; i++) {
       var el = $('#' + ids[i]);
       if (el) el.value = '';
+    }
+    // 清空日期三联动
+    var dateSels = ['rm-checkin-y','rm-checkin-m','rm-checkin-d','rm-checkout-y','rm-checkout-m','rm-checkout-d'];
+    for (var j = 0; j < dateSels.length; j++) {
+      var ds = $('#' + dateSels[j]);
+      if (ds) ds.value = '';
     }
   },
 
@@ -7211,13 +7573,21 @@ function switchRoomTab(tab, el) {
   }
   if (el) el.classList.add('active');
 
-  // 切换面板
-  var panels = document.querySelectorAll('#page-room .room-panel');
+  // 切换面板 (HTML ID 格式: room-tab-xxx, class: room-tab-content)
+  var panels = document.querySelectorAll('#page-room .room-tab-content');
   for (var j = 0; j < panels.length; j++) {
+    panels[j].classList.remove('active');
     panels[j].style.display = 'none';
   }
-  var target = document.getElementById('room-panel-' + tab);
-  if (target) target.style.display = 'block';
+  var target = document.getElementById('room-tab-' + tab);
+  if (target) {
+    target.classList.add('active');
+    target.style.display = 'block';
+    // 切换到酒店设定时刷新列表
+    if (tab === 'config') {
+      hcRender();
+    }
+  }
 }
 
 // 全域桥接 (供 HTML onclick)
@@ -7233,6 +7603,650 @@ function rmSaveForm()        { RM.saveForm(); }
 function rmRender()          { RM.render(); }
 function rmExportCSV()       { RM.exportCSV(); }
 function rmImportCSV()       { RM.importCSV(); }
+
+// src/pages/wallet.js
+/**
+ * v13 总钱包页面 (v3 — 快捷按钮时间筛选器)
+ *
+ * 依赖: State, Events, calc/finance.js, utils/format.js
+ *
+ * 页面内容:
+ * 1. KPI 总览卡片 (总钱包余额、公基金余额、代理钱包总额、总存入、总提领)
+ * 2. 快捷时间筛选器 (本週/上週/本月/上月/年度/自訂 — 与查询页一致)
+ * 3. 总钱包流水 (合并: 公基金记录 + 代理钱包记录 + 交易佣金产生的码粮/公基金)
+ * 4. 公基金卡片 (卡片式, 含汇总 + 流水明细)
+ * 5. 代理钱包卡片 (同原设计)
+ *
+ * 筛选逻辑: 取代旧的月份下拉，改用日期范围 (dateFrom/dateTo)
+ *   - 快捷按钮设定 dateFrom/dateTo，存入 State
+ *   - 各渲染函数从 State 读取范围进行筛选
+ *   - 「全部時間」时 dateFrom='' && dateTo='' → 不过滤
+ */
+
+// ============================================================================
+// 快捷时间筛选器 (与查询页一致)
+// ============================================================================
+
+/** 快捷按钮点击处理 */
+function walletQuickFilter(type) {
+  _highlightWalletQuickBtn(type);
+
+  var now = new Date();
+  var dateFrom = '';
+  var dateTo = '';
+  var customRange = document.getElementById('wallet-date-range');
+  if (customRange) customRange.style.display = 'none';
+
+  var pad2 = function(n) { return n < 10 ? '0' + n : '' + n; };
+  var ymd = function(d) {
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  };
+
+  switch (type) {
+    case 'lastWeek': {
+      // 上周一 ~ 上周日
+      var dow = now.getDay() || 7;
+      var lastMon = new Date(now);
+      lastMon.setDate(now.getDate() - dow - 6);
+      var lastSun = new Date(lastMon);
+      lastSun.setDate(lastMon.getDate() + 6);
+      dateFrom = ymd(lastMon);
+      dateTo = ymd(lastSun);
+      break;
+    }
+    case 'thisWeek': {
+      // 本周一 ~ 今天
+      var dow2 = now.getDay() || 7;
+      var thisMon = new Date(now);
+      thisMon.setDate(now.getDate() - dow2 + 1);
+      dateFrom = ymd(thisMon);
+      dateTo = ymd(now);
+      break;
+    }
+    case 'thisMonth': {
+      // 本月1日 ~ 今天
+      dateFrom = now.getFullYear() + '-' + pad2(now.getMonth() + 1) + '-01';
+      dateTo = ymd(now);
+      break;
+    }
+    case 'lastMonth': {
+      // 上月1日 ~ 上月最后一天
+      var firstDayLM = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      var lastDayLM = new Date(now.getFullYear(), now.getMonth(), 0);
+      dateFrom = ymd(firstDayLM);
+      dateTo = ymd(lastDayLM);
+      break;
+    }
+    case 'thisYear': {
+      // 今年1/1 ~ 今天
+      dateFrom = now.getFullYear() + '-01-01';
+      dateTo = ymd(now);
+      break;
+    }
+    case 'custom': {
+      if (customRange) customRange.style.display = '';
+      var fromEl = document.getElementById('wallet-date-from');
+      var toEl = document.getElementById('wallet-date-to');
+      // 保留上次的值，或默认今天
+      if (fromEl && !fromEl.value) fromEl.value = ymd(now);
+      if (toEl && !toEl.value) toEl.value = ymd(now);
+      // custom 模式：不在这里设定范围，等用户选日期后 onchange 触发 renderWallet
+      _updateWalletDateDisplay();
+      renderWallet();
+      return;
+    }
+    default: {
+      // 全部時間
+      break;
+    }
+  }
+
+  // 设定日期输入框的值（非 custom 模式）
+  var fromEl2 = document.getElementById('wallet-date-from');
+  var toEl2 = document.getElementById('wallet-date-to');
+  if (fromEl2 && dateFrom) fromEl2.value = dateFrom;
+  if (toEl2 && dateTo) toEl2.value = dateTo;
+
+  _updateWalletDateDisplay();
+  renderWallet();
+}
+
+/** 高亮当前活跃的快捷按钮 */
+function _highlightWalletQuickBtn(type) {
+  var btns = document.querySelectorAll('#page-wallet .tf-btn');
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].classList.remove('active');
+  }
+  if (!type || type === 'all') return;
+  var label = _walletQuickBtnLabel(type);
+  for (var j = 0; j < btns.length; j++) {
+    if (btns[j].textContent.trim() === label) {
+      btns[j].classList.add('active');
+    }
+  }
+}
+
+/** 快捷按钮 type → 显示文字 */
+function _walletQuickBtnLabel(type) {
+  var map = {
+    lastWeek: '上週', thisWeek: '本週', thisMonth: '本月',
+    lastMonth: '上月', thisYear: '年度', custom: '自訂'
+  };
+  return map[type] || '';
+}
+
+/** 更新页面上的日期范围显示文字 */
+function _updateWalletDateDisplay() {
+  var disp = document.getElementById('wallet-date-display');
+  if (!disp) return;
+  var fromEl = document.getElementById('wallet-date-from');
+  var toEl = document.getElementById('wallet-date-to');
+  var from = fromEl ? fromEl.value : '';
+  var to = toEl ? toEl.value : '';
+  if (from && to) {
+    disp.textContent = '📅 ' + from + ' ～ ' + to;
+  } else if (from) {
+    disp.textContent = '📅 ' + from + ' 起';
+  } else if (to) {
+    disp.textContent = '📅 至 ' + to;
+  } else {
+    disp.textContent = '📅 全部時間';
+  }
+}
+
+/** 从输入框读取当前筛选范围 {dateFrom, dateTo} (空字符串=不限制) */
+function _getWalletDateRange() {
+  var fromEl = document.getElementById('wallet-date-from');
+  var toEl = document.getElementById('wallet-date-to');
+  return {
+    dateFrom: (fromEl && fromEl.value) ? fromEl.value : '',
+    dateTo: (toEl && toEl.value) ? toEl.value : '',
+  };
+}
+
+/** 判断一条记录的日期是否在当前筛选范围内 */
+function _walletDateInRange(dateStr, dateFrom, dateTo) {
+  if (!dateStr) return false;
+  // 归一化日期格式为 YYYY-MM-DD
+  var ds = (dateStr || '').replace(/\//g, '-');
+  if (dateFrom && ds < dateFrom) return false;
+  if (dateTo && ds > dateTo) return false;
+  return true;
+}
+
+// ============================================================================
+// 渲染入口
+// ============================================================================
+
+/**
+ * 渲染总钱包页面
+ */
+function renderWallet() {
+  try {
+    _updateWalletDateDisplay();
+    _renderWalletKPIs();
+    _renderFlowTable();
+    _renderFundCard();
+    _renderAgentWalletCards();
+  } catch (e) {
+    console.error('[v13:wallet] renderWallet error:', e);
+  }
+}
+
+// ============================================================================
+// KPI 统计卡片
+// ============================================================================
+
+function _renderWalletKPIs() {
+  var container = document.getElementById('wallet-overview');
+  if (!container) return;
+
+  var txs = State.get('txs');
+  var fundRecords = State.get('fundWithdrawals');
+  var agentWallets = State.get('agentWallets');
+  var range = _getWalletDateRange();
+
+  // 筛选（KPI 按日期范围筛选）
+  var filteredTxs = _filterByDateRange(txs, 'date', range);
+  var filteredFunds = _filterByDateRange(fundRecords, 'date', range);
+  var filteredAWs = {};
+  for (var ag in agentWallets) {
+    var recs = agentWallets[ag];
+    var filt = _filterByDateRange(recs, 'date', range);
+    if (filt.length > 0) filteredAWs[ag] = filt;
+  }
+
+  // 公基金余额 (全量、不受筛选影响 — KPI 应该是全量)
+  var fundBalance = calcFundBalance(txs, fundRecords);
+
+  // 代理钱包总额 (全量)
+  var agents = {};
+  for (var a1 = 0; a1 < txs.length; a1++) {
+    var a = txs[a1].agent;
+    if (a) agents[a] = true;
+  }
+  for (var ag2 in agentWallets) {
+    agents[ag2] = true;
+  }
+  var agentTotal = 0;
+  for (var name in agents) {
+    agentTotal += calcAgentBalance(name, txs, agentWallets);
+  }
+
+  // 总钱包余额
+  var totalWallet = getTotalWallet();
+
+  // 总存入 (筛选范围内)
+  var totalDeposit = 0;
+  for (var d1 = 0; d1 < filteredFunds.length; d1++) {
+    var fr = filteredFunds[d1];
+    if (fr.type === 'deposit' || fr.type === 'cash_deposit') {
+      totalDeposit += toNum(fr.amount);
+    }
+  }
+  for (var ag3 in filteredAWs) {
+    var recs3 = filteredAWs[ag3];
+    for (var d2 = 0; d2 < recs3.length; d2++) {
+      if (recs3[d2].type === 'deposit' || recs3[d2].type === 'cash_deposit') {
+        totalDeposit += toNum(recs3[d2].amount);
+      }
+    }
+  }
+  // 存入也包括: 交易产生的佣金公基金 + 码粮 (视为流入)
+  for (var d3 = 0; d3 < filteredTxs.length; d3++) {
+    totalDeposit += toNum(filteredTxs[d3].fund);
+    totalDeposit += toNum(filteredTxs[d3].bonus);
+  }
+
+  // 总提领 (筛选范围内)
+  var totalWithdraw = 0;
+  for (var w1 = 0; w1 < filteredFunds.length; w1++) {
+    if (filteredFunds[w1].type === 'withdraw') {
+      totalWithdraw += toNum(filteredFunds[w1].amount);
+    }
+  }
+  for (var ag4 in filteredAWs) {
+    var recs4 = filteredAWs[ag4];
+    for (var w2 = 0; w2 < recs4.length; w2++) {
+      if (recs4[w2].type === 'withdraw') {
+        totalWithdraw += toNum(recs4[w2].amount);
+      }
+    }
+  }
+
+  var cards = [
+    { label: '總錢包餘額', value: fmtMoney(totalWallet), cls: 'wk-gold' },
+    { label: '公基金餘額',  value: fmtMoney(fundBalance), cls: 'wk-positive' },
+    { label: '代理錢包總額', value: fmtMoney(agentTotal), cls: 'wk-positive' },
+    { label: '總存入',      value: fmtMoney(totalDeposit), cls: 'wk-positive' },
+    { label: '總提領',      value: fmtMoney(totalWithdraw), cls: 'wk-negative' },
+  ];
+
+  var html = '';
+  for (var c = 0; c < cards.length; c++) {
+    html += '<div class="wallet-kpi-card">' +
+      '<div class="wk-label">' + cards[c].label + '</div>' +
+      '<div class="wk-value ' + cards[c].cls + '">' + cards[c].value + '</div>' +
+      '</div>';
+  }
+  container.innerHTML = html;
+}
+
+// ============================================================================
+// 工具函式
+// ============================================================================
+
+/** 按日期范围筛选数组 (arr[field] 支持 YYYY/MM/DD 和 YYYY-MM-DD) */
+function _filterByDateRange(arr, dateField, range) {
+  if (!range.dateFrom && !range.dateTo) return arr;
+  var result = [];
+  for (var i = 0; i < arr.length; i++) {
+    if (_walletDateInRange(arr[i][dateField], range.dateFrom, range.dateTo)) {
+      result.push(arr[i]);
+    }
+  }
+  return result;
+}
+
+// ============================================================================
+// 总钱包流水 (合并所有金流来源)
+// ============================================================================
+
+function _renderFlowTable() {
+  var tbody = document.querySelector('#wallet-flow-table tbody');
+  var empty = document.getElementById('wallet-flow-empty');
+  if (!tbody) return;
+
+  var txs = State.get('txs');
+  var fundRecords = State.get('fundWithdrawals');
+  var agentWallets = State.get('agentWallets');
+  var range = _getWalletDateRange();
+
+  // 构建统一流水条目
+  var flows = [];
+
+  // 1) 公基金记录
+  var filteredFunds = _filterByDateRange(fundRecords, 'date', range);
+  for (var i = 0; i < filteredFunds.length; i++) {
+    var fr = filteredFunds[i];
+    var typeLabel = (fr.type === 'deposit' || fr.type === 'cash_deposit') ? '存入' : '提領';
+    if (fr.type === 'cash_deposit') typeLabel = '現金存入';
+    flows.push({
+      date: fr.date || '',
+      source: '公基金',
+      type: typeLabel,
+      amount: toNum(fr.amount),
+      sign: (fr.type === 'withdraw') ? -1 : 1,
+      note: fr.note || '',
+    });
+  }
+
+  // 2) 交易佣金产生的码粮和公基金
+  var filteredTxs = _filterByDateRange(txs, 'date', range);
+  for (var j = 0; j < filteredTxs.length; j++) {
+    var tx = filteredTxs[j];
+    var fundVal = toNum(tx.fund);
+    var bonusVal = toNum(tx.bonus);
+    var volNote = '洗碼' + fmt(tx.volume) + '萬';
+
+    if (fundVal > 0) {
+      flows.push({
+        date: tx.date || '',
+        source: '公基金',
+        type: '佣金公基金',
+        amount: fundVal,
+        sign: 1,
+        note: (tx.agent || '') + ' ' + volNote,
+      });
+    }
+    if (bonusVal > 0) {
+      flows.push({
+        date: tx.date || '',
+        source: tx.agent || '',
+        type: '碼糧',
+        amount: bonusVal,
+        sign: 1,
+        note: volNote,
+      });
+    }
+  }
+
+  // 3) 代理钱包记录
+  for (var ag in agentWallets) {
+    var recs = agentWallets[ag];
+    for (var k = 0; k < recs.length; k++) {
+      var wr = recs[k];
+      if (!_walletDateInRange(wr.date, range.dateFrom, range.dateTo)) continue;
+      var wl = '';
+      if (wr.type === 'deposit') wl = '存入';
+      else if (wr.type === 'cash_deposit') wl = '自存現金';
+      else if (wr.type === 'withdraw') wl = '提領';
+      flows.push({
+        date: wr.date || '',
+        source: ag,
+        type: wl,
+        amount: toNum(wr.amount),
+        sign: (wr.type === 'withdraw') ? -1 : 1,
+        note: wr.note || '',
+      });
+    }
+  }
+
+  if (flows.length === 0) {
+    tbody.innerHTML = '';
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+
+  if (empty) empty.style.display = 'none';
+
+  // 按日期降序排列
+  flows.sort(function(a, b) {
+    return (b.date || '').replace(/\//g, '-').localeCompare((a.date || '').replace(/\//g, '-'));
+  });
+
+  var html = '';
+  for (var f = 0; f < flows.length; f++) {
+    var flow = flows[f];
+    var isOut = flow.sign < 0;
+    var tc = isOut ? 'wf-withdraw' : 'wf-deposit';
+    var prefix = isOut ? '-' : '+';
+    html += '<tr>' +
+      '<td>' + flow.date + '</td>' +
+      '<td class="wf-source">' + flow.source + '</td>' +
+      '<td class="' + tc + '">' + flow.type + '</td>' +
+      '<td class="' + tc + '" style="text-align:right">' + prefix + fmtMoney(flow.amount) + '</td>' +
+      '<td>' + flow.note + '</td>' +
+      '</tr>';
+  }
+  tbody.innerHTML = html;
+}
+
+// ============================================================================
+// 公基金卡片
+// ============================================================================
+
+function _renderFundCard() {
+  var container = document.getElementById('wallet-fund-card');
+  if (!container) return;
+
+  var txs = State.get('txs');
+  var fundRecords = State.get('fundWithdrawals');
+  var range = _getWalletDateRange();
+
+  // 筛选
+  var filteredFunds = _filterByDateRange(fundRecords, 'date', range);
+  var filteredTxs = _filterByDateRange(txs, 'date', range);
+
+  // 公基金余额 (全量)
+  var balance = calcFundBalance(txs, fundRecords);
+
+  // 汇总统计
+  var commFundSum = 0;     // 佣金产生的公基金
+  var depositSum = 0;      // 手动存入
+  var cashDepSum = 0;      // 自存现金
+  var withdrawSum = 0;     // 提领
+  for (var k = 0; k < filteredTxs.length; k++) {
+    commFundSum += toNum(filteredTxs[k].fund);
+  }
+  for (var m = 0; m < filteredFunds.length; m++) {
+    var fr = filteredFunds[m];
+    if (fr.type === 'deposit') depositSum += toNum(fr.amount);
+    else if (fr.type === 'cash_deposit') cashDepSum += toNum(fr.amount);
+    else if (fr.type === 'withdraw') withdrawSum += toNum(fr.amount);
+  }
+
+  // 构建明细列表 (合并佣金公基金 + 手动记录)
+  var details = [];
+
+  // 佣金公基金 (从交易中)
+  for (var d1 = 0; d1 < filteredTxs.length; d1++) {
+    var tx = filteredTxs[d1];
+    var fv = toNum(tx.fund);
+    if (fv > 0) {
+      details.push({
+        date: tx.date || '',
+        type: '佣金公基金',
+        amount: fv,
+        sign: 1,
+        note: (tx.agent || '') + ' 洗碼' + fmt(tx.volume) + '萬',
+      });
+    }
+  }
+
+  // 手动记录
+  for (var d2 = 0; d2 < filteredFunds.length; d2++) {
+    var fr2 = filteredFunds[d2];
+    var tl = '';
+    if (fr2.type === 'deposit') tl = '存入';
+    else if (fr2.type === 'cash_deposit') tl = '現金存入';
+    else if (fr2.type === 'withdraw') tl = '提領';
+    details.push({
+      date: fr2.date || '',
+      type: tl,
+      amount: toNum(fr2.amount),
+      sign: (fr2.type === 'withdraw') ? -1 : 1,
+      note: fr2.note || '',
+    });
+  }
+
+  // 按日期降序
+  details.sort(function(a, b) {
+    return (b.date || '').replace(/\//g, '-').localeCompare((a.date || '').replace(/\//g, '-'));
+  });
+
+  // 渲染卡片 — 复用代理钱包卡片样式 (.wallet-agent-card 系列)，视觉统一
+  var html = '<div class="wallet-agent-card">' +
+    '<div class="wallet-agent-card-header">' +
+      '<span class="wa-name">🏦 公基金</span>' +
+      '<span class="wa-balance">' + fmtMoney(balance) + '</span>' +
+    '</div>' +
+    '<div class="wallet-agent-card-body">' +
+      '<table>' +
+        '<thead><tr><th>佣金公基金</th><th>存入</th><th>自存現金</th><th>提領</th></tr></thead>' +
+        '<tbody><tr>' +
+          '<td style="color:var(--success)">' + fmtMoney(commFundSum) + '</td>' +
+          '<td style="color:var(--success)">' + fmtMoney(depositSum) + '</td>' +
+          '<td style="color:var(--info)">' + fmtMoney(cashDepSum) + '</td>' +
+          '<td style="color:var(--danger)">' + fmtMoney(withdrawSum) + '</td>' +
+        '</tr></tbody>' +
+      '</table>' +
+    '</div>';
+
+  // 明细 — 统一使用 .wallet-card-detail 样式
+  if (details.length > 0) {
+    html += '<div class="wallet-card-detail">' +
+      '<table>' +
+      '<thead><tr><th style="width:90px">日期</th><th>類型</th><th style="text-align:right">金額</th><th>備註</th></tr></thead>' +
+      '<tbody>';
+
+    for (var d3 = 0; d3 < details.length; d3++) {
+      var dt = details[d3];
+      var isOut = dt.sign < 0;
+      var tc = isOut ? 'var(--danger)' : 'var(--success)';
+      var prefix = isOut ? '-' : '+';
+      html += '<tr>' +
+        '<td>' + dt.date + '</td>' +
+        '<td style="color:' + tc + '">' + dt.type + '</td>' +
+        '<td style="text-align:right;color:' + tc + '">' + prefix + fmtMoney(dt.amount) + '</td>' +
+        '<td>' + dt.note + '</td>' +
+        '</tr>';
+    }
+
+    html += '</tbody></table></div>';
+  }
+
+  html += '</div>';
+
+  container.innerHTML = html;
+}
+
+// ============================================================================
+// 代理钱包明细卡片
+// ============================================================================
+
+function _renderAgentWalletCards() {
+  var container = document.getElementById('wallet-agent-cards');
+  var empty = document.getElementById('wallet-agent-empty');
+  if (!container) return;
+
+  var txs = State.get('txs');
+  var agentWallets = State.get('agentWallets');
+
+  // 收集所有代理
+  var agents = {};
+  for (var i = 0; i < txs.length; i++) {
+    var a = txs[i].agent;
+    if (a) agents[a] = true;
+  }
+  for (var ag in agentWallets) {
+    agents[ag] = true;
+  }
+
+  var agentList = Object.keys(agents).sort();
+  if (agentList.length === 0) {
+    container.innerHTML = '';
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+
+  if (empty) empty.style.display = 'none';
+
+  var html = '<div class="wallet-agent-grid">';
+
+  for (var m = 0; m < agentList.length; m++) {
+    var agentName = agentList[m];
+    var balance = calcAgentBalance(agentName, txs, agentWallets);
+
+    // 从交易中计算该代理的码粮和现金寄放
+    var bonusSum = 0;
+    var cashSum = 0;
+    for (var n = 0; n < txs.length; n++) {
+      if (txs[n].agent === agentName) {
+        bonusSum += toNum(txs[n].bonus);
+        cashSum += toNum(txs[n].cash) || 0;
+      }
+    }
+
+    // 从钱包记录中计算各项
+    var records = agentWallets[agentName] || [];
+    var awDeposit = 0;
+    var awCashDep = 0;
+    var awWithdraw = 0;
+    for (var k = 0; k < records.length; k++) {
+      if (records[k].type === 'deposit') awDeposit += toNum(records[k].amount);
+      else if (records[k].type === 'cash_deposit') awCashDep += toNum(records[k].amount);
+      else if (records[k].type === 'withdraw') awWithdraw += toNum(records[k].amount);
+    }
+
+    html += '<div class="wallet-agent-card">' +
+      '<div class="wallet-agent-card-header">' +
+        '<span class="wa-name">' + agentName + '</span>' +
+        '<span class="wa-balance">' + fmtMoney(balance) + '</span>' +
+      '</div>' +
+      '<div class="wallet-agent-card-body">' +
+        '<table>' +
+          '<thead><tr><th>碼糧累計</th><th>現金寄放</th><th>存入</th><th>自存現金</th><th>提領</th></tr></thead>' +
+          '<tbody><tr>' +
+            '<td>' + fmtMoney(bonusSum) + '</td>' +
+            '<td>' + fmtMoney(cashSum) + '</td>' +
+            '<td style="color:var(--success)">' + fmtMoney(awDeposit) + '</td>' +
+            '<td style="color:var(--info)">' + fmtMoney(awCashDep) + '</td>' +
+            '<td style="color:var(--danger)">' + fmtMoney(awWithdraw) + '</td>' +
+          '</tr></tbody>' +
+        '</table>' +
+      '</div>';
+
+    // 钱包流水明细 — 统一使用 .wallet-card-detail 样式
+    if (records.length > 0) {
+      var sorted = records.slice().sort(function(a, b) {
+        return (b.date || '').replace(/\//g, '-').localeCompare((a.date || '').replace(/\//g, '-'));
+      });
+      var typeLabel2 = { deposit: '存入', cash_deposit: '自存現金', withdraw: '提領' };
+      html += '<div class="wallet-card-detail">' +
+        '<table>' +
+        '<thead><tr><th style="width:90px">日期</th><th>類型</th><th style="text-align:right">金額</th><th>備註</th></tr></thead>' +
+        '<tbody>';
+      for (var p = 0; p < sorted.length; p++) {
+        var wr = sorted[p];
+        var tc = (wr.type === 'deposit' || wr.type === 'cash_deposit') ? 'var(--success)' : 'var(--danger)';
+        var prefix = (wr.type === 'deposit' || wr.type === 'cash_deposit') ? '+' : '-';
+        html += '<tr>' +
+          '<td>' + (wr.date || '') + '</td>' +
+          '<td style="color:' + tc + '">' + (typeLabel2[wr.type] || wr.type) + '</td>' +
+          '<td style="text-align:right;color:' + tc + '">' + prefix + fmtMoney(toNum(wr.amount)) + '</td>' +
+          '<td>' + (wr.note || '') + '</td>' +
+        '</tr>';
+      }
+      html += '</tbody></table></div>';
+    }
+
+    html += '</div>';
+  }
+
+  html += '</div>';
+  container.innerHTML = html;
+}
 
 // src/charts/trend.js
 /**
@@ -7747,7 +8761,7 @@ function deleteFundRecord(fbKey) {
   if (!confirm('確定刪除此筆公基金記錄？')) return;
   var result = deleteFund(fbKey);
   if (result) {
-    showToast('已刪除', 'success');
+    toastCRUDDone();
     refreshAllViews();
   } else {
     showToast('刪除失敗', 'error');
@@ -7759,7 +8773,7 @@ function deleteAgentWallet(agent, fbKey) {
   if (!confirm('確定刪除此筆錢包記錄？')) return;
   var result = deleteWallet(agent, fbKey);
   if (result) {
-    showToast('已刪除', 'success');
+    toastCRUDDone();
     refreshAllViews();
   } else {
     showToast('刪除失敗', 'error');
@@ -8095,6 +9109,348 @@ Events.on('tx:edit:request', function(fbKey) {
 Events.on(EVENTS.TX_CREATED, function() { clearDraft(null); });
 Events.on(EVENTS.TX_UPDATED, function() { clearDraft(null); });
 
+/**
+ * 手動重置為最新預設數據 (UI 按鈕調用)
+ */
+function hcResetPreset() {
+  if (!confirm('確定要重置為最新預設數據嗎？\n這會刪除現有所有酒店設定（' + State.get('hotelConfig').length + ' 筆），並載入 ' + PRESET_CONFIG.length + ' 筆預設數據。此操作無法復原！')) return;
+  try {
+    var count = resetHCToPreset();
+    showToast('已重置 ' + count + ' 筆酒店預設數據', 'success');
+    _hcSelected = {};
+    _hcLastClicked = null;
+    hcRender();
+  } catch(e) {
+    console.error('[v13:hc] reset preset error:', e);
+    showToast('重置失敗', 'error');
+  }
+}
+
+/** 批量選取狀態: { fbKey: true } */
+var _hcSelected = {};
+/** 最後一次點擊的 fbKey (用於 Shift 範圍選取) */
+var _hcLastClicked = null;
+
+/**
+ * 渲染酒店设定列表 (hc-table tbody)
+ * 可选: 按 casino/hotel/search 筛选
+ */
+function hcRender(filterCasino, filterHotel, filterSearch) {
+  var tbody = document.querySelector('.hc-table tbody');
+  if (!tbody) return;
+
+  var config = getAllHC();
+
+  // 填充筛选下拉 (体系)
+  var casSel = document.getElementById('hc-filter-casino');
+  if (casSel) {
+    var curCas = casSel.value;
+    casSel.innerHTML = '<option value="">全部體系</option>';
+    var seenCas = {};
+    for (var k = 0; k < config.length; k++) {
+      if (!seenCas[config[k].casino]) {
+        seenCas[config[k].casino] = true;
+        var co = document.createElement('option');
+        co.value = config[k].casino;
+        co.textContent = config[k].casino;
+        if (config[k].casino === curCas) co.selected = true;
+        casSel.appendChild(co);
+      }
+    }
+  }
+
+  // 填充筛选下拉 (酒店)
+  var hotSel = document.getElementById('hc-filter-hotel');
+  if (hotSel) {
+    var curHot = hotSel.value;
+    hotSel.innerHTML = '<option value="">全部酒店</option>';
+    var seenHot = {};
+    var casFil = casSel ? casSel.value : '';
+    for (var m = 0; m < config.length; m++) {
+      if ((!casFil || config[m].casino === casFil) && !seenHot[config[m].hotel]) {
+        seenHot[config[m].hotel] = true;
+        var ho = document.createElement('option');
+        ho.value = config[m].hotel;
+        ho.textContent = config[m].hotel;
+        if (config[m].hotel === curHot) ho.selected = true;
+        hotSel.appendChild(ho);
+      }
+    }
+  }
+
+  // 读取当前筛选条件
+  var fCasino = filterCasino != null ? filterCasino : (casSel ? casSel.value : '');
+  var fHotel  = filterHotel  != null ? filterHotel  : (hotSel ? hotSel.value : '');
+  var fSearch = filterSearch != null ? filterSearch : (document.getElementById('hc-filter-search') || {}).value || '';
+  var fSearchLower = fSearch.toLowerCase();
+
+  // 筛选
+  var filtered = config.filter(function(c) {
+    if (fCasino && c.casino !== fCasino) return false;
+    if (fHotel  && c.hotel  !== fHotel)  return false;
+    if (fSearchLower) {
+      var hay = (c.casino + c.hotel + c.code + c.room).toLowerCase();
+      if (hay.indexOf(fSearchLower) < 0) return false;
+    }
+    return true;
+  });
+
+  tbody.innerHTML = '';
+  if (filtered.length === 0) {
+    var emptyTr = document.createElement('tr');
+    var emptyTd = document.createElement('td');
+    emptyTd.colSpan = 10;
+    emptyTd.style.cssText = 'text-align:center;padding:24px;color:' + UI_COLORS.textMuted;
+    emptyTd.textContent = '暫無資料';
+    emptyTr.appendChild(emptyTd);
+    tbody.appendChild(emptyTr);
+    hcUpdateBatchBar();
+    return;
+  }
+
+  // 收集當前可見行的 fbKey 列表 (用於 Shift 範圍選取)
+  var visibleKeys = [];
+  for (var i = 0; i < filtered.length; i++) {
+    visibleKeys.push(filtered[i]._fbKey);
+  }
+
+  for (var i = 0; i < filtered.length; i++) {
+    (function(entry, rowIndex) {
+      var tr = document.createElement('tr');
+      tr.setAttribute('data-hc-key', entry._fbKey);
+
+      // 高亮已選行
+      if (_hcSelected[entry._fbKey]) {
+        tr.style.background = '#fff8e1';
+      }
+
+      // checkbox 列
+      var tdChk = document.createElement('td');
+      tdChk.style.cssText = 'text-align:center;padding:4px';
+      var chk = document.createElement('input');
+      chk.type = 'checkbox';
+      chk.checked = !!_hcSelected[entry._fbKey];
+      chk.setAttribute('data-hc-key', entry._fbKey);
+      chk.onclick = function(e) {
+        e.stopPropagation();
+        hcToggleRow(entry._fbKey, chk.checked, e);
+      };
+      tdChk.appendChild(chk);
+      tr.appendChild(tdChk);
+
+      var cells = [
+        entry.casino, entry.hotel, entry.code, entry.room,
+        '¥' + entry.weekday, '¥' + entry.weekend, '¥' + entry.special,
+        entry.threshold + '萬'
+      ];
+      for (var j = 0; j < cells.length; j++) {
+        var td = document.createElement('td');
+        td.textContent = cells[j] != null ? String(cells[j]) : '';
+        tr.appendChild(td);
+      }
+      // 操作列
+      var tdOp = document.createElement('td');
+      var editBtn = document.createElement('button');
+      editBtn.textContent = '編輯';
+      editBtn.style.cssText = 'background:' + UI_COLORS.goldSoft + ';color:white;border:none;padding:2px 8px;border-radius:4px;cursor:pointer;font-size:11px;margin-right:4px';
+      editBtn.onclick = function() { hcOpenModal(entry._fbKey); };
+
+      var delBtn = document.createElement('button');
+      delBtn.textContent = '刪';
+      delBtn.style.cssText = 'background:' + UI_COLORS.danger + ';color:white;border:none;padding:2px 8px;border-radius:4px;cursor:pointer;font-size:11px';
+      delBtn.onclick = function() {
+        if (!confirm('確定刪除「' + entry.room + '」？')) return;
+        var deleted = deleteHC(entry._fbKey);
+        if (deleted) {
+          delete _hcSelected[entry._fbKey];
+          showToast('已刪除', 'success');
+          hcRender();
+        } else {
+          showToast('刪除失敗', 'error');
+        }
+      };
+
+      tdOp.appendChild(editBtn);
+      tdOp.appendChild(delBtn);
+      tr.appendChild(tdOp);
+      tbody.appendChild(tr);
+    })(filtered[i], i);
+  }
+
+  // 更新全選 checkbox 狀態
+  hcUpdateSelectAllState(visibleKeys);
+  hcUpdateBatchBar();
+}
+
+/** 更新全選 checkbox 的三態 (全選/半選/未選) */
+function hcUpdateSelectAllState(visibleKeys) {
+  var sa = document.getElementById('hc-select-all');
+  if (!sa) return;
+  if (!visibleKeys) {
+    // 從 DOM 收集
+    var rows = document.querySelectorAll('.hc-table tbody tr[data-hc-key]');
+    visibleKeys = [];
+    for (var r = 0; r < rows.length; r++) {
+      visibleKeys.push(rows[r].getAttribute('data-hc-key'));
+    }
+  }
+  var selCount = 0;
+  for (var i = 0; i < visibleKeys.length; i++) {
+    if (_hcSelected[visibleKeys[i]]) selCount++;
+  }
+  if (selCount === 0) {
+    sa.checked = false;
+    sa.indeterminate = false;
+  } else if (selCount === visibleKeys.length && visibleKeys.length > 0) {
+    sa.checked = true;
+    sa.indeterminate = false;
+  } else {
+    sa.checked = false;
+    sa.indeterminate = true;
+  }
+}
+
+/** 更新批量操作欄顯示狀態 */
+function hcUpdateBatchBar() {
+  var bar = document.getElementById('hc-batch-bar');
+  var countEl = document.getElementById('hc-batch-count');
+  if (!bar) return;
+  var count = Object.keys(_hcSelected).length;
+  if (count > 0) {
+    bar.style.display = 'flex';
+    if (countEl) countEl.textContent = '已選 ' + count + ' 項';
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+/** 全選 / 取消全選 */
+function hcToggleSelectAll(checked) {
+  var rows = document.querySelectorAll('.hc-table tbody tr[data-hc-key]');
+  if (checked) {
+    for (var i = 0; i < rows.length; i++) {
+      var key = rows[i].getAttribute('data-hc-key');
+      _hcSelected[key] = true;
+    }
+  } else {
+    _hcSelected = {};
+  }
+  // 刷新列表 (保留篩選狀態)
+  hcRender();
+}
+
+/** 切換單行選取 (支援 Shift 範圍選取) */
+function hcToggleRow(fbKey, checked, event) {
+  if (event && event.shiftKey && _hcLastClicked) {
+    // Shift 範圍選取：選取 _hcLastClicked 到 fbKey 之間的所有行
+    var rows = document.querySelectorAll('.hc-table tbody tr[data-hc-key]');
+    var keys = [];
+    for (var i = 0; i < rows.length; i++) {
+      keys.push(rows[i].getAttribute('data-hc-key'));
+    }
+    var idxA = keys.indexOf(_hcLastClicked);
+    var idxB = keys.indexOf(fbKey);
+    if (idxA >= 0 && idxB >= 0) {
+      var from = Math.min(idxA, idxB);
+      var to   = Math.max(idxA, idxB);
+      for (var j = from; j <= to; j++) {
+        _hcSelected[keys[j]] = checked;
+      }
+    }
+  } else {
+    _hcSelected[fbKey] = checked;
+    if (!checked) delete _hcSelected[fbKey];
+  }
+  _hcLastClicked = fbKey;
+  // 刷新列表 (保留篩選狀態)
+  hcRender();
+}
+
+/** 清除所有選取 */
+function hcClearSelection() {
+  _hcSelected = {};
+  _hcLastClicked = null;
+  var sa = document.getElementById('hc-select-all');
+  if (sa) { sa.checked = false; sa.indeterminate = false; }
+  hcRender();
+}
+
+/** 批量刪除所選項目 */
+function hcBatchDelete() {
+  var keys = Object.keys(_hcSelected);
+  if (keys.length === 0) {
+    showToast('請先選取要刪除的項目', 'warning');
+    return;
+  }
+  if (!confirm('確定要批量刪除 ' + keys.length + ' 筆酒店設定？此操作無法復原！')) return;
+
+  var deleted = 0;
+  for (var i = 0; i < keys.length; i++) {
+    var result = deleteHC(keys[i]);
+    if (result) deleted++;
+  }
+  _hcSelected = {};
+  _hcLastClicked = null;
+  showToast('已刪除 ' + deleted + ' 筆', deleted > 0 ? 'success' : 'error');
+  hcRender();
+}
+
+/**
+ * 酒店设定筛选 (HTML onchange/oninput 调用)
+ * 筛选变更时自动清除选取 (避免跨筛选混淆)
+ */
+function hcFilter() {
+  _hcSelected = {};
+  _hcLastClicked = null;
+  hcRender();
+}
+
+// ============================================================================
+// 登入桥接
+// ============================================================================
+
+/**
+ * 登入按钮回调 — 读取密码调用 checkPassword，显示错误/剩余次数
+ */
+function _v13LoginFallback() {
+  var inputEl = document.getElementById('pw-input');
+  var errorEl = document.getElementById('pw-error');
+  var attemptsEl = document.getElementById('pw-attempts');
+  var pw = inputEl ? inputEl.value : '';
+
+  if (!pw) {
+    if (errorEl) errorEl.textContent = '請輸入密碼';
+    if (attemptsEl) attemptsEl.textContent = '';
+    return;
+  }
+
+  var result = (typeof checkPassword === 'function') ? checkPassword(pw) : { success: false, error: '認證模組未載入' };
+
+  if (result.success) {
+    if (errorEl) errorEl.textContent = '';
+    if (attemptsEl) attemptsEl.textContent = '';
+  } else {
+    if (errorEl) errorEl.textContent = result.error || '驗證失敗';
+    // 自动从 _pwAttempts(若可访问) 或直接隐藏
+    if (attemptsEl) {
+      var maxAttempts = (typeof CONFIG !== 'undefined' && CONFIG.MAX_PW_ATTEMPTS) ? CONFIG.MAX_PW_ATTEMPTS : 3;
+      attemptsEl.textContent = '剩餘 ' + maxAttempts + ' 次機會';
+    }
+  }
+}
+
+// 监听 HC 更新事件，自动刷新列表
+Events.on(EVENTS.HC_CONFIG_UPDATED, function() {
+  var panel = document.getElementById('room-tab-config');
+  if (panel && (panel.style.display !== 'none' && panel.classList.contains('active'))) {
+    hcRender();
+  }
+  // 同时刷新订房表单中的体系下拉
+  if (typeof RM !== 'undefined' && RM.populateCasinoDropdown) {
+    RM.populateCasinoDropdown();
+  }
+});
+
 // src/app.js
 /**
  * v13 App 入口 — 系统初始化
@@ -8194,6 +9550,25 @@ Events.on(EVENTS.TX_UPDATED, function() { clearDraft(null); });
         State.set('workingMonth', currentMonth());
       }
 
+      // 酒店设定预设版本检测: 版本变化时自动重置（覆盖旧数据）
+      var currentPresetVer = Store.loadHCPresetVersion();
+      if (currentPresetVer !== PRESET_VERSION) {
+        try {
+          var presetCount = resetHCToPreset();
+          console.log('[v13:app] Hotel preset updated: v' + currentPresetVer + ' → v' + PRESET_VERSION + ', loaded ' + presetCount + ' entries');
+        } catch(e) {
+          console.error('[v13:app] Failed to update hotel preset:', e);
+        }
+      } else if (State.get('hotelConfig').length === 0) {
+        // 首次使用（空数据）也加载预设
+        try {
+          var presetCount = resetHCToPreset();
+          console.log('[v13:app] Hotel config preset loaded: ' + presetCount + ' entries');
+        } catch(e) {
+          console.error('[v13:app] Failed to load hotel preset:', e);
+        }
+      }
+
       console.log('[v13:app] Local data loaded ✓');
       return true;
     } catch (e) {
@@ -8281,6 +9656,11 @@ Events.on(EVENTS.TX_UPDATED, function() { clearDraft(null); });
 
     // 初始化房务系统
     try { if (typeof RM !== 'undefined') RM.init(); } catch(e) { console.error('[v13:app] RM.init error:', e); }
+
+    try { if (typeof renderWallet === 'function') renderWallet(); } catch(e) { console.error('[v13:app] renderWallet error:', e); }
+
+    // 更新 topbar 总钱包
+    try { _updateTopbarWallet(); } catch(e) {}
 
     // 每日自动备份
     try { autoBackupCheck(); } catch(e) {}
@@ -8371,15 +9751,36 @@ Events.on(EVENTS.TX_UPDATED, function() { clearDraft(null); });
       if (page === 'all') renderAll();
       if (page === 'query') doQuery();
       if (page === 'summary') renderSummary();
+      _updateTopbarWallet();
     });
 
-    Events.on(EVENTS.TX_CREATED, function() { renderAll(); renderOverview(); });
-    Events.on(EVENTS.TX_UPDATED, function() { renderAll(); renderOverview(); });
-    Events.on(EVENTS.TX_DELETED, function() { renderAll(); renderOverview(); });
+    Events.on(EVENTS.TX_CREATED, function() { renderAll(); renderOverview(); _updateTopbarWallet(); if (typeof renderWallet === 'function') renderWallet(); });
+    Events.on(EVENTS.TX_UPDATED, function() { renderAll(); renderOverview(); _updateTopbarWallet(); if (typeof renderWallet === 'function') renderWallet(); });
+    Events.on(EVENTS.TX_DELETED, function() { renderAll(); renderOverview(); _updateTopbarWallet(); if (typeof renderWallet === 'function') renderWallet(); });
 
-    Events.on(EVENTS.FUND_CREATED, function() { renderOverview(); });
-    Events.on(EVENTS.FUND_UPDATED, function() { renderOverview(); });
-    Events.on(EVENTS.FUND_DELETED, function() { renderOverview(); });
+    Events.on(EVENTS.FUND_CREATED, function() { renderOverview(); _updateTopbarWallet(); });
+    Events.on(EVENTS.FUND_UPDATED, function() { renderOverview(); _updateTopbarWallet(); });
+    Events.on(EVENTS.FUND_DELETED, function() { renderOverview(); _updateTopbarWallet(); });
+
+    // 钱包变更 → 刷新总钱包页
+    Events.on(EVENTS.FUND_CREATED, function() { if (typeof renderWallet === 'function') renderWallet(); });
+    Events.on(EVENTS.FUND_UPDATED, function() { if (typeof renderWallet === 'function') renderWallet(); });
+    Events.on(EVENTS.FUND_DELETED, function() { if (typeof renderWallet === 'function') renderWallet(); });
+    Events.on(EVENTS.WALLET_CREATED, function() { if (typeof renderWallet === 'function') renderWallet(); _updateTopbarWallet(); });
+    Events.on(EVENTS.WALLET_UPDATED, function() { if (typeof renderWallet === 'function') renderWallet(); _updateTopbarWallet(); });
+    Events.on(EVENTS.WALLET_DELETED, function() { if (typeof renderWallet === 'function') renderWallet(); _updateTopbarWallet(); });
+    Events.on(EVENTS.TXS_LOADED, function() { if (typeof renderWallet === 'function') renderWallet(); });
+  }
+
+  function _updateTopbarWallet() {
+    try {
+      var badge = document.getElementById('total-wallet-badge');
+      if (!badge) return;
+      var total = getTotalWallet();
+      badge.textContent = '💰 總錢包: ' + fmtMoney(total);
+    } catch (e) {
+      console.error('[v13:app] _updateTopbarWallet error:', e);
+    }
   }
 
   // ========================================================================
