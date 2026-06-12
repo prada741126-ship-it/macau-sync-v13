@@ -2968,6 +2968,7 @@ function updateTx(fbKey, formData) {
  * @returns {object|null} 被删除的交易对象，找不到返回 null
  */
 function deleteTx(fbKey) {
+  console.log('[v13:tx] 🔵 deleteTx ENTERED, fbKey=' + fbKey + ', 當前 txs 數量=' + State.get('txs').length);
   var deleted = null;
 
   State.update('txs', function(arr) {
@@ -2975,22 +2976,29 @@ function deleteTx(fbKey) {
       if (arr[i]._fbKey === fbKey) {
         deleted = arr[i];
         arr.splice(i, 1);
+        console.log('[v13:tx] 🗑️  從陣列移除 index=' + i + ', 剩餘=' + arr.length);
         break;
       }
     }
     return arr;
   });
 
-  if (!deleted) return null;
+  if (!deleted) {
+    console.warn('[v13:tx] ⚠️ deleteTx 未找到 fbKey=' + fbKey + '! 可能已被刪除');
+    return null;
+  }
 
+  console.log('[v13:tx] 💾 持久化 Storage...');
   // 持久化
   Store.saveTxs(State.get('txs'));
 
+  console.log('[v13:tx] 🔥 從 Firebase 移除...');
   // ★ 即時從 Firebase 刪除
   removeTxFromFirebase(fbKey);
 
   // 通知事件
   Events.emit(EVENTS.TX_DELETED, deleted);
+  console.log('[v13:tx] ✅ deleteTx 完成, 新 txs 數量=' + State.get('txs').length);
 
   return deleted;
 }
@@ -6538,10 +6546,17 @@ function _renderAllTable(txs) {
       delBtn.onclick = (function(key) {
         return function(e) {
           e.stopPropagation();
-          if (confirm('確定刪除這筆交易？')) {
-            deleteTx(key);
+          console.log('[v13:all] 🗑️ 刪除按鈕點擊, fbKey=' + key);
+          var confirmed = confirm('確定刪除這筆交易？');
+          console.log('[v13:all] confirm 返回值: ' + confirmed);
+          if (confirmed) {
+            console.log('[v13:all] 📤 呼叫 deleteTx(' + key + ')...');
+            var result = deleteTx(key);
+            console.log('[v13:all] deleteTx 返回: ' + (result ? '成功 (' + result._fbKey + ')' : 'null (刪除失敗!)'));
             toastCRUDDone();
+            console.log('[v13:all] 🔄 重新渲染 renderAll()...');
             renderAll();
+            console.log('[v13:all] ✅ renderAll 完成, 當前 txs 數量: ' + State.get('txs').length);
           }
         };
       })(fbKey);

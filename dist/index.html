@@ -11,7 +11,7 @@
   <!-- 版本快取清除 -->
   <script>
     (function() {
-      var APP_VERSION = '13.0.0.1781273435587';
+      var APP_VERSION = '13.0.0.1781273857272';
       var stored = localStorage.getItem('macau_app_version');
       var qs = location.search || '';
       if (stored && stored !== APP_VERSION && !sessionStorage.getItem('_v13_reloaded')) {
@@ -2118,7 +2118,7 @@ tr.rank-1 td {
   <!-- Firebase 初始化已统一由 src/sync/firebase.js 的 initFirebase() 处理（带重试） -->
 
   <!-- JS: 合并后由 build.js 输出为 app.js -->
-  <script src="app.js?v=13.0.0.1781273435587"></script>
+  <script src="app.js?v=13.0.0.1781273857272"></script>
 </head>
 <body>
 
@@ -2605,6 +2605,6 @@ tr.rank-1 td {
   <input type="file" id="file-input" accept=".csv" style="display:none" onchange="handleCSVImport(event)">
   <input type="file" id="rm-file-input" accept=".csv" style="display:none" onchange="rmHandleImport(event)">
 
-  <!-- BUILD: v13.0.0 | 2026-06-11 | 2026-06-12T14:10:35.587Z -->
+  <!-- BUILD: v13.0.0 | 2026-06-11 | 2026-06-12T14:17:37.272Z -->
 </body>
 </html>
