@@ -2894,6 +2894,7 @@ function createTx(formData) {
   Store.saveTxs(State.get('txs'));
 
   // ★ 即時同步到 Firebase
+  console.log('[v13:tx] 📤 createTx → calling syncTxToFirebase... fbKey=' + tx._fbKey + ' type=' + tx.type);
   syncTxToFirebase(tx);
 
   // 通知事件
@@ -4906,6 +4907,7 @@ function _watchConnection() {
  * @param {object} tx
  */
 function syncTxToFirebase(tx) {
+  console.log('[v13:firebase] 🔵 syncTxToFirebase ENTERED, _db=' + (!!_db) + ', fbKey=' + (tx && tx._fbKey));
   if (!tx._fbKey) {
     console.warn('[v13:firebase] syncTx skipped: missing _fbKey');
     return;
