@@ -9,13 +9,25 @@
 function renderAll() {
   var txs = State.get('txs');
   var month = State.get('workingMonth');
-  if (month) txs = filterByMonth(txs, month);
 
-  // KPI 迷你
-  _renderAllKPI(txs);
+  // ★ try-catch 包裹，防止单个渲染阶段崩溃导致页面卡死
+  try {
+    if (month) txs = filterByMonth(txs, month);
+  } catch (e) {
+    console.error('[v13:all] filterByMonth 崩溃:', e);
+  }
 
-  // 表格
-  _renderAllTable(txs);
+  try {
+    _renderAllKPI(txs);
+  } catch (e) {
+    console.error('[v13:all] _renderAllKPI 崩溃:', e);
+  }
+
+  try {
+    _renderAllTable(txs);
+  } catch (e) {
+    console.error('[v13:all] _renderAllTable 崩溃:', e);
+  }
 }
 
 function _renderAllKPI(txs) {
@@ -59,6 +71,8 @@ function _renderAllTable(txs) {
 
   tbody.innerHTML = '';
   for (var i = 0; i < txs.length; i++) {
+    // ★ 防御：跳过 undefined 的墓碑条目
+    if (!txs[i]) continue;
     (function(tx) {
       var tr = h('tr', {
         'data-fbkey': tx._fbKey,
@@ -97,10 +111,23 @@ function _renderAllTable(txs) {
       delBtn.onclick = (function(key) {
         return function(e) {
           e.stopPropagation();
-          if (confirm('確定刪除這筆交易？')) {
-            deleteTx(key);
+          console.log('[v13:all] 🗑️ 刪除按鈕點擊, fbKey=' + key);
+          var confirmed = confirm('確定刪除這筆交易？');
+          console.log('[v13:all] confirm 返回值: ' + confirmed);
+          if (confirmed) {
+            console.log('[v13:all] 📤 呼叫 deleteTx(' + key + ')...');
+            var result = deleteTx(key);
+            console.log('[v13:all] deleteTx 返回: ' + (result ? '成功 (' + result._fbKey + ')' : 'null (刪除失敗!)'));
             toastCRUDDone();
-            renderAll();
+            console.log('[v13:all] 🔄 重新渲染 renderAll()...');
+            try {
+              renderAll();
+            } catch (e) {
+              console.error('[v13:all] renderAll 崩潰:', e);
+              // 数据已删除并持久化，即使渲染崩溃也不会丢失
+              console.log('[v13:all] ⚠️ 數據已成功刪除，請手動刷新頁面');
+            }
+            console.log('[v13:all] ✅ renderAll 完成, 當前 txs 數量: ' + State.get('txs').length);
           }
         };
       })(fbKey);

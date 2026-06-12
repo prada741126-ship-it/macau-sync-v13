@@ -11,13 +11,29 @@
   <!-- 版本快取清除 -->
   <script>
     (function() {
-      var APP_VERSION = 'v13.0.0';
+      var APP_VERSION = '13.0.0.1781275535210';
       var stored = localStorage.getItem('macau_app_version');
+      var qs = location.search || '';
       if (stored && stored !== APP_VERSION && !sessionStorage.getItem('_v13_reloaded')) {
         sessionStorage.setItem('_v13_reloaded', '1');
-        location.replace(location.href.split('?')[0] + '?v=' + APP_VERSION);
+        // 保留现有 URL 参数，附加版本号
+        var sep = qs ? '&' : '?';
+        location.replace(location.href.split('?')[0] + qs + sep + 'v=' + APP_VERSION);
       }
       localStorage.setItem('macau_app_version', APP_VERSION);
+    })();
+  </script>
+
+  <!-- vConsole 手机调试工具 (URL: ?debug=1 或 localStorage macau_debug=1) -->
+  <script>
+    (function() {
+      var debugOn = (location.search.indexOf('debug=1') !== -1) || localStorage.getItem('macau_debug') === '1';
+      if (!debugOn) return;
+      var s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/vconsole@3.15.1/dist/vconsole.min.js';
+      s.onload = function() { new VConsole(); console.log('[v13] vConsole 手机调试已启动'); };
+      s.onerror = function() { console.warn('[v13] vConsole 加载失败'); };
+      document.head.appendChild(s);
     })();
   </script>
 
@@ -2102,7 +2118,7 @@ tr.rank-1 td {
   <!-- Firebase 初始化已统一由 src/sync/firebase.js 的 initFirebase() 处理（带重试） -->
 
   <!-- JS: 合并后由 build.js 输出为 app.js -->
-  <script src="app.js?v=13.0.0"></script>
+  <script src="app.js?v=13.0.0.1781275535210"></script>
 </head>
 <body>
 
@@ -2589,6 +2605,6 @@ tr.rank-1 td {
   <input type="file" id="file-input" accept=".csv" style="display:none" onchange="handleCSVImport(event)">
   <input type="file" id="rm-file-input" accept=".csv" style="display:none" onchange="rmHandleImport(event)">
 
-  <!-- BUILD: v13.0.0 | 2026-06-11 | 2026-06-12T10:13:04.083Z -->
+  <!-- BUILD: v13.0.0 | 2026-06-11 | 2026-06-12T14:45:35.210Z -->
 </body>
 </html>

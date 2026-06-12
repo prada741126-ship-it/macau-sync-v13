@@ -7,13 +7,27 @@
 function renderSummary() {
   var txs = State.get('txs');
   var month = State.get('workingMonth');
-  if (month) txs = filterByMonth(txs, month);
+
+  // ★ try-catch 包裹，防止未定义条目导致崩溃
+  try {
+    if (month) txs = filterByMonth(txs, month);
+  } catch (e) {
+    console.error('[v13:summary] filterByMonth 崩溃:', e);
+  }
 
   // KPI
-  _renderSummaryKPI(txs);
+  try {
+    _renderSummaryKPI(txs);
+  } catch (e) {
+    console.error('[v13:summary] _renderSummaryKPI 崩溃:', e);
+  }
 
   // 代理×场地表
-  _renderSummaryTable(txs);
+  try {
+    _renderSummaryTable(txs);
+  } catch (e) {
+    console.error('[v13:summary] _renderSummaryTable 崩溃:', e);
+  }
 }
 
 function _renderSummaryKPI(txs) {

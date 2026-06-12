@@ -132,6 +132,7 @@ var EVENTS = {
   SYNC_COMPLETE:    'sync:complete',
   SYNC_ERROR:       'sync:error',
   CONNECTION_CHANGED: 'connection:changed',
+  CRYPTO_READY:      'crypto:ready',
   // 页面
   PAGE_CHANGED:     'page:changed',
   // UI
@@ -835,6 +836,8 @@ function throttle(func, limit) {
 // ============================================================================
 var _cryptoReady = false;
 var _cryptoError = '';
+var _cryptoPollTimer = null;
+var _cryptoRetryDone = false;
 
 /**
  * 检测 CryptoJS 是否可用
@@ -844,11 +847,20 @@ function checkCrypto() {
   if (typeof CryptoJS !== 'undefined' && CryptoJS.AES) {
     _cryptoReady = true;
     _cryptoError = '';
+    if (_cryptoPollTimer) { clearInterval(_cryptoPollTimer); _cryptoPollTimer = null; }
+    _cryptoRetryDone = true;
     return true;
   }
   _cryptoReady = false;
   _cryptoError = 'CryptoJS 未載入 — 加密功能不可用，請檢查 CDN 連線';
   console.error('[v13:crypto] FATAL: CryptoJS is not defined. Encryption is UNAVAILABLE.');
+
+  // ★ 如果还没设置重试，启动轮询（参照 Firebase 模式）
+  if (!_cryptoRetryDone) {
+    _cryptoRetryDone = true;
+    _startCryptoPoll();
+  }
+
   return false;
 }
 
@@ -858,6 +870,68 @@ function checkCrypto() {
  */
 function isCryptoReady() {
   return _cryptoReady;
+}
+
+/**
+ * 启动 CryptoJS 轮询重试
+ * 当 CDN 异步加载晚于 app.js 执行时，通过轮询等待 CryptoJS 就绪
+ */
+function _startCryptoPoll() {
+  var pollCount = 0;
+  _cryptoPollTimer = setInterval(function() {
+    pollCount++;
+    if (typeof CryptoJS !== 'undefined' && CryptoJS.AES) {
+      _cryptoReady = true;
+      _cryptoError = '';
+      clearInterval(_cryptoPollTimer);
+      _cryptoPollTimer = null;
+      console.log('[v13:crypto] ✅ CryptoJS loaded via poll #' + pollCount + ' — encryption ACTIVE');
+
+      // ★ 加密就绪后：尝试从 localStorage 重新加载加密数据
+      // 之前因为 decryptData 返回 [] 导致数据丢失，现在重新解密
+      try {
+        var rawTxs = localStorage.getItem(STORAGE_KEYS.DATA);
+        if (rawTxs && rawTxs.indexOf('ENC:') === 0) {
+          var decrypted = decryptData(rawTxs);
+          if (decrypted.length > 0) {
+            State.set('txs', decrypted);
+            Events.emit(EVENTS.TXS_LOADED, decrypted);
+            console.log('[v13:crypto] 🔓 Restored ' + decrypted.length + ' encrypted TXS records');
+          }
+        }
+        var rawFund = localStorage.getItem(STORAGE_KEYS.FUND);
+        if (rawFund && rawFund.indexOf('ENC:') === 0) {
+          var decFund = decryptData(rawFund);
+          if (decFund.length > 0) {
+            State.set('fundWithdrawals', decFund);
+            Events.emit(EVENTS.FUND_LOADED, decFund);
+            console.log('[v13:crypto] 🔓 Restored ' + decFund.length + ' encrypted FUND records');
+          }
+        }
+        var rawWallets = localStorage.getItem(STORAGE_KEYS.AGENT_WALLETS);
+        if (rawWallets && rawWallets.indexOf('ENC:') === 0) {
+          var decWallets = decryptWallets(rawWallets);
+          if (decWallets && Object.keys(decWallets).length > 0) {
+            State.set('agentWallets', decWallets);
+            Events.emit(EVENTS.WALLETS_LOADED, decWallets);
+            console.log('[v13:crypto] 🔓 Restored encrypted WALLET records');
+          }
+        }
+      } catch(re) {
+        console.error('[v13:crypto] Crypto restore error:', re);
+      }
+
+      // ★ 触发加密就绪事件
+      Events.emit(EVENTS.CRYPTO_READY);
+    }
+
+    if (pollCount >= 30) {
+      clearInterval(_cryptoPollTimer);
+      _cryptoPollTimer = null;
+      console.error('[v13:crypto] ❌ CryptoJS failed to load after 30s. Encryption permanently DISABLED.');
+      console.error('[v13:crypto]    请检查: 1) 网络是否可访问 cdn.jsdelivr.net  2) 防火墙/广告拦截器是否屏蔽');
+    }
+  }, 1000);
 }
 
 /**
@@ -2109,6 +2183,8 @@ function validateMonthBalance(month, txs, fundWithdrawals, agentWallets) {
   var monthTxs = [];
 
   for (var i = 0; i < txs.length; i++) {
+    // ★ 防御：跳过 undefined 或没有 date 的墓碑条目
+    if (!txs[i] || !txs[i].date) continue;
     if (txs[i].date.indexOf(month) === 0) {
       monthTxs.push(txs[i]);
     }
@@ -2248,6 +2324,8 @@ function aggregateByDay(txs, month) {
   var map = {};
   for (var i = 0; i < txs.length; i++) {
     var tx = txs[i];
+    // ★ 防御：跳过 undefined 的墓碑条目
+    if (!tx) continue;
     var date = tx.date;
     if (!date) continue;
     if (month && date.indexOf(month) !== 0) continue;
@@ -2431,6 +2509,8 @@ function filterByMonth(txs, month) {
   if (!month) return txs;
   var result = [];
   for (var i = 0; i < txs.length; i++) {
+    // ★ 防御：跳过 undefined 或没有 date 的墓碑条目
+    if (!txs[i] || !txs[i].date) continue;
     if (txs[i].date.indexOf(month) === 0) {
       result.push(txs[i]);
     }
@@ -2820,6 +2900,7 @@ function createTx(formData) {
   Store.saveTxs(State.get('txs'));
 
   // ★ 即時同步到 Firebase
+  console.log('[v13:tx] 📤 createTx → calling syncTxToFirebase... fbKey=' + tx._fbKey + ' type=' + tx.type);
   syncTxToFirebase(tx);
 
   // 通知事件
@@ -2893,6 +2974,7 @@ function updateTx(fbKey, formData) {
  * @returns {object|null} 被删除的交易对象，找不到返回 null
  */
 function deleteTx(fbKey) {
+  console.log('[v13:tx] 🔵 deleteTx ENTERED, fbKey=' + fbKey + ', 當前 txs 數量=' + State.get('txs').length);
   var deleted = null;
 
   State.update('txs', function(arr) {
@@ -2900,22 +2982,29 @@ function deleteTx(fbKey) {
       if (arr[i]._fbKey === fbKey) {
         deleted = arr[i];
         arr.splice(i, 1);
+        console.log('[v13:tx] 🗑️  從陣列移除 index=' + i + ', 剩餘=' + arr.length);
         break;
       }
     }
     return arr;
   });
 
-  if (!deleted) return null;
+  if (!deleted) {
+    console.warn('[v13:tx] ⚠️ deleteTx 未找到 fbKey=' + fbKey + '! 可能已被刪除');
+    return null;
+  }
 
+  console.log('[v13:tx] 💾 持久化 Storage...');
   // 持久化
   Store.saveTxs(State.get('txs'));
 
+  console.log('[v13:tx] 🔥 從 Firebase 移除...');
   // ★ 即時從 Firebase 刪除
   removeTxFromFirebase(fbKey);
 
   // 通知事件
   Events.emit(EVENTS.TX_DELETED, deleted);
+  console.log('[v13:tx] ✅ deleteTx 完成, 新 txs 數量=' + State.get('txs').length);
 
   return deleted;
 }
@@ -4674,7 +4763,6 @@ function hasDraft() {
 var _db = null;              // Firebase database 实例
 var _fbRetryDone = false;    // 是否已完成重试/setup
 var _fbPollTimer = null;     // 轮询定时器
-var _initialSyncDone = false; // 首次连通后已完成双向同步
 
 /**
  * 真正执行 Firebase 初始化
@@ -4809,18 +4897,11 @@ function _watchConnection() {
 
     if (connected) {
       console.log('[v13:firebase] ✅ Firebase RTDB 已連線');
-      // 首次连通：延迟 2 秒后执行双向同步（给 SDK 时间稳定连接）
+      // 安全网：2 秒后推送本地数据到 Firebase（transaction 合并，幂等）
       setTimeout(function() {
-        if (!State.get('syncConnected')) return;  // 又断开了，跳过
-        console.log('[v13:firebase] 🔄 执行双向同步...');
-        // 先上传本地数据
+        if (!State.get('syncConnected')) return;
+        console.log('[v13:firebase] 🔄 安全網推送...');
         try { syncUploadAll(); } catch(e) { console.error('[v13:firebase] syncUploadAll error:', e); }
-        // 然后下载远端数据（如果还没做过首次同步）
-        if (!_initialSyncDone) {
-          _initialSyncDone = true;
-          console.log('[v13:firebase] 🔽 首次同步: 拉取遠端數據...');
-          try { syncDownloadAll(); } catch(e) { console.error('[v13:firebase] syncDownloadAll error:', e); }
-        }
       }, 2000);
     } else {
       // 只有从 connected→disconnected 变化时才警告（避免首次 false 状态误报）
@@ -4840,17 +4921,24 @@ function _watchConnection() {
  * @param {object} tx
  */
 function syncTxToFirebase(tx) {
-  if (!_db || !tx._fbKey) {
-    if (!_db) console.warn('[v13:firebase] syncTx skipped: _db is null');
-    if (!tx._fbKey) console.warn('[v13:firebase] syncTx skipped: missing _fbKey');
+  console.log('[v13:firebase] 🔵 syncTxToFirebase ENTERED, _db=' + (!!_db) + ', fbKey=' + (tx && tx._fbKey));
+  if (!tx._fbKey) {
+    console.warn('[v13:firebase] syncTx skipped: missing _fbKey');
+    return;
+  }
+  if (!_db) {
+    console.warn('[v13:firebase] syncTx deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { syncTxToFirebase(tx); });
     return;
   }
   try {
+    console.log('[v13:firebase] 🚀 syncTx WRITE:', tx._fbKey, 'agent=' + (tx.agent || '?'), 'vol=' + (tx.volume || 0));
     _db.ref(FB_PATH.TXS + '/' + tx._fbKey).set(tx, function(err) {
       if (err) {
-        console.error('[v13:firebase] syncTx FAILED:', err.message || err);
-        // 写入失败时重新入队
+        console.error('[v13:firebase] ❌ syncTx FAILED:', tx._fbKey, err.message || err);
         enqueueUpload(function() { syncTxToFirebase(tx); });
+      } else {
+        console.log('[v13:firebase] ✅ syncTx OK:', tx._fbKey);
       }
     });
   } catch (e) {
@@ -4863,10 +4951,26 @@ function syncTxToFirebase(tx) {
  * @param {string} fbKey
  */
 function removeTxFromFirebase(fbKey) {
-  if (!_db) return;
+  if (!_db) {
+    console.warn('[v13:firebase] removeTx deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { removeTxFromFirebase(fbKey); });
+    return;
+  }
   try {
-    _db.ref(FB_PATH.TXS + '/' + fbKey).set(null, function(err) {
-      if (err) console.error('[v13:firebase] removeTx FAILED:', err.message || err);
+    console.log('[v13:firebase] 🗑️  removeTx TOMBSTONE:', fbKey);
+    // ★ 墓碑策略：不设 null，而是写一个墓碑对象
+    // 这样另一端的 mergeTxs 可以识别并移除该条目
+    _db.ref(FB_PATH.TXS + '/' + fbKey).set({
+      _fbKey: fbKey,
+      _deleted: true,
+      _updatedAt: Date.now()
+    }, function(err) {
+      if (err) {
+        console.error('[v13:firebase] ❌ removeTx FAILED:', fbKey, err.message || err);
+        enqueueUpload(function() { removeTxFromFirebase(fbKey); });
+      } else {
+        console.log('[v13:firebase] ✅ removeTx TOMBSTONE OK:', fbKey);
+      }
     });
   } catch (e) {
     console.error('[v13:firebase] removeTx error:', e);
@@ -4878,15 +4982,23 @@ function removeTxFromFirebase(fbKey) {
  * @param {object} record
  */
 function syncFundToFirebase(record) {
-  if (!_db || !record._fbKey) {
-    if (!_db) console.warn('[v13:firebase] syncFund skipped: _db is null');
+  if (!record._fbKey) {
+    console.warn('[v13:firebase] syncFund skipped: missing _fbKey');
+    return;
+  }
+  if (!_db) {
+    console.warn('[v13:firebase] syncFund deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { syncFundToFirebase(record); });
     return;
   }
   try {
+    console.log('[v13:firebase] 🚀 syncFund WRITE:', record._fbKey);
     _db.ref(FB_PATH.FUND + '/' + record._fbKey).set(record, function(err) {
       if (err) {
-        console.error('[v13:firebase] syncFund FAILED:', err.message || err);
+        console.error('[v13:firebase] ❌ syncFund FAILED:', record._fbKey, err.message || err);
         enqueueUpload(function() { syncFundToFirebase(record); });
+      } else {
+        console.log('[v13:firebase] ✅ syncFund OK:', record._fbKey);
       }
     });
   } catch (e) {
@@ -4899,10 +5011,23 @@ function syncFundToFirebase(record) {
  * @param {string} fbKey
  */
 function removeFundFromFirebase(fbKey) {
-  if (!_db) return;
+  if (!_db) {
+    console.warn('[v13:firebase] removeFund deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { removeFundFromFirebase(fbKey); });
+    return;
+  }
   try {
-    _db.ref(FB_PATH.FUND + '/' + fbKey).set(null, function(err) {
-      if (err) console.error('[v13:firebase] removeFund FAILED:', err.message || err);
+    console.log('[v13:firebase] 🗑️  removeFund TOMBSTONE:', fbKey);
+    _db.ref(FB_PATH.FUND + '/' + fbKey).set({
+      _fbKey: fbKey,
+      _deleted: true,
+      _updatedAt: Date.now()
+    }, function(err) {
+      if (err) {
+        console.error('[v13:firebase] ❌ removeFund FAILED:', fbKey, err.message || err);
+      } else {
+        console.log('[v13:firebase] ✅ removeFund TOMBSTONE OK:', fbKey);
+      }
     });
   } catch (e) {
     console.error('[v13:firebase] removeFund error:', e);
@@ -4915,15 +5040,23 @@ function removeFundFromFirebase(fbKey) {
  * @param {object} record
  */
 function syncWalletToFirebase(agent, record) {
-  if (!_db || !record._fbKey) {
-    if (!_db) console.warn('[v13:firebase] syncWallet skipped: _db is null');
+  if (!record._fbKey) {
+    console.warn('[v13:firebase] syncWallet skipped: missing _fbKey');
+    return;
+  }
+  if (!_db) {
+    console.warn('[v13:firebase] syncWallet deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { syncWalletToFirebase(agent, record); });
     return;
   }
   try {
+    console.log('[v13:firebase] 🚀 syncWallet WRITE:', agent, record._fbKey);
     _db.ref(FB_PATH.AGENT_WALLETS + '/' + encodeFirebaseKey(agent) + '/' + record._fbKey).set(record, function(err) {
       if (err) {
-        console.error('[v13:firebase] syncWallet FAILED:', err.message || err);
+        console.error('[v13:firebase] ❌ syncWallet FAILED:', agent, record._fbKey, err.message || err);
         enqueueUpload(function() { syncWalletToFirebase(agent, record); });
+      } else {
+        console.log('[v13:firebase] ✅ syncWallet OK:', agent, record._fbKey);
       }
     });
   } catch (e) {
@@ -4937,10 +5070,23 @@ function syncWalletToFirebase(agent, record) {
  * @param {string} fbKey
  */
 function removeWalletFromFirebase(agent, fbKey) {
-  if (!_db) return;
+  if (!_db) {
+    console.warn('[v13:firebase] removeWallet deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { removeWalletFromFirebase(agent, fbKey); });
+    return;
+  }
   try {
-    _db.ref(FB_PATH.AGENT_WALLETS + '/' + encodeFirebaseKey(agent) + '/' + fbKey).set(null, function(err) {
-      if (err) console.error('[v13:firebase] removeWallet FAILED:', err.message || err);
+    console.log('[v13:firebase] 🗑️  removeWallet TOMBSTONE:', agent, fbKey);
+    _db.ref(FB_PATH.AGENT_WALLETS + '/' + encodeFirebaseKey(agent) + '/' + fbKey).set({
+      _fbKey: fbKey,
+      _deleted: true,
+      _updatedAt: Date.now()
+    }, function(err) {
+      if (err) {
+        console.error('[v13:firebase] ❌ removeWallet FAILED:', agent, fbKey, err.message || err);
+      } else {
+        console.log('[v13:firebase] ✅ removeWallet TOMBSTONE OK:', agent, fbKey);
+      }
     });
   } catch (e) {
     console.error('[v13:firebase] removeWallet error:', e);
@@ -4952,15 +5098,23 @@ function removeWalletFromFirebase(agent, fbKey) {
  * @param {object} booking
  */
 function syncBookingToFirebase(booking) {
-  if (!_db || !booking._fbKey) {
-    if (!_db) console.warn('[v13:firebase] syncBooking skipped: _db is null');
+  if (!booking._fbKey) {
+    console.warn('[v13:firebase] syncBooking skipped: missing _fbKey');
+    return;
+  }
+  if (!_db) {
+    console.warn('[v13:firebase] syncBooking deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { syncBookingToFirebase(booking); });
     return;
   }
   try {
+    console.log('[v13:firebase] 🚀 syncBooking WRITE:', booking._fbKey);
     _db.ref(FB_PATH.RM_BOOKINGS + '/' + booking._fbKey).set(booking, function(err) {
       if (err) {
-        console.error('[v13:firebase] syncBooking FAILED:', err.message || err);
+        console.error('[v13:firebase] ❌ syncBooking FAILED:', booking._fbKey, err.message || err);
         enqueueUpload(function() { syncBookingToFirebase(booking); });
+      } else {
+        console.log('[v13:firebase] ✅ syncBooking OK:', booking._fbKey);
       }
     });
   } catch (e) {
@@ -4973,10 +5127,23 @@ function syncBookingToFirebase(booking) {
  * @param {string} fbKey
  */
 function removeBookingFromFirebase(fbKey) {
-  if (!_db) return;
+  if (!_db) {
+    console.warn('[v13:firebase] removeBooking deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { removeBookingFromFirebase(fbKey); });
+    return;
+  }
   try {
-    _db.ref(FB_PATH.RM_BOOKINGS + '/' + fbKey).set(null, function(err) {
-      if (err) console.error('[v13:firebase] removeBooking FAILED:', err.message || err);
+    console.log('[v13:firebase] 🗑️  removeBooking TOMBSTONE:', fbKey);
+    _db.ref(FB_PATH.RM_BOOKINGS + '/' + fbKey).set({
+      _fbKey: fbKey,
+      _deleted: true,
+      _updatedAt: Date.now()
+    }, function(err) {
+      if (err) {
+        console.error('[v13:firebase] ❌ removeBooking FAILED:', fbKey, err.message || err);
+      } else {
+        console.log('[v13:firebase] ✅ removeBooking TOMBSTONE OK:', fbKey);
+      }
     });
   } catch (e) {
     console.error('[v13:firebase] removeBooking error:', e);
@@ -4989,7 +5156,8 @@ function removeBookingFromFirebase(fbKey) {
  */
 function syncAgentListToFirebase(agentList) {
   if (!_db) {
-    console.warn('[v13:firebase] syncAgentList skipped: _db is null');
+    console.warn('[v13:firebase] syncAgentList deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { syncAgentListToFirebase(agentList); });
     return;
   }
   try {
@@ -5140,6 +5308,13 @@ function _processQueue() {
     return;
   }
 
+  // ★ 如果 Firebase 还没就绪，延迟处理（不退队，不丢数据）
+  if (!getDB()) {
+    _uploading = false;
+    setTimeout(_processQueue, 1000);
+    return;
+  }
+
   _uploading = true;
   var task = _uploadQueue.shift();
 
@@ -5179,11 +5354,19 @@ function syncUploadAll() {
   var db = getDB();
 
   // 1. 交易：transaction 原子合併 (個別 CRUD 已即時推送，此為安全網)
+  // ★ FIX: mergeTxs(local, remote) — 第一个参数是本地，第二个是远端
   db.ref(FB_PATH.TXS).transaction(function(remote) {
     if (!remote) return fbArrayToObj(txs);
     var rArr = fbObjToArray(remote);
-    var merged = mergeTxs(rArr, txs);
+    var merged = mergeTxs(txs, rArr);  // ✓ local=txs, remote=rArr
+    console.log('[v13:uploader] TXS transaction: local=' + txs.length + ' remote=' + rArr.length + ' merged=' + merged.length);
     return fbArrayToObj(merged);
+  }, function(err, committed, snapshot) {
+    if (err) {
+      console.error('[v13:uploader] TXS transaction FAILED:', err.message || err);
+    } else if (committed) {
+      console.log('[v13:uploader] ✅ TXS transaction committed, ' + (snapshot ? snapshot.numChildren() : '?') + ' entries on Firebase');
+    }
   });
 
   // 2. 公基金：transaction 原子合併
@@ -5205,7 +5388,9 @@ function syncUploadAll() {
       }
     }
     var mf = [];
-    for (var fk in localMap) mf.push(localMap[fk]);
+    for (var fk in localMap) {
+      if (!localMap[fk]._deleted) mf.push(localMap[fk]);
+    }  // ★ 墓碑过滤
     return fbArrayToObj(mf);
   });
 
@@ -5216,10 +5401,11 @@ function syncUploadAll() {
   });
 
   // 4. 代理钱包：transaction 原子合併
+  // ★ FIX: mergeWallets(local, remote) — local=agentWallets, remote=rw
   db.ref(FB_PATH.AGENT_WALLETS).transaction(function(remote) {
     if (!remote) return fbWalletsToObj(agentWallets);
     var rw = fbObjToWallets(remote);
-    return fbWalletsToObj(mergeWallets(rw, agentWallets));
+    return fbWalletsToObj(mergeWallets(agentWallets, rw));
   });
 
   // 5. 工作月份
@@ -5244,7 +5430,9 @@ function syncUploadAll() {
       }
     }
     var mb = [];
-    for (var bk in localMap) mb.push(localMap[bk]);
+    for (var bk in localMap) {
+      if (!localMap[bk]._deleted) mb.push(localMap[bk]);
+    }  // ★ 墓碑过滤
     return fbArrayToObj(mb);
   });
 
@@ -5314,8 +5502,11 @@ function startWatchers() {
     // 用 mergeTxs 合并（时间戳胜出策略）
     var merged = mergeTxs(local, remote);
 
+    console.log('[v13:watchers] TXS onValue: remote=' + remote.length + ' local=' + local.length + ' merged=' + merged.length);
+
     // 检测是否真正有变化（按长度+内容）
     if (JSON.stringify(merged) !== JSON.stringify(local)) {
+      console.log('[v13:watchers] TXS CHANGED: ' + local.length + ' → ' + merged.length + ' entries');
       State.set('txs', merged);
       Store.saveTxs(merged);
       Events.emit(EVENTS.TXS_LOADED, merged);
@@ -5536,16 +5727,23 @@ function mergeTxs(local, remote) {
         var localTs = merged[rKey]._updatedAt || 0;
         var remoteTs = remote[j]._updatedAt || 0;
         if (remoteTs > localTs) {
+          // 远端胜出（可能是墓碑 _deleted:true）
           merged[rKey] = remote[j];
         }
       } else {
+        // 本地没有 → 远端胜出（包括墓碑）
         merged[rKey] = remote[j];
       }
     }
   }
 
+  // ★ 墓碑过滤：排除 _deleted:true 的远端墓碑条目
+  // 墓碑机制：删除时写 {_fbKey, _deleted:true, _updatedAt} 而非 set(null)
+  // 这样 mergeTxs 能识别删除操作并同步移除
   for (var k in merged) {
-    result.push(merged[k]);
+    if (!merged[k]._deleted) {
+      result.push(merged[k]);
+    }
   }
 
   return result;
@@ -5590,7 +5788,10 @@ function mergeWallets(local, remote) {
 
     var result = [];
     for (var k in recordMap) {
-      result.push(recordMap[k]);
+      // ★ 墓碑过滤：排除 _deleted:true 的远端删除标记
+      if (!recordMap[k]._deleted) {
+        result.push(recordMap[k]);
+      }
     }
     if (result.length > 0) {
       merged[agent] = result;
@@ -5622,7 +5823,10 @@ function mergeArrays(local, remote) {
 
   var result = [];
   for (var k in map) {
-    result.push(map[k]);
+    // ★ 墓碑过滤：排除 _deleted:true 的远端删除标记
+    if (!map[k]._deleted) {
+      result.push(map[k]);
+    }
   }
   return result;
 }
@@ -6260,13 +6464,25 @@ function _renderRecentActivity(txs) {
 function renderAll() {
   var txs = State.get('txs');
   var month = State.get('workingMonth');
-  if (month) txs = filterByMonth(txs, month);
 
-  // KPI 迷你
-  _renderAllKPI(txs);
+  // ★ try-catch 包裹，防止单个渲染阶段崩溃导致页面卡死
+  try {
+    if (month) txs = filterByMonth(txs, month);
+  } catch (e) {
+    console.error('[v13:all] filterByMonth 崩溃:', e);
+  }
 
-  // 表格
-  _renderAllTable(txs);
+  try {
+    _renderAllKPI(txs);
+  } catch (e) {
+    console.error('[v13:all] _renderAllKPI 崩溃:', e);
+  }
+
+  try {
+    _renderAllTable(txs);
+  } catch (e) {
+    console.error('[v13:all] _renderAllTable 崩溃:', e);
+  }
 }
 
 function _renderAllKPI(txs) {
@@ -6310,6 +6526,8 @@ function _renderAllTable(txs) {
 
   tbody.innerHTML = '';
   for (var i = 0; i < txs.length; i++) {
+    // ★ 防御：跳过 undefined 的墓碑条目
+    if (!txs[i]) continue;
     (function(tx) {
       var tr = h('tr', {
         'data-fbkey': tx._fbKey,
@@ -6348,10 +6566,23 @@ function _renderAllTable(txs) {
       delBtn.onclick = (function(key) {
         return function(e) {
           e.stopPropagation();
-          if (confirm('確定刪除這筆交易？')) {
-            deleteTx(key);
+          console.log('[v13:all] 🗑️ 刪除按鈕點擊, fbKey=' + key);
+          var confirmed = confirm('確定刪除這筆交易？');
+          console.log('[v13:all] confirm 返回值: ' + confirmed);
+          if (confirmed) {
+            console.log('[v13:all] 📤 呼叫 deleteTx(' + key + ')...');
+            var result = deleteTx(key);
+            console.log('[v13:all] deleteTx 返回: ' + (result ? '成功 (' + result._fbKey + ')' : 'null (刪除失敗!)'));
             toastCRUDDone();
-            renderAll();
+            console.log('[v13:all] 🔄 重新渲染 renderAll()...');
+            try {
+              renderAll();
+            } catch (e) {
+              console.error('[v13:all] renderAll 崩潰:', e);
+              // 数据已删除并持久化，即使渲染崩溃也不会丢失
+              console.log('[v13:all] ⚠️ 數據已成功刪除，請手動刷新頁面');
+            }
+            console.log('[v13:all] ✅ renderAll 完成, 當前 txs 數量: ' + State.get('txs').length);
           }
         };
       })(fbKey);
@@ -7235,13 +7466,27 @@ function pad2(n) {
 function renderSummary() {
   var txs = State.get('txs');
   var month = State.get('workingMonth');
-  if (month) txs = filterByMonth(txs, month);
+
+  // ★ try-catch 包裹，防止未定义条目导致崩溃
+  try {
+    if (month) txs = filterByMonth(txs, month);
+  } catch (e) {
+    console.error('[v13:summary] filterByMonth 崩溃:', e);
+  }
 
   // KPI
-  _renderSummaryKPI(txs);
+  try {
+    _renderSummaryKPI(txs);
+  } catch (e) {
+    console.error('[v13:summary] _renderSummaryKPI 崩溃:', e);
+  }
 
   // 代理×场地表
-  _renderSummaryTable(txs);
+  try {
+    _renderSummaryTable(txs);
+  } catch (e) {
+    console.error('[v13:summary] _renderSummaryTable 崩溃:', e);
+  }
 }
 
 function _renderSummaryKPI(txs) {
@@ -9845,8 +10090,7 @@ Events.on(EVENTS.HC_CONFIG_UPDATED, function() {
     // 启动 Firebase 监听器 (非致命) — watchers 在连线建立后会自动拉取远端数据
     try { startWatchers(); } catch(e) { console.warn('[v13:app] startWatchers error:', e); }
 
-    // 尝試同步 — 如果连线已建立就立即同步，否则由 _watchConnection 在连通时补触发
-    try { syncDownloadAll(); } catch(e) { console.warn('[v13:app] syncDownloadAll error:', e); }
+    // 立即推送本地数据到 Firebase（异步安全网）
     try { syncUploadAll(); } catch(e) { console.warn('[v13:app] syncUploadAll error:', e); }
 
     // 渲染: 加 try-catch 确保一个页面失败不影响其他

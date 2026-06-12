@@ -109,6 +109,8 @@ function aggregateByDay(txs, month) {
   var map = {};
   for (var i = 0; i < txs.length; i++) {
     var tx = txs[i];
+    // ★ 防御：跳过 undefined 的墓碑条目
+    if (!tx) continue;
     var date = tx.date;
     if (!date) continue;
     if (month && date.indexOf(month) !== 0) continue;

@@ -306,6 +306,8 @@ function validateMonthBalance(month, txs, fundWithdrawals, agentWallets) {
   var monthTxs = [];
 
   for (var i = 0; i < txs.length; i++) {
+    // ★ 防御：跳过 undefined 或没有 date 的墓碑条目
+    if (!txs[i] || !txs[i].date) continue;
     if (txs[i].date.indexOf(month) === 0) {
       monthTxs.push(txs[i]);
     }
