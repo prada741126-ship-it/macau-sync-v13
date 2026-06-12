@@ -297,8 +297,8 @@ var TX_TYPES = [
 // CDN 依赖 (对照档第十四节)
 // ============================================================================
 var CDN = {
-  FIREBASE_APP:      'https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js',
-  FIREBASE_DB:       'https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js',
+  FIREBASE_APP:      'https://cdn.jsdelivr.net/npm/firebase@10.12.0/firebase-app-compat.js',
+  FIREBASE_DB:       'https://cdn.jsdelivr.net/npm/firebase@10.12.0/firebase-database-compat.js',
   CRYPTOJS:          'https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js',
   CHARTJS:           'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js',
 };

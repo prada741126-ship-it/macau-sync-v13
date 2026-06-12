@@ -189,12 +189,12 @@
     // 填充下拉
     try { _populateDropdowns(); } catch(e) { console.error('[v13:app] populateDropdowns error:', e); }
 
-    // 启动 Firebase 监听器 (非致命)
+    // 启动 Firebase 监听器 (非致命) — watchers 在连线建立后会自动拉取远端数据
     try { startWatchers(); } catch(e) { console.warn('[v13:app] startWatchers error:', e); }
 
-    // 手动同步一次 (非致命)
-    try { syncUploadAll(); } catch(e) { console.warn('[v13:app] syncUploadAll error:', e); }
+    // 尝試同步 — 如果连线已建立就立即同步，否则由 _watchConnection 在连通时补触发
     try { syncDownloadAll(); } catch(e) { console.warn('[v13:app] syncDownloadAll error:', e); }
+    try { syncUploadAll(); } catch(e) { console.warn('[v13:app] syncUploadAll error:', e); }
 
     // 渲染: 加 try-catch 确保一个页面失败不影响其他
     try { renderOverview(); } catch(e) { console.error('[v13:app] renderOverview error:', e); }
