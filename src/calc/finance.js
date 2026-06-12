@@ -267,7 +267,19 @@ function calcRoomQuota(bookings, txs, month) {
   }
 
   var remaining = Math.max(0, totalVolume - usedThreshold);
-  var rate = totalVolume > 0 ? ((usedThreshold / totalVolume) * 100) : 0;
+  // 额度使用率计算
+  // 业务规则：
+  //   1. 有出场量 → 使用率 = 已用额度 / 总出场量
+  //   2. 无出场量但有登记额度 → 100%（超额，无出场量支撑却已占用额度）
+  //   3. 无任何数据 → 0%
+  var rate;
+  if (totalVolume > 0) {
+    rate = (usedThreshold / totalVolume) * 100;
+  } else if (usedThreshold > 0) {
+    rate = 100; // 无出场但有登记额度 = 100%已用
+  } else {
+    rate = 0;
+  }
 
   return {
     totalVolume:      totalVolume,

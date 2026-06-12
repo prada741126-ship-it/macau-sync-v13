@@ -371,11 +371,31 @@ var RM = {
     // 调试日志
     console.log('[v13:room] _updateQuota month=' + month + ' txs=' + (txs ? txs.length : 0) + ' totalVol=' + quota.totalVolume + ' usedThr=' + quota.usedThreshold + ' rooms=' + roomCount);
 
+    var pct = Math.min(100, quota.usageRate);
     var el = $('.rm-quota-bar');
-    if (el) el.style.width = quota.usageRate.toFixed(1) + '%';
+    if (el) {
+      el.style.width = pct.toFixed(1) + '%';
+      // 动态颜色：<50% green, 50-80% yellow, >80% red
+      if (pct > 80) {
+        el.style.background = 'var(--danger)';
+      } else if (pct > 50) {
+        el.style.background = 'var(--warning)';
+      } else {
+        el.style.background = 'var(--success)';
+      }
+    }
 
     var rateEl = $('.rm-quota-rate');
-    if (rateEl) rateEl.textContent = quota.usageRate.toFixed(1) + '%';
+    if (rateEl) {
+      rateEl.textContent = pct.toFixed(1) + '%';
+      if (pct > 80) {
+        rateEl.style.color = 'var(--danger)';
+      } else if (pct > 50) {
+        rateEl.style.color = 'var(--warning)';
+      } else {
+        rateEl.style.color = 'var(--success)';
+      }
+    }
 
     var volEl = $('.rm-quota-volume');
     if (volEl) volEl.textContent = fmt(quota.totalVolume) + '萬';

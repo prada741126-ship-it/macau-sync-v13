@@ -37,8 +37,10 @@ function createTx(formData) {
   var fbKey = generateFbKey();
 
   var tx = {
-    id:      State.nextId('tx'),
-    _fbKey:  fbKey,
+    id:         State.nextId('tx'),
+    _fbKey:     fbKey,
+    _createdAt: Date.now(),
+    _updatedAt: Date.now(),
     date:    formData.date || nowStr(),
     dow:     getDow(formData.date || nowStr()),
     type:    formData.type || 'rolling',
@@ -107,6 +109,7 @@ function updateTx(fbKey, formData) {
         arr[i].fund    = fund;
         arr[i].cash    = toNum(formData.cash) || 0;
         arr[i].note    = formData.note != null ? formData.note : arr[i].note;
+        arr[i]._updatedAt = Date.now();
 
         updated = arr[i];
         break;

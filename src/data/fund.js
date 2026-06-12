@@ -19,7 +19,9 @@
 function createFund(data) {
   var fbKey = generateFbKey();
   var record = {
-    _fbKey: fbKey,
+    _fbKey:     fbKey,
+    _createdAt: Date.now(),
+    _updatedAt: Date.now(),
     id:     State.nextId('fund'),
     date:   data.date || nowStr(),
     type:   data.type || 'deposit',
@@ -52,6 +54,7 @@ function updateFund(fbKey, data) {
         if (data.type != null)   arr[i].type = data.type;
         if (data.amount != null) arr[i].amount = toNum(data.amount);
         if (data.note != null)   arr[i].note = data.note;
+        arr[i]._updatedAt = Date.now();
         updated = arr[i];
         break;
       }

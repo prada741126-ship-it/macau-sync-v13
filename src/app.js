@@ -268,6 +268,23 @@
       });
     }
 
+    // ★ 手机底部导航绑定
+    var mobileNavItems = document.querySelectorAll('.nav-item[data-page]');
+    for (var mi = 0; mi < mobileNavItems.length; mi++) {
+      mobileNavItems[mi].addEventListener('click', function() {
+        var page = this.getAttribute('data-page');
+        showPage(page);
+      });
+    }
+
+    // 手机底部导航 active 状态同步
+    Events.on(EVENTS.PAGE_CHANGED, function(pageName) {
+      var items = document.querySelectorAll('.nav-item[data-page]');
+      for (var ni = 0; ni < items.length; ni++) {
+        items[ni].classList.toggle('active', items[ni].getAttribute('data-page') === pageName);
+      }
+    });
+
     // 手机侧边栏
     var overlay = $('#sidebar-overlay');
     if (overlay) {

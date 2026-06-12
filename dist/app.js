@@ -2789,8 +2789,10 @@ function createTx(formData) {
   var fbKey = generateFbKey();
 
   var tx = {
-    id:      State.nextId('tx'),
-    _fbKey:  fbKey,
+    id:         State.nextId('tx'),
+    _fbKey:     fbKey,
+    _createdAt: Date.now(),
+    _updatedAt: Date.now(),
     date:    formData.date || nowStr(),
     dow:     getDow(formData.date || nowStr()),
     type:    formData.type || 'rolling',
@@ -2859,6 +2861,7 @@ function updateTx(fbKey, formData) {
         arr[i].fund    = fund;
         arr[i].cash    = toNum(formData.cash) || 0;
         arr[i].note    = formData.note != null ? formData.note : arr[i].note;
+        arr[i]._updatedAt = Date.now();
 
         updated = arr[i];
         break;
@@ -3140,7 +3143,9 @@ function recalcAllTxs() {
 function createFund(data) {
   var fbKey = generateFbKey();
   var record = {
-    _fbKey: fbKey,
+    _fbKey:     fbKey,
+    _createdAt: Date.now(),
+    _updatedAt: Date.now(),
     id:     State.nextId('fund'),
     date:   data.date || nowStr(),
     type:   data.type || 'deposit',
@@ -3173,6 +3178,7 @@ function updateFund(fbKey, data) {
         if (data.type != null)   arr[i].type = data.type;
         if (data.amount != null) arr[i].amount = toNum(data.amount);
         if (data.note != null)   arr[i].note = data.note;
+        arr[i]._updatedAt = Date.now();
         updated = arr[i];
         break;
       }
@@ -3254,7 +3260,9 @@ function getAllFunds() {
 function createWallet(agentName, data) {
   var fbKey = generateFbKey();
   var record = {
-    _fbKey: fbKey,
+    _fbKey:     fbKey,
+    _createdAt: Date.now(),
+    _updatedAt: Date.now(),
     id:     State.nextId('wallet'),
     date:   data.date || nowStr(),
     type:   data.type || 'deposit',
@@ -3291,6 +3299,7 @@ function updateWallet(agentName, fbKey, data) {
         if (data.type != null)   records[i].type = data.type;
         if (data.amount != null) records[i].amount = toNum(data.amount);
         if (data.note != null)   records[i].note = data.note;
+        records[i]._updatedAt = Date.now();
         updated = records[i];
         break;
       }
@@ -3603,6 +3612,8 @@ function createBooking(data) {
   var booking = {
     id:            State.nextId('booking'),
     _fbKey:        fbKey,
+    _createdAt:    Date.now(),
+    _updatedAt:    Date.now(),
     date:          data.date || nowStr(),
     month:         normalizeMonth(data.checkIn),
     agent:         data.agent || '',
@@ -3658,6 +3669,7 @@ function updateBooking(fbKey, data) {
         b.nights = calcNights(b.checkIn, b.checkOut);
         b.totalCost = b.nights * b.pricePerNight;
         b.month = normalizeMonth(b.checkIn);
+        b._updatedAt = Date.now();
         updated = b;
         break;
       }
@@ -5143,34 +5155,13 @@ function startWatchers() {
   // 1. 监听交易
   _watchers.txs = db.ref(FB_PATH.TXS).on('value', function(snap) {
     var remote = fbObjToArray(snap.val());
-    if (remote.length === 0) return;
-
-    // 合并：保留本地独有的，更新远端有的
     var local = State.get('txs');
-    var localMap = {};
-    for (var i = 0; i < local.length; i++) {
-      localMap[local[i]._fbKey] = local[i];
-    }
 
-    var changed = false;
-    for (var j = 0; j < remote.length; j++) {
-      var rKey = remote[j]._fbKey;
-      if (!localMap[rKey]) {
-        // 远端新增 → 加入本地
-        local.push(remote[j]);
-        changed = true;
-      } else {
-        // 远端更新 → 覆盖本地（取时间戳大的）
-        // 简化处理：远端覆盖本地
-        localMap[rKey] = remote[j];
-        changed = true;
-      }
-    }
+    // 用 mergeTxs 合并（时间戳胜出策略）
+    var merged = mergeTxs(local, remote);
 
-    if (changed) {
-      // 重建数组
-      var merged = [];
-      for (var k in localMap) { merged.push(localMap[k]); }
+    // 检测是否真正有变化（按长度+内容）
+    if (JSON.stringify(merged) !== JSON.stringify(local)) {
       State.set('txs', merged);
       Store.saveTxs(merged);
       Events.emit(EVENTS.TXS_LOADED, merged);
@@ -5180,26 +5171,12 @@ function startWatchers() {
   // 2. 监听公基金
   _watchers.fund = db.ref(FB_PATH.FUND).on('value', function(snap) {
     var remote = fbObjToArray(snap.val());
-    if (remote.length === 0) return;
-
     var local = State.get('fundWithdrawals');
-    var localMap = {};
-    for (var i = 0; i < local.length; i++) {
-      localMap[local[i]._fbKey] = local[i];
-    }
 
-    var changed = false;
-    for (var j = 0; j < remote.length; j++) {
-      var fbKey = remote[j]._fbKey;
-      if (!localMap[fbKey] || JSON.stringify(localMap[fbKey]) !== JSON.stringify(remote[j])) {
-        localMap[fbKey] = remote[j];
-        changed = true;
-      }
-    }
+    // 用 mergeArrays 合并（本地有+远端没有 → 保留本地；远端有+本地没有 → 加入）
+    var merged = mergeArrays(local, remote);
 
-    if (changed) {
-      var merged = [];
-      for (var k in localMap) { merged.push(localMap[k]); }
+    if (JSON.stringify(merged) !== JSON.stringify(local)) {
       State.set('fundWithdrawals', merged);
       Store.saveFund(merged);
       Events.emit(EVENTS.FUND_LOADED, merged);
@@ -5245,13 +5222,15 @@ function startWatchers() {
   // 6. 监听订房
   _watchers.bookings = db.ref(FB_PATH.RM_BOOKINGS).on('value', function(snap) {
     var remote = fbObjToArray(snap.val());
-    if (remote.length === 0) return;
-
     var local = State.get('bookings');
-    if (JSON.stringify(local) !== JSON.stringify(remote)) {
-      State.set('bookings', remote);
-      Store.saveBookings(remote);
-      Events.emit(EVENTS.BOOKINGS_LOADED, remote);
+
+    // 用 mergeArrays 合并，避免直接覆盖导致本地独有订房丢失
+    var merged = mergeArrays(local, remote);
+
+    if (JSON.stringify(merged) !== JSON.stringify(local)) {
+      State.set('bookings', merged);
+      Store.saveBookings(merged);
+      Events.emit(EVENTS.BOOKINGS_LOADED, merged);
     }
   });
 

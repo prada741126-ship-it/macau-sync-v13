@@ -21,7 +21,9 @@
 function createWallet(agentName, data) {
   var fbKey = generateFbKey();
   var record = {
-    _fbKey: fbKey,
+    _fbKey:     fbKey,
+    _createdAt: Date.now(),
+    _updatedAt: Date.now(),
     id:     State.nextId('wallet'),
     date:   data.date || nowStr(),
     type:   data.type || 'deposit',
@@ -58,6 +60,7 @@ function updateWallet(agentName, fbKey, data) {
         if (data.type != null)   records[i].type = data.type;
         if (data.amount != null) records[i].amount = toNum(data.amount);
         if (data.note != null)   records[i].note = data.note;
+        records[i]._updatedAt = Date.now();
         updated = records[i];
         break;
       }

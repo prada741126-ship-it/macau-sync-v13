@@ -35,6 +35,8 @@ function createBooking(data) {
   var booking = {
     id:            State.nextId('booking'),
     _fbKey:        fbKey,
+    _createdAt:    Date.now(),
+    _updatedAt:    Date.now(),
     date:          data.date || nowStr(),
     month:         normalizeMonth(data.checkIn),
     agent:         data.agent || '',
@@ -90,6 +92,7 @@ function updateBooking(fbKey, data) {
         b.nights = calcNights(b.checkIn, b.checkOut);
         b.totalCost = b.nights * b.pricePerNight;
         b.month = normalizeMonth(b.checkIn);
+        b._updatedAt = Date.now();
         updated = b;
         break;
       }
