@@ -66,25 +66,7 @@
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js" async></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" async></script>
 
-  <!-- Firebase 初始化 (等 CDN 加载后) -->
-  <script>
-    window.addEventListener('load', function() {
-      try {
-        if (typeof firebase !== 'undefined' && firebase.initializeApp) {
-          firebase.initializeApp({
-            apiKey: "AIzaSyDPLDEr5QnMQ_AD-z7Wppt2fylxWoBuxj0U",
-            authDomain: "macau-sync.firebaseapp.com",
-            databaseURL: "https://macau-sync-default-rtdb.asia-southeast1.firebasedatabase.app",
-            projectId: "macau-sync",
-            storageBucket: "macau-sync.appspot.com",
-            messagingSenderId: "5394959664910",
-            appId: "1:5394959664910:web:f445ede79937711fdd65f",
-            measurementId: "G-8BFD758YCF"
-          });
-        }
-      } catch(e) { console.warn('[v13] Firebase init deferred'); }
-    });
-  </script>
+  <!-- Firebase 初始化已统一由 src/sync/firebase.js 的 initFirebase() 处理（带重试） -->
 
   <!-- JS: 合并后由 build.js 输出为 app.js -->
   <script src="app.js?v=__VERSION__"></script>

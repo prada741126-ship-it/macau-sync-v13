@@ -11,17 +11,33 @@
 // 初始化
 // ============================================================================
 
-var _db = null;  // Firebase database 实例
+var _db = null;            // Firebase database 实例
+var _fbRetryRegistered = false;  // 避免重复注册 load 重试
 
 /**
- * 初始化 Firebase
- * @returns {object} database 实例
+ * 初始化 Firebase（带重试：Firebase CDN 是 async 加载的，
+ * DOMContentLoaded 时可能还没到，需要等到 load 事件再试）
+ * @returns {object|null} database 实例，未就绪时返回 null
  */
 function initFirebase() {
   // 检测 Firebase SDK
   if (typeof firebase === 'undefined') {
-    console.error('[v13:firebase] FATAL: Firebase SDK not loaded!');
-    Events.emit(EVENTS.SYNC_ERROR, 'Firebase SDK 未載入，請檢查 CDN 連線');
+    // 如果还没注册 load 重试，注册一次
+    if (!_fbRetryRegistered) {
+      _fbRetryRegistered = true;
+      console.warn('[v13:firebase] Firebase SDK not loaded yet, will retry at window.load');
+      window.addEventListener('load', function() {
+        console.log('[v13:firebase] window.load fired, retrying init...');
+        if (!_db) {
+          initFirebase();
+          // 连接成功后补启动 watchers + 首次同步
+          if (_db) {
+            try { startWatchers(); } catch(e) {}
+            try { syncDownloadAll(); } catch(e) {}
+          }
+        }
+      });
+    }
     return null;
   }
 
@@ -30,7 +46,7 @@ function initFirebase() {
       firebase.initializeApp(FIREBASE_CONFIG);
     }
     _db = firebase.database();
-    console.log('[v13:firebase] Initialized successfully');
+    console.log('[v13:firebase] Initialized successfully, _db ready');
 
     // 启动连接监控
     _watchConnection();
