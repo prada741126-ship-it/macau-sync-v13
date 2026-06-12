@@ -4748,7 +4748,6 @@ function hasDraft() {
 var _db = null;              // Firebase database 实例
 var _fbRetryDone = false;    // 是否已完成重试/setup
 var _fbPollTimer = null;     // 轮询定时器
-var _initialSyncDone = false; // 首次连通后已完成双向同步
 
 /**
  * 真正执行 Firebase 初始化
@@ -4883,18 +4882,11 @@ function _watchConnection() {
 
     if (connected) {
       console.log('[v13:firebase] ✅ Firebase RTDB 已連線');
-      // 首次连通：延迟 2 秒后执行双向同步（给 SDK 时间稳定连接）
+      // 安全网：2 秒后推送本地数据到 Firebase（transaction 合并，幂等）
       setTimeout(function() {
-        if (!State.get('syncConnected')) return;  // 又断开了，跳过
-        console.log('[v13:firebase] 🔄 执行双向同步...');
-        // 先上传本地数据
+        if (!State.get('syncConnected')) return;
+        console.log('[v13:firebase] 🔄 安全網推送...');
         try { syncUploadAll(); } catch(e) { console.error('[v13:firebase] syncUploadAll error:', e); }
-        // 然后下载远端数据（如果还没做过首次同步）
-        if (!_initialSyncDone) {
-          _initialSyncDone = true;
-          console.log('[v13:firebase] 🔽 首次同步: 拉取遠端數據...');
-          try { syncDownloadAll(); } catch(e) { console.error('[v13:firebase] syncDownloadAll error:', e); }
-        }
       }, 2000);
     } else {
       // 只有从 connected→disconnected 变化时才警告（避免首次 false 状态误报）
@@ -4924,10 +4916,13 @@ function syncTxToFirebase(tx) {
     return;
   }
   try {
+    console.log('[v13:firebase] 🚀 syncTx WRITE:', tx._fbKey, 'agent=' + (tx.agent || '?'), 'vol=' + (tx.volume || 0));
     _db.ref(FB_PATH.TXS + '/' + tx._fbKey).set(tx, function(err) {
       if (err) {
-        console.error('[v13:firebase] syncTx FAILED:', err.message || err);
+        console.error('[v13:firebase] ❌ syncTx FAILED:', tx._fbKey, err.message || err);
         enqueueUpload(function() { syncTxToFirebase(tx); });
+      } else {
+        console.log('[v13:firebase] ✅ syncTx OK:', tx._fbKey);
       }
     });
   } catch (e) {
@@ -4946,8 +4941,13 @@ function removeTxFromFirebase(fbKey) {
     return;
   }
   try {
+    console.log('[v13:firebase] 🗑️  removeTx DELETE:', fbKey);
     _db.ref(FB_PATH.TXS + '/' + fbKey).set(null, function(err) {
-      if (err) console.error('[v13:firebase] removeTx FAILED:', err.message || err);
+      if (err) {
+        console.error('[v13:firebase] ❌ removeTx FAILED:', fbKey, err.message || err);
+      } else {
+        console.log('[v13:firebase] ✅ removeTx OK:', fbKey);
+      }
     });
   } catch (e) {
     console.error('[v13:firebase] removeTx error:', e);
@@ -4969,10 +4969,13 @@ function syncFundToFirebase(record) {
     return;
   }
   try {
+    console.log('[v13:firebase] 🚀 syncFund WRITE:', record._fbKey);
     _db.ref(FB_PATH.FUND + '/' + record._fbKey).set(record, function(err) {
       if (err) {
-        console.error('[v13:firebase] syncFund FAILED:', err.message || err);
+        console.error('[v13:firebase] ❌ syncFund FAILED:', record._fbKey, err.message || err);
         enqueueUpload(function() { syncFundToFirebase(record); });
+      } else {
+        console.log('[v13:firebase] ✅ syncFund OK:', record._fbKey);
       }
     });
   } catch (e) {
@@ -4991,8 +4994,13 @@ function removeFundFromFirebase(fbKey) {
     return;
   }
   try {
+    console.log('[v13:firebase] 🗑️  removeFund DELETE:', fbKey);
     _db.ref(FB_PATH.FUND + '/' + fbKey).set(null, function(err) {
-      if (err) console.error('[v13:firebase] removeFund FAILED:', err.message || err);
+      if (err) {
+        console.error('[v13:firebase] ❌ removeFund FAILED:', fbKey, err.message || err);
+      } else {
+        console.log('[v13:firebase] ✅ removeFund OK:', fbKey);
+      }
     });
   } catch (e) {
     console.error('[v13:firebase] removeFund error:', e);
@@ -5015,10 +5023,13 @@ function syncWalletToFirebase(agent, record) {
     return;
   }
   try {
+    console.log('[v13:firebase] 🚀 syncWallet WRITE:', agent, record._fbKey);
     _db.ref(FB_PATH.AGENT_WALLETS + '/' + encodeFirebaseKey(agent) + '/' + record._fbKey).set(record, function(err) {
       if (err) {
-        console.error('[v13:firebase] syncWallet FAILED:', err.message || err);
+        console.error('[v13:firebase] ❌ syncWallet FAILED:', agent, record._fbKey, err.message || err);
         enqueueUpload(function() { syncWalletToFirebase(agent, record); });
+      } else {
+        console.log('[v13:firebase] ✅ syncWallet OK:', agent, record._fbKey);
       }
     });
   } catch (e) {
@@ -5038,8 +5049,13 @@ function removeWalletFromFirebase(agent, fbKey) {
     return;
   }
   try {
+    console.log('[v13:firebase] 🗑️  removeWallet DELETE:', agent, fbKey);
     _db.ref(FB_PATH.AGENT_WALLETS + '/' + encodeFirebaseKey(agent) + '/' + fbKey).set(null, function(err) {
-      if (err) console.error('[v13:firebase] removeWallet FAILED:', err.message || err);
+      if (err) {
+        console.error('[v13:firebase] ❌ removeWallet FAILED:', agent, fbKey, err.message || err);
+      } else {
+        console.log('[v13:firebase] ✅ removeWallet OK:', agent, fbKey);
+      }
     });
   } catch (e) {
     console.error('[v13:firebase] removeWallet error:', e);
@@ -5061,10 +5077,13 @@ function syncBookingToFirebase(booking) {
     return;
   }
   try {
+    console.log('[v13:firebase] 🚀 syncBooking WRITE:', booking._fbKey);
     _db.ref(FB_PATH.RM_BOOKINGS + '/' + booking._fbKey).set(booking, function(err) {
       if (err) {
-        console.error('[v13:firebase] syncBooking FAILED:', err.message || err);
+        console.error('[v13:firebase] ❌ syncBooking FAILED:', booking._fbKey, err.message || err);
         enqueueUpload(function() { syncBookingToFirebase(booking); });
+      } else {
+        console.log('[v13:firebase] ✅ syncBooking OK:', booking._fbKey);
       }
     });
   } catch (e) {
@@ -5083,8 +5102,13 @@ function removeBookingFromFirebase(fbKey) {
     return;
   }
   try {
+    console.log('[v13:firebase] 🗑️  removeBooking DELETE:', fbKey);
     _db.ref(FB_PATH.RM_BOOKINGS + '/' + fbKey).set(null, function(err) {
-      if (err) console.error('[v13:firebase] removeBooking FAILED:', err.message || err);
+      if (err) {
+        console.error('[v13:firebase] ❌ removeBooking FAILED:', fbKey, err.message || err);
+      } else {
+        console.log('[v13:firebase] ✅ removeBooking OK:', fbKey);
+      }
     });
   } catch (e) {
     console.error('[v13:firebase] removeBooking error:', e);
@@ -5295,11 +5319,19 @@ function syncUploadAll() {
   var db = getDB();
 
   // 1. 交易：transaction 原子合併 (個別 CRUD 已即時推送，此為安全網)
+  // ★ FIX: mergeTxs(local, remote) — 第一个参数是本地，第二个是远端
   db.ref(FB_PATH.TXS).transaction(function(remote) {
     if (!remote) return fbArrayToObj(txs);
     var rArr = fbObjToArray(remote);
-    var merged = mergeTxs(rArr, txs);
+    var merged = mergeTxs(txs, rArr);  // ✓ local=txs, remote=rArr
+    console.log('[v13:uploader] TXS transaction: local=' + txs.length + ' remote=' + rArr.length + ' merged=' + merged.length);
     return fbArrayToObj(merged);
+  }, function(err, committed, snapshot) {
+    if (err) {
+      console.error('[v13:uploader] TXS transaction FAILED:', err.message || err);
+    } else if (committed) {
+      console.log('[v13:uploader] ✅ TXS transaction committed, ' + (snapshot ? snapshot.numChildren() : '?') + ' entries on Firebase');
+    }
   });
 
   // 2. 公基金：transaction 原子合併
@@ -5332,10 +5364,11 @@ function syncUploadAll() {
   });
 
   // 4. 代理钱包：transaction 原子合併
+  // ★ FIX: mergeWallets(local, remote) — local=agentWallets, remote=rw
   db.ref(FB_PATH.AGENT_WALLETS).transaction(function(remote) {
     if (!remote) return fbWalletsToObj(agentWallets);
     var rw = fbObjToWallets(remote);
-    return fbWalletsToObj(mergeWallets(rw, agentWallets));
+    return fbWalletsToObj(mergeWallets(agentWallets, rw));
   });
 
   // 5. 工作月份
@@ -5430,8 +5463,11 @@ function startWatchers() {
     // 用 mergeTxs 合并（时间戳胜出策略）
     var merged = mergeTxs(local, remote);
 
+    console.log('[v13:watchers] TXS onValue: remote=' + remote.length + ' local=' + local.length + ' merged=' + merged.length);
+
     // 检测是否真正有变化（按长度+内容）
     if (JSON.stringify(merged) !== JSON.stringify(local)) {
+      console.log('[v13:watchers] TXS CHANGED: ' + local.length + ' → ' + merged.length + ' entries');
       State.set('txs', merged);
       Store.saveTxs(merged);
       Events.emit(EVENTS.TXS_LOADED, merged);
@@ -9961,8 +9997,7 @@ Events.on(EVENTS.HC_CONFIG_UPDATED, function() {
     // 启动 Firebase 监听器 (非致命) — watchers 在连线建立后会自动拉取远端数据
     try { startWatchers(); } catch(e) { console.warn('[v13:app] startWatchers error:', e); }
 
-    // 尝試同步 — 如果连线已建立就立即同步，否则由 _watchConnection 在连通时补触发
-    try { syncDownloadAll(); } catch(e) { console.warn('[v13:app] syncDownloadAll error:', e); }
+    // 立即推送本地数据到 Firebase（异步安全网）
     try { syncUploadAll(); } catch(e) { console.warn('[v13:app] syncUploadAll error:', e); }
 
     // 渲染: 加 try-catch 确保一个页面失败不影响其他
