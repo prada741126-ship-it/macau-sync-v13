@@ -2082,8 +2082,20 @@ tr.rank-1 td {
   </script>
 
   <!-- CDN 脚本: 全部 async, 不阻塞页面加载 -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" async></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js" async></script>
+  <!-- Firebase CDN: jsdelivr (大陆可访问) + gstatic 兜底 -->
+  <script src="https://cdn.jsdelivr.net/npm/firebase@10.12.0/firebase-app-compat.js" async></script>
+  <script src="https://cdn.jsdelivr.net/npm/firebase@10.12.0/firebase-database-compat.js" async></script>
+  <!-- 兜底: 如果 jsdelivr 加载失败，尝试 gstatic -->
+  <script>
+    window.addEventListener('error', function(e) {
+      if (e.target && e.target.src && e.target.src.includes('firebase') && e.target.src.includes('jsdelivr')) {
+        var s = document.createElement('script');
+        s.src = e.target.src.replace('cdn.jsdelivr.net/npm/firebase@', 'www.gstatic.com/firebasejs/');
+        s.async = true;
+        document.head.appendChild(s);
+      }
+    }, true);
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.min.js" async></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" async></script>
 
@@ -2577,6 +2589,6 @@ tr.rank-1 td {
   <input type="file" id="file-input" accept=".csv" style="display:none" onchange="handleCSVImport(event)">
   <input type="file" id="rm-file-input" accept=".csv" style="display:none" onchange="rmHandleImport(event)">
 
-  <!-- BUILD: v13.0.0 | 2026-06-11 | 2026-06-12T09:47:35.682Z -->
+  <!-- BUILD: v13.0.0 | 2026-06-11 | 2026-06-12T10:00:28.383Z -->
 </body>
 </html>

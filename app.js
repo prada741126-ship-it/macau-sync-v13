@@ -4672,51 +4672,103 @@ function hasDraft() {
 // ============================================================================
 
 var _db = null;            // Firebase database 实例
-var _fbRetryRegistered = false;  // 避免重复注册 load 重试
+var _fbRetryDone = false;   // 是否已完成重试/setup
+var _fbPollTimer = null;    // 轮询定时器
 
 /**
- * 初始化 Firebase（带重试：Firebase CDN 是 async 加载的，
- * DOMContentLoaded 时可能还没到，需要等到 load 事件再试）
- * @returns {object|null} database 实例，未就绪时返回 null
+ * 真正执行 Firebase 初始化
+ * @returns {object|null}
  */
-function initFirebase() {
-  // 检测 Firebase SDK
-  if (typeof firebase === 'undefined') {
-    // 如果还没注册 load 重试，注册一次
-    if (!_fbRetryRegistered) {
-      _fbRetryRegistered = true;
-      console.warn('[v13:firebase] Firebase SDK not loaded yet, will retry at window.load');
-      window.addEventListener('load', function() {
-        console.log('[v13:firebase] window.load fired, retrying init...');
-        if (!_db) {
-          initFirebase();
-          // 连接成功后补启动 watchers + 首次同步
-          if (_db) {
-            try { startWatchers(); } catch(e) {}
-            try { syncDownloadAll(); } catch(e) {}
-          }
-        }
-      });
-    }
-    return null;
-  }
-
+function _doInitFirebase() {
+  if (typeof firebase === 'undefined') return null;
   try {
     if (!firebase.apps.length) {
       firebase.initializeApp(FIREBASE_CONFIG);
     }
     _db = firebase.database();
-    console.log('[v13:firebase] Initialized successfully, _db ready');
-
-    // 启动连接监控
+    console.log('[v13:firebase] ✅ Connected! _db ready, database:', _db.ref.toString().substring(0,30));
     _watchConnection();
-
     return _db;
   } catch (e) {
     console.error('[v13:firebase] Init error:', e);
-    Events.emit(EVENTS.SYNC_ERROR, 'Firebase 初始化失敗: ' + e.message);
     return null;
   }
+}
+
+/**
+ * 初始化成功后补启动 watchers + 同步
+ */
+function _onFirebaseReady() {
+  console.log('[v13:firebase] 🚀 Starting watchers + sync...');
+  try { startWatchers(); } catch(e) { console.error('[v13:firebase] startWatchers error:', e); }
+  try { syncDownloadAll(); } catch(e) { console.error('[v13:firebase] syncDownloadAll error:', e); }
+}
+
+/**
+ * 初始化 Firebase（多层回退保障）
+ * 1. 立即尝试（如果 SDK 已加载）
+ * 2. load 事件重试（兼容 document.readyState===complete）
+ * 3. 1秒间隔轮询 最多 30 次
+ * @returns {object|null} database 实例，未就绪时返回 null
+ */
+function initFirebase() {
+  // 如果已经连上了，直接返回
+  if (_db) return _db;
+
+  // 立即尝试
+  var result = _doInitFirebase();
+  if (result) {
+    _fbRetryDone = true;
+    return result;
+  }
+
+  // 还没连上 — 安排重试
+  if (_fbRetryDone) return null;  // 已经安排过了
+  _fbRetryDone = true;
+
+  console.warn('[v13:firebase] Firebase SDK not loaded yet, setting up retry...');
+
+  // 策略A: load 事件（处理 document.readyState 问题）
+  function tryInitViaEvent() {
+    if (!_db) {
+      console.log('[v13:firebase] ⏳ Retry via event...');
+      _doInitFirebase();
+      if (_db) _onFirebaseReady();
+    }
+  }
+
+  if (document.readyState === 'complete') {
+    // 页面已完全加载，直接用 setTimeout 延迟执行
+    console.log('[v13:firebase] Page already loaded, scheduling retry...');
+    setTimeout(tryInitViaEvent, 500);
+  } else {
+    window.addEventListener('load', tryInitViaEvent);
+  }
+
+  // 策略B: 轮询（兜底 — 处理 load 永远不触发的情况）
+  var pollCount = 0;
+  _fbPollTimer = setInterval(function() {
+    pollCount++;
+    if (typeof firebase !== 'undefined' && !_db) {
+      console.log('[v13:firebase] ⏳ Poll #' + pollCount + ' — Firebase SDK detected, initializing...');
+      _doInitFirebase();
+      if (_db) {
+        clearInterval(_fbPollTimer);
+        _fbPollTimer = null;
+        _onFirebaseReady();
+      }
+    }
+    if (pollCount >= 30) {
+      clearInterval(_fbPollTimer);
+      _fbPollTimer = null;
+      if (!_db) {
+        console.error('[v13:firebase] ❌ Firebase SDK failed to load after 30s. Sync disabled.');
+        console.error('[v13:firebase]    请检查: 1) 网络是否可访问 cdn.jsdelivr.net  2) 防火墙/广告拦截器是否屏蔽');
+      }
+    }
+  }, 1000);
+
+  return null;
 }
 
 /**
