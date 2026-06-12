@@ -68,102 +68,90 @@ function syncUploadAll() {
 
   var db = getDB();
 
-  // 1. 交易 (transaction: 本地优先，删除多余)
-  db.ref(FB_PATH.TXS).transaction(function(remote) {
-    if (!remote) return fbArrayToObj(txs);
-    // 合并：本地更新覆盖远端
-    var merged = fbObjToArray(remote);
-    var localMap = {};
-    for (var i = 0; i < txs.length; i++) {
-      localMap[txs[i]._fbKey] = txs[i];
-    }
-    for (var j = 0; j < merged.length; j++) {
-      var key = merged[j]._fbKey;
-      if (localMap[key]) {
-        merged[j] = localMap[key];
-        delete localMap[key];
-      }
-    }
-    // 添加本地新增的
-    for (var k in localMap) {
-      merged.push(localMap[k]);
-    }
-    return fbArrayToObj(merged);
+  // 1. 交易：先从 Firebase 拉取最新，mergeTxs 后再全量 set
+  //    这样本地的删除（splice）会正确反映到 Firebase
+  db.ref(FB_PATH.TXS).once('value', function(snap) {
+    var remote = fbObjToArray(snap.val());
+    var merged = mergeTxs(remote, txs); // 本地(_updatedAt大)胜出
+    db.ref(FB_PATH.TXS).set(fbArrayToObj(merged), function(err) {
+      if (err) console.error('[v13:uploader] TXS set error:', err);
+    });
   });
 
-  // 2. 公基金
-  db.ref(FB_PATH.FUND).transaction(function(remote) {
-    if (!remote) return fbArrayToObj(fundWithdrawals);
-    var merged = fbObjToArray(remote);
+  // 2. 公基金：先拉取再 set（保证删除同步）
+  db.ref(FB_PATH.FUND).once('value', function(snap) {
+    var remote = fbObjToArray(snap.val());
+    // 以本地为准（本地已 splice 的不在 localMap 里，不会加入 merged）
     var localMap = {};
-    for (var i = 0; i < fundWithdrawals.length; i++) {
-      localMap[fundWithdrawals[i]._fbKey] = fundWithdrawals[i];
+    for (var fi = 0; fi < fundWithdrawals.length; fi++) {
+      localMap[fundWithdrawals[fi]._fbKey] = fundWithdrawals[fi];
     }
-    for (var j = 0; j < merged.length; j++) {
-      var key = merged[j]._fbKey;
-      if (localMap[key]) {
-        merged[j] = localMap[key];
-        delete localMap[key];
+    // 远端有但本地没有 → 远端胜出（新增）；远端有且本地也有 → _updatedAt 大者胜出
+    for (var fj = 0; fj < remote.length; fj++) {
+      var fKey = remote[fj]._fbKey;
+      if (!localMap[fKey]) {
+        // 远端有但本地没有：可能是别的设备新增的 → 保留
+        localMap[fKey] = remote[fj];
+      } else {
+        // 两边都有 → 时间戳大者胜
+        var lTs = localMap[fKey]._updatedAt || 0;
+        var rTs = remote[fj]._updatedAt || 0;
+        if (rTs > lTs) localMap[fKey] = remote[fj];
       }
     }
-    for (var k in localMap) {
-      merged.push(localMap[k]);
+    var mergedFund = [];
+    for (var fk in localMap) mergedFund.push(localMap[fk]);
+    // 更新本地 state（如果有变化）
+    if (mergedFund.length !== fundWithdrawals.length) {
+      State.set('fundWithdrawals', mergedFund);
+      Store.saveFund(mergedFund);
     }
-    return fbArrayToObj(merged);
+    db.ref(FB_PATH.FUND).set(fbArrayToObj(mergedFund), function(err) {
+      if (err) console.error('[v13:uploader] FUND set error:', err);
+    });
   });
 
   // 3. 代理名单 (直接 set 数组)
   db.ref(FB_PATH.AGENT_LIST).set(agentList);
 
-  // 4. 代理钱包
-  db.ref(FB_PATH.AGENT_WALLETS).transaction(function(remote) {
-    if (!remote) return fbWalletsToObj(agentWallets);
-    var remoteWallets = fbObjToWallets(remote);
-    // 合并
-    for (var agent in agentWallets) {
-      var localRecords = agentWallets[agent];
-      var remoteRecords = remoteWallets[agent] || [];
-      var localMap = {};
-      for (var i = 0; i < localRecords.length; i++) {
-        localMap[localRecords[i]._fbKey] = localRecords[i];
-      }
-      for (var j = 0; j < remoteRecords.length; j++) {
-        var key = remoteRecords[j]._fbKey;
-        if (localMap[key]) {
-          remoteRecords[j] = localMap[key];
-          delete localMap[key];
-        }
-      }
-      for (var k in localMap) {
-        remoteRecords.push(localMap[k]);
-      }
-      remoteWallets[agent] = remoteRecords;
-    }
-    return fbWalletsToObj(remoteWallets);
+  // 4. 代理钱包：mergeWallets 后全量 set
+  db.ref(FB_PATH.AGENT_WALLETS).once('value', function(snap) {
+    var remoteWallets = fbObjToWallets(snap.val());
+    var merged = mergeWallets(remoteWallets, agentWallets); // 本地胜出
+    db.ref(FB_PATH.AGENT_WALLETS).set(fbWalletsToObj(merged), function(err) {
+      if (err) console.error('[v13:uploader] WALLETS set error:', err);
+    });
   });
 
   // 5. 工作月份
   db.ref(FB_PATH.WORKING_MONTH).set(workingMonth);
 
-  // 6. 订房
-  db.ref(FB_PATH.RM_BOOKINGS).transaction(function(remote) {
-    if (!remote) return fbArrayToObj(bookings);
-    var merged = fbObjToArray(remote);
+  // 6. 订房：与公基金相同策略（先拉再合并再 set）
+  db.ref(FB_PATH.RM_BOOKINGS).once('value', function(snap) {
+    var remote = fbObjToArray(snap.val());
     var localMap = {};
-    for (var i = 0; i < bookings.length; i++) {
-      localMap[bookings[i]._fbKey] = bookings[i];
+    for (var bi = 0; bi < bookings.length; bi++) {
+      localMap[bookings[bi]._fbKey] = bookings[bi];
     }
-    for (var j = 0; j < merged.length; j++) {
-      var key = merged[j]._fbKey;
-      if (localMap[key]) {
-        merged[j] = localMap[key];
-        delete localMap[key];
+    for (var bj = 0; bj < remote.length; bj++) {
+      var bKey = remote[bj]._fbKey;
+      if (!localMap[bKey]) {
+        localMap[bKey] = remote[bj];
+      } else {
+        var blTs = localMap[bKey]._updatedAt || 0;
+        var brTs = remote[bj]._updatedAt || 0;
+        if (brTs > blTs) localMap[bKey] = remote[bj];
       }
     }
-    for (var k in localMap) {
-      merged.push(localMap[k]);
+    var mergedBookings = [];
+    for (var bk in localMap) mergedBookings.push(localMap[bk]);
+    if (mergedBookings.length !== bookings.length) {
+      State.set('bookings', mergedBookings);
+      Store.saveBookings(mergedBookings);
     }
-    return fbArrayToObj(merged);
+    db.ref(FB_PATH.RM_BOOKINGS).set(fbArrayToObj(mergedBookings), function(err) {
+      if (err) console.error('[v13:uploader] BOOKINGS set error:', err);
+    });
   });
 
   // 7. 月度存档

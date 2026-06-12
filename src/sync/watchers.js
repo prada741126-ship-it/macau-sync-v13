@@ -134,27 +134,31 @@ function stopWatchers() {
 }
 
 /**
- * 手动全量同步 (从 Firebase 拉取)
+ * 手动全量同步 (从 Firebase 拉取，走 merge 逻辑避免覆盖本地数据)
  */
 function syncDownloadAll() {
   var db = getDB();
   if (!db) return;
 
   db.ref(FB_PATH.TXS).once('value', function(snap) {
-    var txs = fbObjToArray(snap.val());
-    if (txs.length > 0) {
-      State.set('txs', txs);
-      Store.saveTxs(txs);
-      Events.emit(EVENTS.TXS_LOADED, txs);
+    var remote = fbObjToArray(snap.val());
+    var local = State.get('txs');
+    var merged = mergeTxs(local, remote);
+    if (JSON.stringify(merged) !== JSON.stringify(local)) {
+      State.set('txs', merged);
+      Store.saveTxs(merged);
+      Events.emit(EVENTS.TXS_LOADED, merged);
     }
   });
 
   db.ref(FB_PATH.FUND).once('value', function(snap) {
-    var funds = fbObjToArray(snap.val());
-    if (funds.length > 0) {
-      State.set('fundWithdrawals', funds);
-      Store.saveFund(funds);
-      Events.emit(EVENTS.FUND_LOADED, funds);
+    var remote = fbObjToArray(snap.val());
+    var local = State.get('fundWithdrawals');
+    var merged = mergeArrays(local, remote);
+    if (JSON.stringify(merged) !== JSON.stringify(local)) {
+      State.set('fundWithdrawals', merged);
+      Store.saveFund(merged);
+      Events.emit(EVENTS.FUND_LOADED, merged);
     }
   });
 
@@ -168,11 +172,13 @@ function syncDownloadAll() {
   });
 
   db.ref(FB_PATH.AGENT_WALLETS).once('value', function(snap) {
-    var wallets = fbObjToWallets(snap.val());
-    if (Object.keys(wallets).length > 0) {
-      State.set('agentWallets', wallets);
-      Store.saveWallets(wallets);
-      Events.emit(EVENTS.WALLETS_LOADED, wallets);
+    var remote = fbObjToWallets(snap.val());
+    var local = State.get('agentWallets');
+    var merged = mergeWallets(local, remote);
+    if (JSON.stringify(merged) !== JSON.stringify(local)) {
+      State.set('agentWallets', merged);
+      Store.saveWallets(merged);
+      Events.emit(EVENTS.WALLETS_LOADED, merged);
     }
   });
 
@@ -186,11 +192,13 @@ function syncDownloadAll() {
   });
 
   db.ref(FB_PATH.RM_BOOKINGS).once('value', function(snap) {
-    var bookings = fbObjToArray(snap.val());
-    if (bookings.length > 0) {
-      State.set('bookings', bookings);
-      Store.saveBookings(bookings);
-      Events.emit(EVENTS.BOOKINGS_LOADED, bookings);
+    var remote = fbObjToArray(snap.val());
+    var local = State.get('bookings');
+    var merged = mergeArrays(local, remote);
+    if (JSON.stringify(merged) !== JSON.stringify(local)) {
+      State.set('bookings', merged);
+      Store.saveBookings(merged);
+      Events.emit(EVENTS.BOOKINGS_LOADED, merged);
     }
   });
 
