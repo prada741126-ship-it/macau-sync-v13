@@ -30,6 +30,7 @@ function addAgent(name) {
   });
 
   Store.saveAgentList(State.get('agentList'));
+  syncAgentListToFirebase(State.get('agentList'));
   Events.emit(EVENTS.AGENT_LIST_UPDATED, State.get('agentList'));
   return { success: true, name: name };
 }
@@ -55,6 +56,7 @@ function removeAgent(name) {
   }
 
   Store.saveAgentList(State.get('agentList'));
+  syncAgentListToFirebase(State.get('agentList'));
   Events.emit(EVENTS.AGENT_LIST_UPDATED, State.get('agentList'));
   return { success: true, name: name };
 }
@@ -107,6 +109,8 @@ function renameAgent(oldName, newName) {
   Store.saveAgentList(State.get('agentList'));
   Store.saveTxs(State.get('txs'));
   Store.saveWallets(State.get('agentWallets'));
+
+  syncAgentListToFirebase(State.get('agentList'));
 
   Events.emit(EVENTS.AGENT_LIST_UPDATED, State.get('agentList'));
   Events.emit(EVENTS.TXS_LOADED, State.get('txs'));

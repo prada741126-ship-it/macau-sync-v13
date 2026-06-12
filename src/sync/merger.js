@@ -121,3 +121,20 @@ function mergeArrays(local, remote) {
   }
   return result;
 }
+
+/**
+ * 合并代理名單（純字符串數組，兩邊去重合併）
+ * @param {Array} local - 本地名單 ['代理A','代理B']
+ * @param {Array} remote - 遠端名單 ['代理B','代理C']
+ * @returns {Array} 合併結果 ['代理A','代理B','代理C']
+ */
+function mergeAgentLists(local, remote) {
+  var merged = remote.slice();
+  for (var i = 0; i < local.length; i++) {
+    if (merged.indexOf(local[i]) === -1) {
+      merged.push(local[i]);
+    }
+  }
+  merged.sort(function(a, b) { return a.localeCompare(b); });
+  return merged;
+}

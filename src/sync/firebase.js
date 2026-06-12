@@ -198,6 +198,31 @@ function removeBookingFromFirebase(fbKey) {
   }
 }
 
+/**
+ * 同步代理名单到 Firebase（即時推送，取代等 syncUploadAll）
+ * 先拉取 Firebase 上最新的名單，合併後再 set
+ * @param {Array} agentList - 當前本地代理名單
+ */
+function syncAgentListToFirebase(agentList) {
+  if (!_db) return;
+  var ref = _db.ref(FB_PATH.AGENT_LIST);
+  ref.once('value', function(snap) {
+    var remote = snap.val();
+    if (!remote || !Array.isArray(remote)) remote = [];
+    // 合併：本地 + 遠端（去重）
+    var merged = remote.slice();
+    for (var i = 0; i < agentList.length; i++) {
+      if (merged.indexOf(agentList[i]) === -1) {
+        merged.push(agentList[i]);
+      }
+    }
+    merged.sort(function(a, b) { return a.localeCompare(b); });
+    ref.set(merged, function(err) {
+      if (err) console.error('[v13:firebase] syncAgentList error:', err);
+    });
+  });
+}
+
 // ============================================================================
 // 格式转换 (对照档第九节)
 // ============================================================================

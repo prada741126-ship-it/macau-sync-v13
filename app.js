@@ -3451,6 +3451,7 @@ function addAgent(name) {
   });
 
   Store.saveAgentList(State.get('agentList'));
+  syncAgentListToFirebase(State.get('agentList'));
   Events.emit(EVENTS.AGENT_LIST_UPDATED, State.get('agentList'));
   return { success: true, name: name };
 }
@@ -3476,6 +3477,7 @@ function removeAgent(name) {
   }
 
   Store.saveAgentList(State.get('agentList'));
+  syncAgentListToFirebase(State.get('agentList'));
   Events.emit(EVENTS.AGENT_LIST_UPDATED, State.get('agentList'));
   return { success: true, name: name };
 }
@@ -3528,6 +3530,8 @@ function renameAgent(oldName, newName) {
   Store.saveAgentList(State.get('agentList'));
   Store.saveTxs(State.get('txs'));
   Store.saveWallets(State.get('agentWallets'));
+
+  syncAgentListToFirebase(State.get('agentList'));
 
   Events.emit(EVENTS.AGENT_LIST_UPDATED, State.get('agentList'));
   Events.emit(EVENTS.TXS_LOADED, State.get('txs'));
@@ -4836,6 +4840,31 @@ function removeBookingFromFirebase(fbKey) {
   }
 }
 
+/**
+ * 同步代理名单到 Firebase（即時推送，取代等 syncUploadAll）
+ * 先拉取 Firebase 上最新的名單，合併後再 set
+ * @param {Array} agentList - 當前本地代理名單
+ */
+function syncAgentListToFirebase(agentList) {
+  if (!_db) return;
+  var ref = _db.ref(FB_PATH.AGENT_LIST);
+  ref.once('value', function(snap) {
+    var remote = snap.val();
+    if (!remote || !Array.isArray(remote)) remote = [];
+    // 合併：本地 + 遠端（去重）
+    var merged = remote.slice();
+    for (var i = 0; i < agentList.length; i++) {
+      if (merged.indexOf(agentList[i]) === -1) {
+        merged.push(agentList[i]);
+      }
+    }
+    merged.sort(function(a, b) { return a.localeCompare(b); });
+    ref.set(merged, function(err) {
+      if (err) console.error('[v13:firebase] syncAgentList error:', err);
+    });
+  });
+}
+
 // ============================================================================
 // 格式转换 (对照档第九节)
 // ============================================================================
@@ -5039,8 +5068,15 @@ function syncUploadAll() {
     });
   });
 
-  // 3. 代理名单 (直接 set 数组)
-  db.ref(FB_PATH.AGENT_LIST).set(agentList);
+  // 3. 代理名單：先拉取再合併再 set（避免覆蓋其他設備新增的代理）
+  db.ref(FB_PATH.AGENT_LIST).once('value', function(snap) {
+    var remote = snap.val();
+    if (!remote || !Array.isArray(remote)) remote = [];
+    var merged = mergeAgentLists(agentList, remote);
+    db.ref(FB_PATH.AGENT_LIST).set(merged, function(err) {
+      if (err) console.error('[v13:uploader] AGENT_LIST set error:', err);
+    });
+  });
 
   // 4. 代理钱包：mergeWallets 后全量 set
   db.ref(FB_PATH.AGENT_WALLETS).once('value', function(snap) {
@@ -5177,10 +5213,11 @@ function startWatchers() {
     if (!remote || !Array.isArray(remote)) return;
 
     var local = State.get('agentList');
-    if (JSON.stringify(local) !== JSON.stringify(remote)) {
-      State.set('agentList', remote);
-      Store.saveAgentList(remote);
-      Events.emit(EVENTS.AGENT_LIST_UPDATED, remote);
+    var merged = mergeAgentLists(local, remote);
+    if (JSON.stringify(merged) !== JSON.stringify(local)) {
+      State.set('agentList', merged);
+      Store.saveAgentList(merged);
+      Events.emit(EVENTS.AGENT_LIST_UPDATED, merged);
     }
   });
 
@@ -5284,11 +5321,14 @@ function syncDownloadAll() {
   });
 
   db.ref(FB_PATH.AGENT_LIST).once('value', function(snap) {
-    var list = snap.val();
-    if (list && Array.isArray(list)) {
-      State.set('agentList', list);
-      Store.saveAgentList(list);
-      Events.emit(EVENTS.AGENT_LIST_UPDATED, list);
+    var remote = snap.val();
+    if (!remote || !Array.isArray(remote)) return;
+    var local = State.get('agentList');
+    var merged = mergeAgentLists(local, remote);
+    if (JSON.stringify(merged) !== JSON.stringify(local)) {
+      State.set('agentList', merged);
+      Store.saveAgentList(merged);
+      Events.emit(EVENTS.AGENT_LIST_UPDATED, merged);
     }
   });
 
@@ -5455,6 +5495,23 @@ function mergeArrays(local, remote) {
     result.push(map[k]);
   }
   return result;
+}
+
+/**
+ * 合并代理名單（純字符串數組，兩邊去重合併）
+ * @param {Array} local - 本地名單 ['代理A','代理B']
+ * @param {Array} remote - 遠端名單 ['代理B','代理C']
+ * @returns {Array} 合併結果 ['代理A','代理B','代理C']
+ */
+function mergeAgentLists(local, remote) {
+  var merged = remote.slice();
+  for (var i = 0; i < local.length; i++) {
+    if (merged.indexOf(local[i]) === -1) {
+      merged.push(local[i]);
+    }
+  }
+  merged.sort(function(a, b) { return a.localeCompare(b); });
+  return merged;
 }
 
 // src/ui/toast.js

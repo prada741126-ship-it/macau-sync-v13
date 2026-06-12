@@ -56,10 +56,11 @@ function startWatchers() {
     if (!remote || !Array.isArray(remote)) return;
 
     var local = State.get('agentList');
-    if (JSON.stringify(local) !== JSON.stringify(remote)) {
-      State.set('agentList', remote);
-      Store.saveAgentList(remote);
-      Events.emit(EVENTS.AGENT_LIST_UPDATED, remote);
+    var merged = mergeAgentLists(local, remote);
+    if (JSON.stringify(merged) !== JSON.stringify(local)) {
+      State.set('agentList', merged);
+      Store.saveAgentList(merged);
+      Events.emit(EVENTS.AGENT_LIST_UPDATED, merged);
     }
   });
 
@@ -163,11 +164,14 @@ function syncDownloadAll() {
   });
 
   db.ref(FB_PATH.AGENT_LIST).once('value', function(snap) {
-    var list = snap.val();
-    if (list && Array.isArray(list)) {
-      State.set('agentList', list);
-      Store.saveAgentList(list);
-      Events.emit(EVENTS.AGENT_LIST_UPDATED, list);
+    var remote = snap.val();
+    if (!remote || !Array.isArray(remote)) return;
+    var local = State.get('agentList');
+    var merged = mergeAgentLists(local, remote);
+    if (JSON.stringify(merged) !== JSON.stringify(local)) {
+      State.set('agentList', merged);
+      Store.saveAgentList(merged);
+      Events.emit(EVENTS.AGENT_LIST_UPDATED, merged);
     }
   });
 

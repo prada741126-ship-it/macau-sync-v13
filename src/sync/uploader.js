@@ -111,8 +111,15 @@ function syncUploadAll() {
     });
   });
 
-  // 3. 代理名单 (直接 set 数组)
-  db.ref(FB_PATH.AGENT_LIST).set(agentList);
+  // 3. 代理名單：先拉取再合併再 set（避免覆蓋其他設備新增的代理）
+  db.ref(FB_PATH.AGENT_LIST).once('value', function(snap) {
+    var remote = snap.val();
+    if (!remote || !Array.isArray(remote)) remote = [];
+    var merged = mergeAgentLists(agentList, remote);
+    db.ref(FB_PATH.AGENT_LIST).set(merged, function(err) {
+      if (err) console.error('[v13:uploader] AGENT_LIST set error:', err);
+    });
+  });
 
   // 4. 代理钱包：mergeWallets 后全量 set
   db.ref(FB_PATH.AGENT_WALLETS).once('value', function(snap) {
