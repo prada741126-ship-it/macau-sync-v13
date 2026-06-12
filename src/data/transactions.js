@@ -67,6 +67,9 @@ function createTx(formData) {
   // 持久化
   Store.saveTxs(State.get('txs'));
 
+  // ★ 即時同步到 Firebase
+  syncTxToFirebase(tx);
+
   // 通知事件
   Events.emit(EVENTS.TX_CREATED, tx);
 
@@ -123,6 +126,9 @@ function updateTx(fbKey, formData) {
   // 持久化
   Store.saveTxs(State.get('txs'));
 
+  // ★ 即時同步到 Firebase
+  syncTxToFirebase(updated);
+
   // 通知事件
   Events.emit(EVENTS.TX_UPDATED, updated);
 
@@ -152,6 +158,9 @@ function deleteTx(fbKey) {
 
   // 持久化
   Store.saveTxs(State.get('txs'));
+
+  // ★ 即時從 Firebase 刪除
+  removeTxFromFirebase(fbKey);
 
   // 通知事件
   Events.emit(EVENTS.TX_DELETED, deleted);

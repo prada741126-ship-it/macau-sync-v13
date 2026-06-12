@@ -61,6 +61,7 @@ function createBooking(data) {
 
   Store.saveBookings(State.get('bookings'));
   Store.saveBookingLastId(booking.id);
+  syncBookingToFirebase(booking);
   Events.emit(EVENTS.BOOKING_CREATED, booking);
   return booking;
 }
@@ -102,6 +103,7 @@ function updateBooking(fbKey, data) {
 
   if (!updated) return null;
   Store.saveBookings(State.get('bookings'));
+  syncBookingToFirebase(updated);
   Events.emit(EVENTS.BOOKING_UPDATED, updated);
   return updated;
 }
@@ -126,6 +128,7 @@ function deleteBooking(fbKey) {
 
   if (!deleted) return null;
   Store.saveBookings(State.get('bookings'));
+  removeBookingFromFirebase(fbKey);
   Events.emit(EVENTS.BOOKING_DELETED, deleted);
   return deleted;
 }

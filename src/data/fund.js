@@ -35,6 +35,7 @@ function createFund(data) {
   });
 
   Store.saveFund(State.get('fundWithdrawals'));
+  syncFundToFirebase(record);
   Events.emit(EVENTS.FUND_CREATED, record);
   return record;
 }
@@ -64,6 +65,7 @@ function updateFund(fbKey, data) {
 
   if (!updated) return null;
   Store.saveFund(State.get('fundWithdrawals'));
+  syncFundToFirebase(updated);
   Events.emit(EVENTS.FUND_UPDATED, updated);
   return updated;
 }
@@ -88,6 +90,7 @@ function deleteFund(fbKey) {
 
   if (!deleted) return null;
   Store.saveFund(State.get('fundWithdrawals'));
+  removeFundFromFirebase(fbKey);
   Events.emit(EVENTS.FUND_DELETED, deleted);
   return deleted;
 }

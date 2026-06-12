@@ -38,6 +38,7 @@ function createWallet(agentName, data) {
   });
 
   Store.saveWallets(State.get('agentWallets'));
+  syncWalletToFirebase(agentName, record);
   Events.emit(EVENTS.WALLET_CREATED, { agent: agentName, record: record });
   return record;
 }
@@ -70,6 +71,7 @@ function updateWallet(agentName, fbKey, data) {
 
   if (!updated) return null;
   Store.saveWallets(State.get('agentWallets'));
+  syncWalletToFirebase(agentName, updated);
   Events.emit(EVENTS.WALLET_UPDATED, { agent: agentName, record: updated });
   return updated;
 }
@@ -101,6 +103,7 @@ function deleteWallet(agentName, fbKey) {
 
   if (!deleted) return null;
   Store.saveWallets(State.get('agentWallets'));
+  removeWalletFromFirebase(agentName, fbKey);
   Events.emit(EVENTS.WALLET_DELETED, { agent: agentName, record: deleted });
   return deleted;
 }
