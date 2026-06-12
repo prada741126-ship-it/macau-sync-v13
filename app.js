@@ -4943,12 +4943,19 @@ function removeTxFromFirebase(fbKey) {
     return;
   }
   try {
-    console.log('[v13:firebase] 🗑️  removeTx DELETE:', fbKey);
-    _db.ref(FB_PATH.TXS + '/' + fbKey).set(null, function(err) {
+    console.log('[v13:firebase] 🗑️  removeTx TOMBSTONE:', fbKey);
+    // ★ 墓碑策略：不设 null，而是写一个墓碑对象
+    // 这样另一端的 mergeTxs 可以识别并移除该条目
+    _db.ref(FB_PATH.TXS + '/' + fbKey).set({
+      _fbKey: fbKey,
+      _deleted: true,
+      _updatedAt: Date.now()
+    }, function(err) {
       if (err) {
         console.error('[v13:firebase] ❌ removeTx FAILED:', fbKey, err.message || err);
+        enqueueUpload(function() { removeTxFromFirebase(fbKey); });
       } else {
-        console.log('[v13:firebase] ✅ removeTx OK:', fbKey);
+        console.log('[v13:firebase] ✅ removeTx TOMBSTONE OK:', fbKey);
       }
     });
   } catch (e) {
@@ -4996,12 +5003,16 @@ function removeFundFromFirebase(fbKey) {
     return;
   }
   try {
-    console.log('[v13:firebase] 🗑️  removeFund DELETE:', fbKey);
-    _db.ref(FB_PATH.FUND + '/' + fbKey).set(null, function(err) {
+    console.log('[v13:firebase] 🗑️  removeFund TOMBSTONE:', fbKey);
+    _db.ref(FB_PATH.FUND + '/' + fbKey).set({
+      _fbKey: fbKey,
+      _deleted: true,
+      _updatedAt: Date.now()
+    }, function(err) {
       if (err) {
         console.error('[v13:firebase] ❌ removeFund FAILED:', fbKey, err.message || err);
       } else {
-        console.log('[v13:firebase] ✅ removeFund OK:', fbKey);
+        console.log('[v13:firebase] ✅ removeFund TOMBSTONE OK:', fbKey);
       }
     });
   } catch (e) {
@@ -5051,12 +5062,16 @@ function removeWalletFromFirebase(agent, fbKey) {
     return;
   }
   try {
-    console.log('[v13:firebase] 🗑️  removeWallet DELETE:', agent, fbKey);
-    _db.ref(FB_PATH.AGENT_WALLETS + '/' + encodeFirebaseKey(agent) + '/' + fbKey).set(null, function(err) {
+    console.log('[v13:firebase] 🗑️  removeWallet TOMBSTONE:', agent, fbKey);
+    _db.ref(FB_PATH.AGENT_WALLETS + '/' + encodeFirebaseKey(agent) + '/' + fbKey).set({
+      _fbKey: fbKey,
+      _deleted: true,
+      _updatedAt: Date.now()
+    }, function(err) {
       if (err) {
         console.error('[v13:firebase] ❌ removeWallet FAILED:', agent, fbKey, err.message || err);
       } else {
-        console.log('[v13:firebase] ✅ removeWallet OK:', agent, fbKey);
+        console.log('[v13:firebase] ✅ removeWallet TOMBSTONE OK:', agent, fbKey);
       }
     });
   } catch (e) {
@@ -5104,12 +5119,16 @@ function removeBookingFromFirebase(fbKey) {
     return;
   }
   try {
-    console.log('[v13:firebase] 🗑️  removeBooking DELETE:', fbKey);
-    _db.ref(FB_PATH.RM_BOOKINGS + '/' + fbKey).set(null, function(err) {
+    console.log('[v13:firebase] 🗑️  removeBooking TOMBSTONE:', fbKey);
+    _db.ref(FB_PATH.RM_BOOKINGS + '/' + fbKey).set({
+      _fbKey: fbKey,
+      _deleted: true,
+      _updatedAt: Date.now()
+    }, function(err) {
       if (err) {
         console.error('[v13:firebase] ❌ removeBooking FAILED:', fbKey, err.message || err);
       } else {
-        console.log('[v13:firebase] ✅ removeBooking OK:', fbKey);
+        console.log('[v13:firebase] ✅ removeBooking TOMBSTONE OK:', fbKey);
       }
     });
   } catch (e) {
@@ -5355,7 +5374,9 @@ function syncUploadAll() {
       }
     }
     var mf = [];
-    for (var fk in localMap) mf.push(localMap[fk]);
+    for (var fk in localMap) {
+      if (!localMap[fk]._deleted) mf.push(localMap[fk]);
+    }  // ★ 墓碑过滤
     return fbArrayToObj(mf);
   });
 
@@ -5395,7 +5416,9 @@ function syncUploadAll() {
       }
     }
     var mb = [];
-    for (var bk in localMap) mb.push(localMap[bk]);
+    for (var bk in localMap) {
+      if (!localMap[bk]._deleted) mb.push(localMap[bk]);
+    }  // ★ 墓碑过滤
     return fbArrayToObj(mb);
   });
 
@@ -5690,16 +5713,23 @@ function mergeTxs(local, remote) {
         var localTs = merged[rKey]._updatedAt || 0;
         var remoteTs = remote[j]._updatedAt || 0;
         if (remoteTs > localTs) {
+          // 远端胜出（可能是墓碑 _deleted:true）
           merged[rKey] = remote[j];
         }
       } else {
+        // 本地没有 → 远端胜出（包括墓碑）
         merged[rKey] = remote[j];
       }
     }
   }
 
+  // ★ 墓碑过滤：排除 _deleted:true 的远端墓碑条目
+  // 墓碑机制：删除时写 {_fbKey, _deleted:true, _updatedAt} 而非 set(null)
+  // 这样 mergeTxs 能识别删除操作并同步移除
   for (var k in merged) {
-    result.push(merged[k]);
+    if (!merged[k]._deleted) {
+      result.push(merged[k]);
+    }
   }
 
   return result;
@@ -5744,7 +5774,10 @@ function mergeWallets(local, remote) {
 
     var result = [];
     for (var k in recordMap) {
-      result.push(recordMap[k]);
+      // ★ 墓碑过滤：排除 _deleted:true 的远端删除标记
+      if (!recordMap[k]._deleted) {
+        result.push(recordMap[k]);
+      }
     }
     if (result.length > 0) {
       merged[agent] = result;
@@ -5776,7 +5809,10 @@ function mergeArrays(local, remote) {
 
   var result = [];
   for (var k in map) {
-    result.push(map[k]);
+    // ★ 墓碑过滤：排除 _deleted:true 的远端删除标记
+    if (!map[k]._deleted) {
+      result.push(map[k]);
+    }
   }
   return result;
 }
