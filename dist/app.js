@@ -132,6 +132,7 @@ var EVENTS = {
   SYNC_COMPLETE:    'sync:complete',
   SYNC_ERROR:       'sync:error',
   CONNECTION_CHANGED: 'connection:changed',
+  CRYPTO_READY:      'crypto:ready',
   // 页面
   PAGE_CHANGED:     'page:changed',
   // UI
@@ -835,6 +836,8 @@ function throttle(func, limit) {
 // ============================================================================
 var _cryptoReady = false;
 var _cryptoError = '';
+var _cryptoPollTimer = null;
+var _cryptoRetryDone = false;
 
 /**
  * 检测 CryptoJS 是否可用
@@ -844,11 +847,20 @@ function checkCrypto() {
   if (typeof CryptoJS !== 'undefined' && CryptoJS.AES) {
     _cryptoReady = true;
     _cryptoError = '';
+    if (_cryptoPollTimer) { clearInterval(_cryptoPollTimer); _cryptoPollTimer = null; }
+    _cryptoRetryDone = true;
     return true;
   }
   _cryptoReady = false;
   _cryptoError = 'CryptoJS 未載入 — 加密功能不可用，請檢查 CDN 連線';
   console.error('[v13:crypto] FATAL: CryptoJS is not defined. Encryption is UNAVAILABLE.');
+
+  // ★ 如果还没设置重试，启动轮询（参照 Firebase 模式）
+  if (!_cryptoRetryDone) {
+    _cryptoRetryDone = true;
+    _startCryptoPoll();
+  }
+
   return false;
 }
 
@@ -858,6 +870,68 @@ function checkCrypto() {
  */
 function isCryptoReady() {
   return _cryptoReady;
+}
+
+/**
+ * 启动 CryptoJS 轮询重试
+ * 当 CDN 异步加载晚于 app.js 执行时，通过轮询等待 CryptoJS 就绪
+ */
+function _startCryptoPoll() {
+  var pollCount = 0;
+  _cryptoPollTimer = setInterval(function() {
+    pollCount++;
+    if (typeof CryptoJS !== 'undefined' && CryptoJS.AES) {
+      _cryptoReady = true;
+      _cryptoError = '';
+      clearInterval(_cryptoPollTimer);
+      _cryptoPollTimer = null;
+      console.log('[v13:crypto] ✅ CryptoJS loaded via poll #' + pollCount + ' — encryption ACTIVE');
+
+      // ★ 加密就绪后：尝试从 localStorage 重新加载加密数据
+      // 之前因为 decryptData 返回 [] 导致数据丢失，现在重新解密
+      try {
+        var rawTxs = localStorage.getItem(STORAGE_KEYS.DATA);
+        if (rawTxs && rawTxs.indexOf('ENC:') === 0) {
+          var decrypted = decryptData(rawTxs);
+          if (decrypted.length > 0) {
+            State.set('txs', decrypted);
+            Events.emit(EVENTS.TXS_LOADED, decrypted);
+            console.log('[v13:crypto] 🔓 Restored ' + decrypted.length + ' encrypted TXS records');
+          }
+        }
+        var rawFund = localStorage.getItem(STORAGE_KEYS.FUND);
+        if (rawFund && rawFund.indexOf('ENC:') === 0) {
+          var decFund = decryptData(rawFund);
+          if (decFund.length > 0) {
+            State.set('fundWithdrawals', decFund);
+            Events.emit(EVENTS.FUND_LOADED, decFund);
+            console.log('[v13:crypto] 🔓 Restored ' + decFund.length + ' encrypted FUND records');
+          }
+        }
+        var rawWallets = localStorage.getItem(STORAGE_KEYS.AGENT_WALLETS);
+        if (rawWallets && rawWallets.indexOf('ENC:') === 0) {
+          var decWallets = decryptWallets(rawWallets);
+          if (decWallets && Object.keys(decWallets).length > 0) {
+            State.set('agentWallets', decWallets);
+            Events.emit(EVENTS.WALLETS_LOADED, decWallets);
+            console.log('[v13:crypto] 🔓 Restored encrypted WALLET records');
+          }
+        }
+      } catch(re) {
+        console.error('[v13:crypto] Crypto restore error:', re);
+      }
+
+      // ★ 触发加密就绪事件
+      Events.emit(EVENTS.CRYPTO_READY);
+    }
+
+    if (pollCount >= 30) {
+      clearInterval(_cryptoPollTimer);
+      _cryptoPollTimer = null;
+      console.error('[v13:crypto] ❌ CryptoJS failed to load after 30s. Encryption permanently DISABLED.');
+      console.error('[v13:crypto]    请检查: 1) 网络是否可访问 cdn.jsdelivr.net  2) 防火墙/广告拦截器是否屏蔽');
+    }
+  }, 1000);
 }
 
 /**
@@ -4840,16 +4914,19 @@ function _watchConnection() {
  * @param {object} tx
  */
 function syncTxToFirebase(tx) {
-  if (!_db || !tx._fbKey) {
-    if (!_db) console.warn('[v13:firebase] syncTx skipped: _db is null');
-    if (!tx._fbKey) console.warn('[v13:firebase] syncTx skipped: missing _fbKey');
+  if (!tx._fbKey) {
+    console.warn('[v13:firebase] syncTx skipped: missing _fbKey');
+    return;
+  }
+  if (!_db) {
+    console.warn('[v13:firebase] syncTx deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { syncTxToFirebase(tx); });
     return;
   }
   try {
     _db.ref(FB_PATH.TXS + '/' + tx._fbKey).set(tx, function(err) {
       if (err) {
         console.error('[v13:firebase] syncTx FAILED:', err.message || err);
-        // 写入失败时重新入队
         enqueueUpload(function() { syncTxToFirebase(tx); });
       }
     });
@@ -4863,7 +4940,11 @@ function syncTxToFirebase(tx) {
  * @param {string} fbKey
  */
 function removeTxFromFirebase(fbKey) {
-  if (!_db) return;
+  if (!_db) {
+    console.warn('[v13:firebase] removeTx deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { removeTxFromFirebase(fbKey); });
+    return;
+  }
   try {
     _db.ref(FB_PATH.TXS + '/' + fbKey).set(null, function(err) {
       if (err) console.error('[v13:firebase] removeTx FAILED:', err.message || err);
@@ -4878,8 +4959,13 @@ function removeTxFromFirebase(fbKey) {
  * @param {object} record
  */
 function syncFundToFirebase(record) {
-  if (!_db || !record._fbKey) {
-    if (!_db) console.warn('[v13:firebase] syncFund skipped: _db is null');
+  if (!record._fbKey) {
+    console.warn('[v13:firebase] syncFund skipped: missing _fbKey');
+    return;
+  }
+  if (!_db) {
+    console.warn('[v13:firebase] syncFund deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { syncFundToFirebase(record); });
     return;
   }
   try {
@@ -4899,7 +4985,11 @@ function syncFundToFirebase(record) {
  * @param {string} fbKey
  */
 function removeFundFromFirebase(fbKey) {
-  if (!_db) return;
+  if (!_db) {
+    console.warn('[v13:firebase] removeFund deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { removeFundFromFirebase(fbKey); });
+    return;
+  }
   try {
     _db.ref(FB_PATH.FUND + '/' + fbKey).set(null, function(err) {
       if (err) console.error('[v13:firebase] removeFund FAILED:', err.message || err);
@@ -4915,8 +5005,13 @@ function removeFundFromFirebase(fbKey) {
  * @param {object} record
  */
 function syncWalletToFirebase(agent, record) {
-  if (!_db || !record._fbKey) {
-    if (!_db) console.warn('[v13:firebase] syncWallet skipped: _db is null');
+  if (!record._fbKey) {
+    console.warn('[v13:firebase] syncWallet skipped: missing _fbKey');
+    return;
+  }
+  if (!_db) {
+    console.warn('[v13:firebase] syncWallet deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { syncWalletToFirebase(agent, record); });
     return;
   }
   try {
@@ -4937,7 +5032,11 @@ function syncWalletToFirebase(agent, record) {
  * @param {string} fbKey
  */
 function removeWalletFromFirebase(agent, fbKey) {
-  if (!_db) return;
+  if (!_db) {
+    console.warn('[v13:firebase] removeWallet deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { removeWalletFromFirebase(agent, fbKey); });
+    return;
+  }
   try {
     _db.ref(FB_PATH.AGENT_WALLETS + '/' + encodeFirebaseKey(agent) + '/' + fbKey).set(null, function(err) {
       if (err) console.error('[v13:firebase] removeWallet FAILED:', err.message || err);
@@ -4952,8 +5051,13 @@ function removeWalletFromFirebase(agent, fbKey) {
  * @param {object} booking
  */
 function syncBookingToFirebase(booking) {
-  if (!_db || !booking._fbKey) {
-    if (!_db) console.warn('[v13:firebase] syncBooking skipped: _db is null');
+  if (!booking._fbKey) {
+    console.warn('[v13:firebase] syncBooking skipped: missing _fbKey');
+    return;
+  }
+  if (!_db) {
+    console.warn('[v13:firebase] syncBooking deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { syncBookingToFirebase(booking); });
     return;
   }
   try {
@@ -4973,7 +5077,11 @@ function syncBookingToFirebase(booking) {
  * @param {string} fbKey
  */
 function removeBookingFromFirebase(fbKey) {
-  if (!_db) return;
+  if (!_db) {
+    console.warn('[v13:firebase] removeBooking deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { removeBookingFromFirebase(fbKey); });
+    return;
+  }
   try {
     _db.ref(FB_PATH.RM_BOOKINGS + '/' + fbKey).set(null, function(err) {
       if (err) console.error('[v13:firebase] removeBooking FAILED:', err.message || err);
@@ -4989,7 +5097,8 @@ function removeBookingFromFirebase(fbKey) {
  */
 function syncAgentListToFirebase(agentList) {
   if (!_db) {
-    console.warn('[v13:firebase] syncAgentList skipped: _db is null');
+    console.warn('[v13:firebase] syncAgentList deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { syncAgentListToFirebase(agentList); });
     return;
   }
   try {
@@ -5137,6 +5246,13 @@ function enqueueUpload(task) {
 function _processQueue() {
   if (_uploadQueue.length === 0) {
     _uploading = false;
+    return;
+  }
+
+  // ★ 如果 Firebase 还没就绪，延迟处理（不退队，不丢数据）
+  if (!getDB()) {
+    _uploading = false;
+    setTimeout(_processQueue, 1000);
     return;
   }
 
