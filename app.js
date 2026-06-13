@@ -5369,29 +5369,19 @@ function syncUploadAll() {
     }
   });
 
-  // 2. 公基金：transaction 原子合併
+  // 2. 公基金：transaction 原子合併（★ 使用 mergeTxs 时间戳决胜策略）
   db.ref(FB_PATH.FUND).transaction(function(remote) {
     if (!remote) return fbArrayToObj(fundWithdrawals);
     var rArr = fbObjToArray(remote);
-    var localMap = {};
-    for (var fi = 0; fi < fundWithdrawals.length; fi++) {
-      localMap[fundWithdrawals[fi]._fbKey] = fundWithdrawals[fi];
+    var merged = mergeTxs(fundWithdrawals, rArr);
+    console.log('[v13:uploader] FUND transaction: local=' + fundWithdrawals.length + ' remote=' + rArr.length + ' merged=' + merged.length);
+    return fbArrayToObj(merged);
+  }, function(err, committed, snapshot) {
+    if (err) {
+      console.error('[v13:uploader] FUND transaction FAILED:', err.message || err);
+    } else if (committed) {
+      console.log('[v13:uploader] ✅ FUND transaction committed');
     }
-    for (var fj = 0; fj < rArr.length; fj++) {
-      var fKey = rArr[fj]._fbKey;
-      if (!localMap[fKey]) {
-        localMap[fKey] = rArr[fj];
-      } else {
-        var lTs = localMap[fKey]._updatedAt || 0;
-        var rTs = rArr[fj]._updatedAt || 0;
-        if (rTs > lTs) localMap[fKey] = rArr[fj];
-      }
-    }
-    var mf = [];
-    for (var fk in localMap) {
-      if (!localMap[fk]._deleted) mf.push(localMap[fk]);
-    }  // ★ 墓碑过滤
-    return fbArrayToObj(mf);
   });
 
   // 3. 代理名單：transaction 原子合併
@@ -5400,12 +5390,18 @@ function syncUploadAll() {
     return mergeAgentLists(agentList, remote);
   });
 
-  // 4. 代理钱包：transaction 原子合併
+  // 4. 代理钱包：transaction 原子合併（★ 使用 mergeWallets 时间戳决胜策略）
   // ★ FIX: mergeWallets(local, remote) — local=agentWallets, remote=rw
   db.ref(FB_PATH.AGENT_WALLETS).transaction(function(remote) {
     if (!remote) return fbWalletsToObj(agentWallets);
     var rw = fbObjToWallets(remote);
     return fbWalletsToObj(mergeWallets(agentWallets, rw));
+  }, function(err, committed, snapshot) {
+    if (err) {
+      console.error('[v13:uploader] WALLETS transaction FAILED:', err.message || err);
+    } else if (committed) {
+      console.log('[v13:uploader] ✅ WALLETS transaction committed');
+    }
   });
 
   // 5. 工作月份
@@ -5508,10 +5504,11 @@ function startWatchers() {
     var remote = fbObjToArray(snap.val());
     var local = State.get('fundWithdrawals');
 
-    // 用 mergeArrays 合并（本地有+远端没有 → 保留本地；远端有+本地没有 → 加入）
-    var merged = mergeArrays(local, remote);
+    // ★ 用 mergeTxs（时间戳决胜），确保编辑/删除能跨端同步（公基金结构与txs一致）
+    var merged = mergeTxs(local, remote);
 
     if (JSON.stringify(merged) !== JSON.stringify(local)) {
+      console.log('[v13:watchers] FUND CHANGED: ' + local.length + ' → ' + merged.length + ' entries');
       State.set('fundWithdrawals', merged);
       Store.saveFund(merged);
       Events.emit(EVENTS.FUND_LOADED, merged);
@@ -5535,13 +5532,17 @@ function startWatchers() {
   // 4. 监听代理钱包
   _watchers.agentWallets = db.ref(FB_PATH.AGENT_WALLETS).on('value', function(snap) {
     var remote = fbObjToWallets(snap.val());
-    if (!remote || Object.keys(remote).length === 0) return;
-
+    // ★ 去掉 empty remote 的提前 return — 远端清空时需合并（mergeWallets 会正确处理 null）
     var local = State.get('agentWallets');
-    if (JSON.stringify(local) !== JSON.stringify(remote)) {
-      State.set('agentWallets', remote);
-      Store.saveWallets(remote);
-      Events.emit(EVENTS.WALLETS_LOADED, remote);
+
+    // ★ 用 mergeWallets 合并（时间戳决胜），不能用 remote 直接覆盖 local
+    var merged = mergeWallets(local, remote);
+
+    if (JSON.stringify(merged) !== JSON.stringify(local)) {
+      console.log('[v13:watchers] WALLETS CHANGED: localAgents=' + Object.keys(local||{}).length + ' remoteAgents=' + Object.keys(remote||{}).length + ' mergedAgents=' + Object.keys(merged||{}).length);
+      State.set('agentWallets', merged);
+      Store.saveWallets(merged);
+      Events.emit(EVENTS.WALLETS_LOADED, merged);
     }
   });
 
@@ -5624,7 +5625,8 @@ function syncDownloadAll() {
   db.ref(FB_PATH.FUND).once('value', function(snap) {
     var remote = fbObjToArray(snap.val());
     var local = State.get('fundWithdrawals');
-    var merged = mergeArrays(local, remote);
+    // ★ 用 mergeTxs（时间戳决胜），确保下载合并时编辑/删除能正确处理
+    var merged = mergeTxs(local, remote);
     if (JSON.stringify(merged) !== JSON.stringify(local)) {
       State.set('fundWithdrawals', merged);
       Store.saveFund(merged);
