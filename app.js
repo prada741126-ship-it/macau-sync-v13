@@ -5488,6 +5488,9 @@ function startWatchers() {
     // 用 mergeTxs 合并（时间戳胜出策略）
     var merged = mergeTxs(local, remote);
 
+    // ★ 客户端侧过滤墓碑（state 中不需要墓碑，墓碑只存在于 Firebase）
+    merged = merged.filter(function(r) { return !r._deleted; });
+
     console.log('[v13:watchers] TXS onValue: remote=' + remote.length + ' local=' + local.length + ' merged=' + merged.length);
 
     // 检测是否真正有变化（按长度+内容）
@@ -5506,6 +5509,9 @@ function startWatchers() {
 
     // ★ 用 mergeTxs（时间戳决胜），确保编辑/删除能跨端同步（公基金结构与txs一致）
     var merged = mergeTxs(local, remote);
+
+    // ★ 客户端侧过滤墓碑
+    merged = merged.filter(function(r) { return !r._deleted; });
 
     if (JSON.stringify(merged) !== JSON.stringify(local)) {
       console.log('[v13:watchers] FUND CHANGED: ' + local.length + ' → ' + merged.length + ' entries');
@@ -5538,6 +5544,14 @@ function startWatchers() {
     // ★ 用 mergeWallets 合并（时间戳决胜），不能用 remote 直接覆盖 local
     var merged = mergeWallets(local, remote);
 
+    // ★ 客户端侧过滤墓碑（state 中不需要墓碑）
+    var cleaned = {};
+    for (var _ag in merged) {
+      var _filtered = merged[_ag].filter(function(r) { return !r._deleted; });
+      if (_filtered.length > 0) cleaned[_ag] = _filtered;
+    }
+    merged = cleaned;
+
     if (JSON.stringify(merged) !== JSON.stringify(local)) {
       console.log('[v13:watchers] WALLETS CHANGED: localAgents=' + Object.keys(local||{}).length + ' remoteAgents=' + Object.keys(remote||{}).length + ' mergedAgents=' + Object.keys(merged||{}).length);
       State.set('agentWallets', merged);
@@ -5563,6 +5577,9 @@ function startWatchers() {
 
     // ★ 用 mergeBookings（时间戳决胜），确保编辑/删除能跨端同步
     var merged = mergeBookings(local, remote);
+
+    // ★ 客户端侧过滤墓碑
+    merged = merged.filter(function(r) { return !r._deleted; });
 
     if (JSON.stringify(merged) !== JSON.stringify(local)) {
       console.log('[v13:watchers] BOOKINGS CHANGED: ' + local.length + ' → ' + merged.length + ' entries');
@@ -5615,6 +5632,8 @@ function syncDownloadAll() {
     var remote = fbObjToArray(snap.val());
     var local = State.get('txs');
     var merged = mergeTxs(local, remote);
+    // ★ 客户端侧过滤墓碑
+    merged = merged.filter(function(r) { return !r._deleted; });
     if (JSON.stringify(merged) !== JSON.stringify(local)) {
       State.set('txs', merged);
       Store.saveTxs(merged);
@@ -5627,6 +5646,8 @@ function syncDownloadAll() {
     var local = State.get('fundWithdrawals');
     // ★ 用 mergeTxs（时间戳决胜），确保下载合并时编辑/删除能正确处理
     var merged = mergeTxs(local, remote);
+    // ★ 客户端侧过滤墓碑
+    merged = merged.filter(function(r) { return !r._deleted; });
     if (JSON.stringify(merged) !== JSON.stringify(local)) {
       State.set('fundWithdrawals', merged);
       Store.saveFund(merged);
@@ -5650,6 +5671,13 @@ function syncDownloadAll() {
     var remote = fbObjToWallets(snap.val());
     var local = State.get('agentWallets');
     var merged = mergeWallets(local, remote);
+    // ★ 客户端侧过滤墓碑
+    var _cleaned = {};
+    for (var _a in merged) {
+      var _f = merged[_a].filter(function(r) { return !r._deleted; });
+      if (_f.length > 0) _cleaned[_a] = _f;
+    }
+    merged = _cleaned;
     if (JSON.stringify(merged) !== JSON.stringify(local)) {
       State.set('agentWallets', merged);
       Store.saveWallets(merged);
@@ -5669,8 +5697,9 @@ function syncDownloadAll() {
   db.ref(FB_PATH.RM_BOOKINGS).once('value', function(snap) {
     var remote = fbObjToArray(snap.val());
     var local = State.get('bookings');
-    // ★ 用 mergeBookings（时间戳决胜），确保下载合并时编辑/删除能正确处理
     var merged = mergeBookings(local, remote);
+    // ★ 客户端侧过滤墓碑
+    merged = merged.filter(function(r) { return !r._deleted; });
     if (JSON.stringify(merged) !== JSON.stringify(local)) {
       State.set('bookings', merged);
       Store.saveBookings(merged);
@@ -5731,13 +5760,10 @@ function mergeTxs(local, remote) {
     }
   }
 
-  // ★ 墓碑过滤：排除 _deleted:true 的远端墓碑条目
-  // 墓碑机制：删除时写 {_fbKey, _deleted:true, _updatedAt} 而非 set(null)
-  // 这样 mergeTxs 能识别删除操作并同步移除
+  // ★ 不过滤墓碑 — 墓碑由 watchers.js 在客户端侧过滤
+  //   Transaction 写回 Firebase 时需要保留墓碑，否则其他设备收不到删除通知
   for (var k in merged) {
-    if (!merged[k]._deleted) {
-      result.push(merged[k]);
-    }
+    result.push(merged[k]);
   }
 
   return result;
@@ -5782,10 +5808,7 @@ function mergeWallets(local, remote) {
 
     var result = [];
     for (var k in recordMap) {
-      // ★ 墓碑过滤：排除 _deleted:true 的远端删除标记
-      if (!recordMap[k]._deleted) {
-        result.push(recordMap[k]);
-      }
+      result.push(recordMap[k]);  // ★ 不过滤墓碑 — 由 watchers.js 在客户端侧过滤
     }
     if (result.length > 0) {
       merged[agent] = result;
@@ -5829,7 +5852,7 @@ function mergeArrays(local, remote) {
  * 合并订房数组（时间戳决胜策略，与 mergeTxs 一致）
  * @param {Array} local - 本地订房数组
  * @param {Array} remote - 远端订房数组
- * @returns {Array} 合并结果（已过滤墓碑）
+ * @returns {Array} 合并结果（含墓碑，由调用方过滤）
  */
 function mergeBookings(local, remote) {
   var merged = {};
@@ -5857,12 +5880,10 @@ function mergeBookings(local, remote) {
     }
   }
 
-  // 过滤墓碑，返回有效数据
+  // ★ 不过滤墓碑 — 由 watchers.js 在客户端侧过滤
   var result = [];
   for (var k in merged) {
-    if (!merged[k]._deleted) {
-      result.push(merged[k]);
-    }
+    result.push(merged[k]);
   }
   return result;
 }
