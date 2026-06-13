@@ -6042,6 +6042,61 @@ function isModalOpen() {
   return _openModals.length > 0;
 }
 
+// ============================================================================
+// 全局自訂確認框（替代 window.confirm，兼容手機/iOS Safari/微信内嵌）
+// ============================================================================
+
+var _confirmCallback = null;
+
+/**
+ * 顯示自訂確認框（異步，不阻塞主線程）
+ * @param {string} msg - 確認訊息
+ * @param {function} onConfirm - 用戶點擊「確定」後的回調
+ * @param {object} [opts] - 可選: { okText, cancelText, okColor }
+ */
+function showConfirm(msg, onConfirm, opts) {
+  var bg = document.getElementById('g-confirm-bg');
+  var msgEl = document.getElementById('g-confirm-msg');
+  var okBtn = document.getElementById('g-confirm-ok');
+  var cancelBtn = document.getElementById('g-confirm-cancel');
+
+  if (!bg || !msgEl || !okBtn || !cancelBtn) {
+    // 降級到原生 confirm（桌面端兜底）
+    if (window.confirm(msg)) onConfirm();
+    return;
+  }
+
+  opts = opts || {};
+  msgEl.textContent = msg;
+  okBtn.textContent = opts.okText || '確定';
+  okBtn.style.background = opts.okColor || '#e53935';
+  cancelBtn.textContent = opts.cancelText || '取消';
+
+  bg.style.display = 'flex';
+  _confirmCallback = onConfirm;
+
+  // 確定
+  okBtn.onclick = function() {
+    bg.style.display = 'none';
+    _confirmCallback = null;
+    onConfirm();
+  };
+
+  // 取消
+  cancelBtn.onclick = function() {
+    bg.style.display = 'none';
+    _confirmCallback = null;
+  };
+
+  // 點背景取消
+  bg.onclick = function(e) {
+    if (e.target === bg) {
+      bg.style.display = 'none';
+      _confirmCallback = null;
+    }
+  };
+}
+
 // 监听事件
 Events.on(EVENTS.MODAL_OPEN, function(data) { openModal(data.id, data.data); });
 Events.on(EVENTS.MODAL_CLOSE, function(data) { closeModal(data ? data.id : null); });
@@ -6601,9 +6656,7 @@ function _renderAllTable(txs) {
         return function(e) {
           e.stopPropagation();
           console.log('[v13:all] 🗑️ 刪除按鈕點擊, fbKey=' + key);
-          var confirmed = confirm('確定刪除這筆交易？');
-          console.log('[v13:all] confirm 返回值: ' + confirmed);
-          if (confirmed) {
+          showConfirm('確定刪除這筆交易？', function() {
             console.log('[v13:all] 📤 呼叫 deleteTx(' + key + ')...');
             var result = deleteTx(key);
             console.log('[v13:all] deleteTx 返回: ' + (result ? '成功 (' + result._fbKey + ')' : 'null (刪除失敗!)'));
@@ -6617,7 +6670,7 @@ function _renderAllTable(txs) {
               console.log('[v13:all] ⚠️ 數據已成功刪除，請手動刷新頁面');
             }
             console.log('[v13:all] ✅ renderAll 完成, 當前 txs 數量: ' + State.get('txs').length);
-          }
+          });
         };
       })(fbKey);
       tdBtn.appendChild(delBtn);
@@ -7859,14 +7912,15 @@ var RM = {
   },
 
   delete: function(id) {
-    if (!confirm('確定刪除這筆訂房？')) return;
-    var b = getBookingById(id);
-    if (b) {
-      deleteBooking(b._fbKey);
-      RM.load();
-      RM.render();
-      toastCRUDDone();
-    }
+    showConfirm('確定刪除這筆訂房？', function() {
+      var b = getBookingById(id);
+      if (b) {
+        deleteBooking(b._fbKey);
+        RM.load();
+        RM.render();
+        toastCRUDDone();
+      }
+    });
   },
 
   // ===== 渲染 =====
@@ -9236,26 +9290,28 @@ function openFundModal() {
 
 /** 删除公基金记录（从查询页调用） */
 function deleteFundRecord(fbKey) {
-  if (!confirm('確定刪除此筆公基金記錄？')) return;
-  var result = deleteFund(fbKey);
-  if (result) {
-    toastCRUDDone();
-    refreshAllViews();
-  } else {
-    showToast('刪除失敗', 'error');
-  }
+  showConfirm('確定刪除此筆公基金記錄？', function() {
+    var result = deleteFund(fbKey);
+    if (result) {
+      toastCRUDDone();
+      refreshAllViews();
+    } else {
+      showToast('刪除失敗', 'error');
+    }
+  });
 }
 
 /** 删除代理钱包记录（从查询页调用） */
 function deleteAgentWallet(agent, fbKey) {
-  if (!confirm('確定刪除此筆錢包記錄？')) return;
-  var result = deleteWallet(agent, fbKey);
-  if (result) {
-    toastCRUDDone();
-    refreshAllViews();
-  } else {
-    showToast('刪除失敗', 'error');
-  }
+  showConfirm('確定刪除此筆錢包記錄？', function() {
+    var result = deleteWallet(agent, fbKey);
+    if (result) {
+      toastCRUDDone();
+      refreshAllViews();
+    } else {
+      showToast('刪除失敗', 'error');
+    }
+  });
 }
 
 // ============================================================================
@@ -9535,20 +9591,22 @@ function _renderAgentMgrList() {
       var delBtn = document.createElement('button');
       delBtn.textContent = '刪除';
       delBtn.style.cssText = 'background:' + UI_COLORS.danger + ';color:white;border:none;padding:2px 8px;border-radius:4px;cursor:pointer;font-size:11px';
-      delBtn.onclick = function() {
-        if (confirm('確定刪除代理「' + agentName + '」？')) {
-          var result = removeAgent(agentName);
-          if (result.success) {
-            showToast('代理已刪除', 'success');
-            _renderAgentMgrList();
-            _populateTxAgentDropdown();
-            if (RM && RM.populateAgentDropdown) RM.populateAgentDropdown();
-            if (RM && RM.populateAgentFilter) RM.populateAgentFilter();
-          } else {
-            showToast(result.error || '刪除失敗', 'error');
-          }
-        }
-      };
+      delBtn.onclick = (function(name) {
+        return function() {
+          showConfirm('確定刪除代理「' + name + '」？', function() {
+            var result = removeAgent(name);
+            if (result.success) {
+              showToast('代理已刪除', 'success');
+              _renderAgentMgrList();
+              _populateTxAgentDropdown();
+              if (RM && RM.populateAgentDropdown) RM.populateAgentDropdown();
+              if (RM && RM.populateAgentFilter) RM.populateAgentFilter();
+            } else {
+              showToast(result.error || '刪除失敗', 'error');
+            }
+          });
+        };
+      })(agentName);
 
       btnGroup.appendChild(walletBtn);
       btnGroup.appendChild(delBtn);
@@ -9591,17 +9649,19 @@ Events.on(EVENTS.TX_UPDATED, function() { clearDraft(null); });
  * 手動重置為最新預設數據 (UI 按鈕調用)
  */
 function hcResetPreset() {
-  if (!confirm('確定要重置為最新預設數據嗎？\n這會刪除現有所有酒店設定（' + State.get('hotelConfig').length + ' 筆），並載入 ' + PRESET_CONFIG.length + ' 筆預設數據。此操作無法復原！')) return;
-  try {
-    var count = resetHCToPreset();
-    showToast('已重置 ' + count + ' 筆酒店預設數據', 'success');
-    _hcSelected = {};
-    _hcLastClicked = null;
-    hcRender();
-  } catch(e) {
-    console.error('[v13:hc] reset preset error:', e);
-    showToast('重置失敗', 'error');
-  }
+  var msg = '確定要重置為最新預設數據嗎？\n這會刪除現有所有酒店設定（' + State.get('hotelConfig').length + ' 筆），並載入 ' + PRESET_CONFIG.length + ' 筆預設數據。此操作無法復原！';
+  showConfirm(msg, function() {
+    try {
+      var count = resetHCToPreset();
+      showToast('已重置 ' + count + ' 筆酒店預設數據', 'success');
+      _hcSelected = {};
+      _hcLastClicked = null;
+      hcRender();
+    } catch(e) {
+      console.error('[v13:hc] reset preset error:', e);
+      showToast('重置失敗', 'error');
+    }
+  }, { okColor: '#b71c1c' });
 }
 
 /** 批量選取狀態: { fbKey: true } */
@@ -9736,17 +9796,20 @@ function hcRender(filterCasino, filterHotel, filterSearch) {
       var delBtn = document.createElement('button');
       delBtn.textContent = '刪';
       delBtn.style.cssText = 'background:' + UI_COLORS.danger + ';color:white;border:none;padding:2px 8px;border-radius:4px;cursor:pointer;font-size:11px';
-      delBtn.onclick = function() {
-        if (!confirm('確定刪除「' + entry.room + '」？')) return;
-        var deleted = deleteHC(entry._fbKey);
-        if (deleted) {
-          delete _hcSelected[entry._fbKey];
-          showToast('已刪除', 'success');
-          hcRender();
-        } else {
-          showToast('刪除失敗', 'error');
-        }
-      };
+      delBtn.onclick = (function(ent) {
+        return function() {
+          showConfirm('確定刪除「' + ent.room + '」？', function() {
+            var deleted = deleteHC(ent._fbKey);
+            if (deleted) {
+              delete _hcSelected[ent._fbKey];
+              showToast('已刪除', 'success');
+              hcRender();
+            } else {
+              showToast('刪除失敗', 'error');
+            }
+          });
+        };
+      })(entry);
 
       tdOp.appendChild(editBtn);
       tdOp.appendChild(delBtn);
@@ -9860,17 +9923,17 @@ function hcBatchDelete() {
     showToast('請先選取要刪除的項目', 'warning');
     return;
   }
-  if (!confirm('確定要批量刪除 ' + keys.length + ' 筆酒店設定？此操作無法復原！')) return;
-
-  var deleted = 0;
-  for (var i = 0; i < keys.length; i++) {
-    var result = deleteHC(keys[i]);
-    if (result) deleted++;
-  }
-  _hcSelected = {};
-  _hcLastClicked = null;
-  showToast('已刪除 ' + deleted + ' 筆', deleted > 0 ? 'success' : 'error');
-  hcRender();
+  showConfirm('確定要批量刪除 ' + keys.length + ' 筆酒店設定？此操作無法復原！', function() {
+    var deleted = 0;
+    for (var i = 0; i < keys.length; i++) {
+      var result = deleteHC(keys[i]);
+      if (result) deleted++;
+    }
+    _hcSelected = {};
+    _hcLastClicked = null;
+    showToast('已刪除 ' + deleted + ' 筆', deleted > 0 ? 'success' : 'error');
+    hcRender();
+  }, { okColor: '#b71c1c' });
 }
 
 /**
