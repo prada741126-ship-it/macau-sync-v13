@@ -558,6 +558,24 @@ function log(module, level, args) {
   method.apply(console, [prefix].concat(extra));
 }
 
+// ============================================================================
+// 颜色工具
+// ============================================================================
+
+/**
+ * Hex 颜色 → rgba 字符串
+ * @param {string} hex - "#RRGGBB" 格式
+ * @param {number} alpha - 0~1 透明度
+ * @returns {string} "rgba(r,g,b,a)"
+ */
+function hexToRgba(hex, alpha) {
+  if (!hex || hex.length < 7) return 'rgba(0,0,0,' + (alpha || 0) + ')';
+  var r = parseInt(hex.slice(1, 3), 16);
+  var g = parseInt(hex.slice(3, 5), 16);
+  var b = parseInt(hex.slice(5, 7), 16);
+  return 'rgba(' + r + ',' + g + ',' + b + ',' + (alpha || 0) + ')';
+}
+
 // src/utils/dom.js
 /**
  * v13 DOM 操作工具
@@ -7013,12 +7031,12 @@ function _renderKPI(kpi) {
   }
 
   var cards = [
-    { label: TERMS.volume,  value: fmt(kpi.totalVolume),  raw: kpi.totalVolume,  cuOpts: { suffix: '萬' },       accent: 'cyan', color: UI_COLORS.techCyan },
-    { label: TERMS.comm,    value: fmtMoney(kpi.totalComm),   raw: kpi.totalComm,    cuOpts: { prefix: '¥' },         accent: 'blue',  color: UI_COLORS.skyBlue },
-    { label: TERMS.bonus,   value: fmtMoney(kpi.totalBonus),  raw: kpi.totalBonus,   cuOpts: { prefix: '¥' },         accent: 'violet',color: UI_COLORS.electricViolet },
-    { label: TERMS.fund,    value: fmtMoney(kpi.totalFund),   raw: kpi.totalFund,    cuOpts: { prefix: '¥' },         accent: 'gold',  color: UI_COLORS.goldSoft },
-    { label: TERMS.drawn,   value: fmtMoney(kpi.totalDrawn),  raw: kpi.totalDrawn,   cuOpts: { prefix: '¥' },         accent: 'orange',color: UI_COLORS.warning },
-    { label: TERMS.undrawn, value: fmtMoney(kpi.totalUndrawn),raw: kpi.totalUndrawn, cuOpts: { prefix: '¥' },         accent: 'red',   color: UI_COLORS.danger },
+    { label: '📊 ' + TERMS.volume,  value: fmt(kpi.totalVolume),  raw: kpi.totalVolume,  cuOpts: { suffix: '萬' },       accent: 'cyan', color: UI_COLORS.techCyan },
+    { label: '💰 ' + TERMS.comm,    value: fmtMoney(kpi.totalComm),   raw: kpi.totalComm,    cuOpts: { prefix: '¥' },         accent: 'blue',  color: UI_COLORS.skyBlue },
+    { label: '🎁 ' + TERMS.bonus,   value: fmtMoney(kpi.totalBonus),  raw: kpi.totalBonus,   cuOpts: { prefix: '¥' },         accent: 'violet',color: UI_COLORS.electricViolet },
+    { label: '🏦 ' + TERMS.fund,    value: fmtMoney(kpi.totalFund),   raw: kpi.totalFund,    cuOpts: { prefix: '¥' },         accent: 'gold',  color: UI_COLORS.goldSoft },
+    { label: '📤 ' + TERMS.drawn,   value: fmtMoney(kpi.totalDrawn),  raw: kpi.totalDrawn,   cuOpts: { prefix: '¥' },         accent: 'orange',color: UI_COLORS.warning },
+    { label: '📥 ' + TERMS.undrawn, value: fmtMoney(kpi.totalUndrawn),raw: kpi.totalUndrawn, cuOpts: { prefix: '¥' },         accent: 'red',   color: UI_COLORS.danger },
   ];
 
   grid.innerHTML = '';
@@ -7140,10 +7158,10 @@ function _renderAllKPI(txs) {
   mini.innerHTML = '';
 
   var items = [
-    { label: TERMS.volume, raw: _totalVol, cuOpts: { suffix: '萬' },       accent: 'cyan',  color: UI_COLORS.techCyan },
-    { label: TERMS.comm,   raw: _totalComm,cuOpts: { prefix: '¥' },         accent: 'blue',  color: UI_COLORS.skyBlue },
-    { label: TERMS.bonus,  raw: _totalBonus,cuOpts: { prefix: '¥' },        accent: 'violet',color: UI_COLORS.electricViolet },
-    { label: TERMS.fund,   raw: _totalFund, cuOpts: { prefix: '¥' },        accent: 'gold',  color: UI_COLORS.goldSoft },
+    { label: '📊 ' + TERMS.volume, raw: _totalVol, cuOpts: { suffix: '萬' },       accent: 'cyan',  color: UI_COLORS.techCyan },
+    { label: '💰 ' + TERMS.comm,   raw: _totalComm,cuOpts: { prefix: '¥' },         accent: 'blue',  color: UI_COLORS.skyBlue },
+    { label: '🎁 ' + TERMS.bonus,  raw: _totalBonus,cuOpts: { prefix: '¥' },        accent: 'violet',color: UI_COLORS.electricViolet },
+    { label: '🏦 ' + TERMS.fund,   raw: _totalFund, cuOpts: { prefix: '¥' },        accent: 'gold',  color: UI_COLORS.goldSoft },
   ];
 
   for (var i = 0; i < items.length; i++) {
@@ -7189,8 +7207,11 @@ function _renderAllTable(txs) {
       });
       tr.style.cursor = 'pointer';
 
+      // ★ 类型彩色标签 (#28)
+      var typeClass = tx.type === 'cash' ? 'cash' : 'roll';
+      var typeLabel = tx.type === 'cash' ? '現金' : '轉碼';
       var cells = [
-        tx.type === 'cash' ? '現金' : '轉碼',
+        '<span class="tx-type-tag ' + typeClass + '">' + typeLabel + '</span>',
         tx.date,
         tx.agent,
         tx.client || '-',
@@ -7215,7 +7236,7 @@ function _renderAllTable(txs) {
       var fbKey = tx._fbKey;
       var tdBtn = h('td');
       var delBtn = h('button', {
-        style: 'background:' + UI_COLORS.danger + ';color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px'
+        className: 'btn btn-danger btn-sm'
       }, '刪除');
       delBtn.onclick = (function(key) {
         return function(e) {
@@ -7712,7 +7733,7 @@ function _renderFundLedger() {
   // 上月累计行
   if (!skipMonthFilter && preBalance > 0) {
     var pr = h('tr');
-    pr.style.cssText = 'background:rgba(201,168,76,0.08);'; // derived from UI_COLORS.goldSoft
+    pr.style.cssText = 'background:' + hexToRgba(UI_COLORS.goldSoft, 0.08) + ';';
     pr.innerHTML = '<td>' + (queryMonth || dateFrom).substring(0, 7) + '-01</td><td style="color:' + UI_COLORS.goldSoft + ';font-weight:600;">上月累計</td><td class="text-right num-mono"></td><td class="text-right num-mono"></td><td></td><td class="text-right num-mono" style="font-weight:700;color:' + UI_COLORS.goldSoft + ';">' + fmtMoney(preBalance) + '</td>';
     tbody.appendChild(pr);
   }
@@ -7738,11 +7759,11 @@ function _renderFundLedger() {
     }
 
     var tr = h('tr');
-    var typeClr = e.type === '提領' ? 'color:#f85149;font-weight:600;' : (e.type === '存入' ? 'color:#58a6ff;' : (e.type === '自存現金' ? 'color:#e67e22;font-weight:600;' : 'color:' + UI_COLORS.goldSoft + ';'));
+    var typeClr = e.type === '提領' ? 'color:' + UI_COLORS.danger + ';font-weight:600;' : (e.type === '存入' ? 'color:' + UI_COLORS.info + ';' : (e.type === '自存現金' ? 'color:' + UI_COLORS.cashOrange + ';font-weight:600;' : 'color:' + UI_COLORS.goldSoft + ';'));
 
     var delBtn = e.source === 'fund'
       ? '<button class="btn-red" onclick="deleteFundRecord(\'' + (e._fbKey || e.id) + '\')">刪除</button>'
-      : '<span style="color:#6e7681;font-size:11px;">自動</span>';
+      : '<span style="color:' + UI_COLORS.textMuted + ';font-size:11px;">自動</span>';
 
     var inVal = (e.type === '入帳' || e.type === '存入' || e.type === '自存現金') ? fmtMoney(e.amount) : '';
     var outVal = (e.type === '提領') ? fmtMoney(e.amount) : '';
@@ -7750,7 +7771,7 @@ function _renderFundLedger() {
     tr.innerHTML = '<td>' + e.date + '</td>' +
       '<td style="' + typeClr + '">' + e.desc + '</td>' +
       '<td class="text-right num-mono" style="color:' + UI_COLORS.goldSoft + ';">' + inVal + '</td>' +
-      '<td class="text-right num-mono" style="color:#f85149;">' + outVal + '</td>' +
+      '<td class="text-right num-mono" style="color:' + UI_COLORS.danger + ';">' + outVal + '</td>' +
       '<td>' + delBtn + '</td>' +
       '<td class="text-right num-mono" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
     tbody.appendChild(tr);
@@ -7975,7 +7996,7 @@ function _renderAgentLedger(agent, filteredTxs, queryMonth) {
   // 上月累计行
   if (!skipMonthFilter && preRunning > 0) {
     var pr = h('tr');
-    pr.style.cssText = 'background:rgba(201,168,76,0.08);'; // derived from UI_COLORS.goldSoft
+    pr.style.cssText = 'background:' + hexToRgba(UI_COLORS.goldSoft, 0.08) + ';';
     pr.innerHTML = '<td>' + filterStart.substring(0, 7) + '-01</td><td style="color:' + UI_COLORS.goldSoft + ';font-weight:600;">上月累計</td><td class="text-right num-mono"></td><td class="text-right num-mono"></td><td></td><td class="text-right num-mono" style="font-weight:700;color:' + UI_COLORS.goldSoft + ';">' + fmtMoney(preRunning) + '</td>';
     tbody.appendChild(pr);
   }
@@ -7998,36 +8019,36 @@ function _renderAgentLedger(agent, filteredTxs, queryMonth) {
     if (e.rowType === 'withdraw') {
       var val = (e._fbKey || e.id).toString();
       tr.innerHTML = '<td>' + e.date + '</td>' +
-        '<td style="color:#f85149;font-weight:700;">提領' + (e.note ? '：' + e.note : '') + '</td>' +
+        '<td style="color:' + UI_COLORS.danger + ';font-weight:700;">提領' + (e.note ? '：' + e.note : '') + '</td>' +
         '<td class="text-right num-mono"></td>' +
-        '<td class="text-right num-mono" style="color:#f85149;font-weight:700;">-' + fmtMoney(e.amount) + '</td>' +
+        '<td class="text-right num-mono" style="color:' + UI_COLORS.danger + ';font-weight:700;">-' + fmtMoney(e.amount) + '</td>' +
         '<td><button class="btn-red" onclick="deleteAgentWallet(\'' + agent.replace(/'/g, "\\'") + '\',\'' + val + '\')">刪除</button></td>' +
         '<td class="text-right num-mono" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
 
     } else if (e.rowType === 'aw_deposit') {
       var val = (e._fbKey || e.id).toString();
       tr.innerHTML = '<td>' + e.date + '</td>' +
-        '<td style="color:#58a6ff;font-weight:700;">存入' + (e.note ? '：' + e.note : '') + '</td>' +
+        '<td style="color:' + UI_COLORS.info + ';font-weight:700;">存入' + (e.note ? '：' + e.note : '') + '</td>' +
         '<td class="text-right num-mono"></td>' +
-        '<td class="text-right num-mono" style="color:#58a6ff;font-weight:700;">+' + fmtMoney(e.amount) + '</td>' +
+        '<td class="text-right num-mono" style="color:' + UI_COLORS.info + ';font-weight:700;">+' + fmtMoney(e.amount) + '</td>' +
         '<td><button class="btn-red" onclick="deleteAgentWallet(\'' + agent.replace(/'/g, "\\'") + '\',\'' + val + '\')">刪除</button></td>' +
         '<td class="text-right num-mono" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
 
     } else if (e.rowType === 'aw_cash_dep') {
       var val = (e._fbKey || e.id).toString();
       tr.innerHTML = '<td>' + e.date + '</td>' +
-        '<td style="color:#e67e22;font-weight:700;">自存現金' + (e.note ? '：' + e.note : '') + '</td>' +
+        '<td style="color:' + UI_COLORS.cashOrange + ';font-weight:700;">自存現金' + (e.note ? '：' + e.note : '') + '</td>' +
         '<td class="text-right num-mono"></td>' +
-        '<td class="text-right num-mono" style="color:#e67e22;font-weight:700;">+' + fmtMoney(e.amount) + '</td>' +
+        '<td class="text-right num-mono" style="color:' + UI_COLORS.cashOrange + ';font-weight:700;">+' + fmtMoney(e.amount) + '</td>' +
         '<td><button class="btn-red" onclick="deleteAgentWallet(\'' + agent.replace(/'/g, "\\'") + '\',\'' + val + '\')">刪除</button></td>' +
         '<td class="text-right num-mono" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
 
     } else if (e.rowType === 'cash') {
       tr.innerHTML = '<td>' + e.date + '</td>' +
-        '<td style="color:#e67e22;font-weight:700;">現金寄放' + (e.client ? '：' + e.client : '') + '</td>' +
+        '<td style="color:' + UI_COLORS.cashOrange + ';font-weight:700;">現金寄放' + (e.client ? '：' + e.client : '') + '</td>' +
         '<td class="text-right num-mono"></td>' +
-        '<td class="text-right num-mono" style="color:#e67e22;font-weight:700;">+' + fmtMoney(e.bonus) + '</td>' +
-        '<td><span style="color:#6e7681;font-size:11px;">自動</span></td>' +
+        '<td class="text-right num-mono" style="color:' + UI_COLORS.cashOrange + ';font-weight:700;">+' + fmtMoney(e.bonus) + '</td>' +
+        '<td><span style="color:' + UI_COLORS.textMuted + ';font-size:11px;">自動</span></td>' +
         '<td class="text-right num-mono" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
 
     } else {
@@ -8036,7 +8057,7 @@ function _renderAgentLedger(agent, filteredTxs, queryMonth) {
         '<td>' + (e.venue || '') + '(' + (e.client || '') + ')</td>' +
         '<td class="text-right num-mono">' + volStr + '</td>' +
         '<td class="text-right num-mono" style="color:' + UI_COLORS.goldSoft + ';">' + fmtMoney(e.bonus) + '</td>' +
-        '<td><span style="color:#6e7681;font-size:11px;">自動</span></td>' +
+        '<td><span style="color:' + UI_COLORS.textMuted + ';font-size:11px;">自動</span></td>' +
         '<td class="text-right num-mono" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
     }
     tbody.appendChild(tr);
@@ -8056,7 +8077,7 @@ function _renderAgentLedger(agent, filteredTxs, queryMonth) {
 
 function _appendTotalRow(tbody, running) {
   var tr = h('tr');
-  tr.style.cssText = 'background:rgba(22,27,34,0.8);font-weight:700;color:' + UI_COLORS.goldSoft + ';'; // bgElevated at 80% opacity
+  tr.style.cssText = 'background:' + hexToRgba(UI_COLORS.bgElevated, 0.8) + ';font-weight:700;color:' + UI_COLORS.goldSoft + ';';
   tr.innerHTML = '<td></td><td style="color:' + UI_COLORS.textPrimary + ';">合計</td><td class="text-right num-mono"></td><td class="text-right num-mono"></td><td></td><td class="text-right num-mono" style="font-size:15px;">' + fmtMoney(Math.max(0, running)) + '</td>';
   tbody.appendChild(tr);
 }
@@ -8294,7 +8315,7 @@ function rmReadDateSels(prefix) {
   return val;
 }
 
-/** 根据 YYYY/MM/DD 字符串反填三个 select */
+/** 根据 YYYY/MM/DD 字符串反填三个 select + 桌面端 date input */
 function rmSetDateSels(prefix, dateStr) {
   if (!dateStr) return;
   // 支持 YYYY/MM/DD 和 YYYY-MM-DD
@@ -8308,6 +8329,14 @@ function rmSetDateSels(prefix, dateStr) {
   if (dEl) dEl.value = parts[2].length === 1 ? '0' + parts[2] : parts[2];
   var hidden = $('#' + prefix);
   if (hidden) hidden.value = dateStr;
+  // 同步桌面端 date input
+  var dtEl = $('#' + prefix + '-dt');
+  if (dtEl) {
+    var y = parts[0];
+    var m = parts[1].length === 1 ? '0' + parts[1] : parts[1];
+    var d = parts[2].length === 1 ? '0' + parts[2] : parts[2];
+    dtEl.value = y + '-' + m + '-' + d;
+  }
 }
 
 var RM = {
@@ -9169,12 +9198,13 @@ function _renderFlowTable() {
     var flow = flows[f];
     var isOut = flow.sign < 0;
     var tc = isOut ? 'wf-withdraw' : 'wf-deposit';
-    var prefix = isOut ? '-' : '+';
-    html += '<tr>' +
+    var rowClass = isOut ? 'row-withdraw' : 'row-deposit';
+    var prefix = isOut ? '↓ -' : '↑ +';
+    html += '<tr class="' + rowClass + '">' +
       '<td>' + flow.date + '</td>' +
       '<td class="wf-source">' + flow.source + '</td>' +
       '<td class="' + tc + '">' + flow.type + '</td>' +
-      '<td class="' + tc + '" style="text-align:right">' + prefix + fmtMoney(flow.amount) + '</td>' +
+      '<td class="' + tc + ' num-mono" style="text-align:right">' + prefix + fmtMoney(flow.amount) + '</td>' +
       '<td>' + flow.note + '</td>' +
       '</tr>';
   }
@@ -9254,13 +9284,13 @@ function _renderFundCard() {
     return (b.date || '').replace(/\//g, '-').localeCompare((a.date || '').replace(/\//g, '-'));
   });
 
-  // 渲染卡片 — 复用代理钱包卡片样式 (.wallet-agent-card 系列)，视觉统一
-  var html = '<div class="wallet-agent-grid"><div class="wallet-agent-card">' +
-    '<div class="wallet-agent-card-header">' +
-      '<span class="wa-name">🏦 公基金</span>' +
-      '<span class="wa-balance">' + fmtMoney(balance) + '</span>' +
+  // 渲染卡片 — 独立金边主题，与代理钱包卡片视觉区分
+  var html = '<div class="wallet-fund-card">' +
+    '<div class="wallet-fund-card-header">' +
+      '<span class="wfc-name">🏦 公基金</span>' +
+      '<span class="wfc-balance">' + fmtMoney(balance) + '</span>' +
     '</div>' +
-    '<div class="wallet-agent-card-body">' +
+    '<div class="wallet-fund-card-body">' +
       '<table>' +
         '<thead><tr><th>佣金公基金</th><th>存入</th><th>自存現金</th><th>提領</th></tr></thead>' +
         '<tbody><tr>' +
@@ -9295,7 +9325,7 @@ function _renderFundCard() {
     html += '</tbody></table></div>';
   }
 
-  html += '</div></div>';  // 关闭 .wallet-agent-card 和 .wallet-agent-grid
+  html += '</div>';  // 关闭 .wallet-fund-card
 
   container.innerHTML = html;
 }
@@ -9415,8 +9445,23 @@ function _renderAgentWalletCards() {
 
 var _trendChart = null;
 
+/** 设置 Chart.js 全局 tooltip 暗色主题 */
+function _initChartDefaults() {
+  if (typeof Chart === 'undefined' || _initChartDefaults._done) return;
+  _initChartDefaults._done = true;
+  Chart.defaults.plugins.tooltip.backgroundColor = UI_COLORS.bgElevated;
+  Chart.defaults.plugins.tooltip.titleColor = UI_COLORS.textPrimary;
+  Chart.defaults.plugins.tooltip.bodyColor = UI_COLORS.textSecondary;
+  Chart.defaults.plugins.tooltip.borderColor = UI_COLORS.borderSubtle;
+  Chart.defaults.plugins.tooltip.borderWidth = 1;
+  Chart.defaults.plugins.tooltip.padding = 10;
+  Chart.defaults.plugins.tooltip.cornerRadius = 8;
+  Chart.defaults.plugins.tooltip.displayColors = false;
+}
+
 function renderTrendChart(txs, month) {
   if (typeof Chart === 'undefined') return;
+  _initChartDefaults();
   var canvas = document.querySelector('#page-overview .chart-full canvas');
   if (!canvas) return;
 
@@ -9439,7 +9484,7 @@ function renderTrendChart(txs, month) {
         label: '洗碼量 (萬)',
         data: volumes,
         borderColor: UI_COLORS.techCyan,
-        backgroundColor: 'rgba(0,212,255,0.08)',
+        backgroundColor: hexToRgba(UI_COLORS.techCyan, 0.08),
         fill: true,
         tension: 0.3,
         pointRadius: 3,
@@ -10228,6 +10273,20 @@ function rmHandleImport(event) {
   if (RM && RM.handleImport) {
     RM.handleImport(event);
   }
+}
+
+/** 桌面端日期输入同步到三联动 select 和 hidden input */
+function rmSyncDateInput(prefix) {
+  var dtInput = document.getElementById('rm-' + prefix + '-dt');
+  var hidden = document.getElementById('rm-' + prefix);
+  if (!dtInput || !hidden) return;
+  var val = dtInput.value;
+  hidden.value = val;
+  // 同步到三联动 select
+  if (typeof rmSetDateSels === 'function') {
+    rmSetDateSels('rm-' + prefix, val);
+  }
+  rmCalcNights();
 }
 
 // ============================================================================
