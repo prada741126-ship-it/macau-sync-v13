@@ -5423,7 +5423,7 @@ function syncUploadAll() {
 
   var txs = State.get('txs');
   var fundWithdrawals = State.get('fundWithdrawals');
-  var agentList = State.get('agentList');
+  // ★ FIX: agentList 不在函數入口捕獲，避免 watchers 更新後用舊數據覆蓋
   var agentWallets = State.get('agentWallets');
   var workingMonth = State.get('workingMonth');
   var bookings = State.get('bookings');
@@ -5465,13 +5465,18 @@ function syncUploadAll() {
   // 3. 代理名單：直接 set() 推送本地到 Firebase（不合并）
   //    CRUD 操作（addAgent/removeAgent/renameAgent）已透過 syncAgentListToFirebase 即時推送，
   //    此處作為安全網確保頁面加載時本地正確數據能到達 Firebase
-  db.ref(FB_PATH.AGENT_LIST).set(agentList.slice().sort(function(a, b) { return a.localeCompare(b); }), function(err) {
-    if (err) {
-      console.error('[v13:uploader] AGENT_LIST set FAILED:', err.message || err);
-    } else {
-      console.log('[v13:uploader] ✅ AGENT_LIST pushed: ' + agentList.length + ' agents', JSON.stringify(agentList));
-    }
-  });
+  // ★ FIX: set 回調內實時讀取 State，避免用入隊時的舊數據覆蓋 watchers 已更新的數據
+  (function() {
+    var _al = State.get('agentList');
+    if (!Array.isArray(_al)) _al = [];
+    db.ref(FB_PATH.AGENT_LIST).set(_al.slice().sort(function(a, b) { return a.localeCompare(b); }), function(err) {
+      if (err) {
+        console.error('[v13:uploader] AGENT_LIST set FAILED:', err.message || err);
+      } else {
+        console.log('[v13:uploader] ✅ AGENT_LIST pushed: ' + _al.length + ' agents', JSON.stringify(_al));
+      }
+    });
+  })();
 
   // 4. 代理钱包：transaction 原子合併（★ 使用 mergeWallets 时间戳决胜策略）
   // ★ FIX: mergeWallets(local, remote) — local=agentWallets, remote=rw
