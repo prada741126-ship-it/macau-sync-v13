@@ -17,7 +17,7 @@
 // 系统识别
 // ============================================================================
 var APP = {
-  VERSION:       'v13.0.1',
+  VERSION:       'v13.0.2',
   TITLE:         '澳門洗碼報表',
   SYSTEM_NAME:   '博盈國際會',
   SYSTEM_SUB:    '洗碼管理系統',
@@ -1634,12 +1634,12 @@ var Store = (function() {
   // --- 代理名单 ---
   function saveAgentList(list) {
     save(STORAGE_KEYS.AGENT_LIST, list, false);
-    console.log('[v13:store] 💾 saveAgentList: ' + JSON.stringify(list));
+    if (typeof debugLog === 'function') debugLog('v13-dlog-cya', '💾 saveAgentList: ' + JSON.stringify(list));
   }
   function loadAgentList() {
     var raw = localStorage.getItem(STORAGE_KEYS.AGENT_LIST);
     var result = load(STORAGE_KEYS.AGENT_LIST, false) || [];
-    console.log('[v13:store] 📖 loadAgentList: raw=' + raw + ' parsed=' + JSON.stringify(result));
+    if (typeof debugLog === 'function') debugLog('v13-dlog-cya', '📖 loadAgentList: raw=' + raw + ' → ' + JSON.stringify(result));
     return result;
   }
 
@@ -3611,32 +3611,32 @@ function addAgent(name) {
  * @returns {object}
  */
 function removeAgent(name) {
-  console.log('[v13:agent] 🔴 removeAgent CALLED: name=' + name + ', before=' + JSON.stringify(State.get('agentList')));
+  debugLog('v13-dlog-red', '🔴 removeAgent(' + name + ') before=' + JSON.stringify(State.get('agentList')));
   var removed = false;
   State.update('agentList', function(arr) {
     var idx = arr.indexOf(name);
     if (idx >= 0) {
       arr.splice(idx, 1);
       removed = true;
-      console.log('[v13:agent] 🔴 spliced index=' + idx + ', after splice=' + JSON.stringify(arr));
+      debugLog('v13-dlog-red', '🔴 spliced idx=' + idx + ' after=' + JSON.stringify(arr));
     }
     return arr;
   });
 
   if (!removed) {
-    console.warn('[v13:agent] 🔴 removeAgent NOT FOUND: ' + name);
+    debugLog('v13-dlog-ylw', '⚠ removeAgent NOT FOUND: ' + name);
     return { success: false, error: '代理 "' + name + '" 不存在' };
   }
 
   var newList = State.get('agentList');
-  console.log('[v13:agent] 🔴 State updated: ' + JSON.stringify(newList));
+  debugLog('v13-dlog-red', '🔴 State.get → ' + JSON.stringify(newList));
   Store.saveAgentList(newList);
-  // ★ 验证写入：立即读回确认
+  // ★ 验证写入
   var verify = Store.loadAgentList();
-  console.log('[v13:agent] 🔴 localStorage saved, verify readback: ' + JSON.stringify(verify) + ' (match=' + (JSON.stringify(verify) === JSON.stringify(newList)) + ')');
+  debugLog('v13-dlog-red', '🔴 localStorage verify: ' + JSON.stringify(verify) + ' match=' + (JSON.stringify(verify) === JSON.stringify(newList)));
   syncAgentListToFirebase(newList);
   Events.emit(EVENTS.AGENT_LIST_UPDATED, newList);
-  console.log('[v13:agent] ✅ removeAgent DONE: ' + name + ' removed, remaining=' + JSON.stringify(newList));
+  debugLog('v13-dlog-grn', '✅ removeAgent DONE. remaining=' + JSON.stringify(newList));
   return { success: true, name: name };
 }
 
@@ -9067,6 +9067,53 @@ function renderRoomChart(bookings, month) {
  */
 
 // ============================================================================
+// 手機調試面板 (內建可視 log，不需開 Console)
+// ============================================================================
+var _debugLines = [];
+var _debugMaxLines = 120;
+
+/** 寫入一筆日誌到螢幕面板 + console */
+function debugLog(className, msg) {
+  var ts = new Date().toISOString().slice(11, 23);
+  var line = '<div class="v13-dlog"><span class="v13-dlog-ts">' + ts + '</span> <span class="' + className + '">' + msg + '</span></div>';
+  _debugLines.push(line);
+  if (_debugLines.length > _debugMaxLines) _debugLines.shift();
+  var panel = document.getElementById('v13-debug-log');
+  if (panel) panel.innerHTML = _debugLines.join('');
+  console.log(msg);
+}
+
+function debugShow() {
+  var panel = document.getElementById('v13-debug-panel');
+  if (panel) panel.style.display = 'block';
+  localStorage.setItem('macau_debug', '1');
+}
+function debugHide() {
+  var panel = document.getElementById('v13-debug-panel');
+  if (panel) panel.style.display = 'none';
+}
+function debugClear() {
+  _debugLines = [];
+  var panel = document.getElementById('v13-debug-log');
+  if (panel) panel.innerHTML = '';
+}
+
+// ★ 自動啟用條件: URL ?debug=1 或 localStorage macau_debug=1
+(function() {
+  if (location.search.indexOf('debug=1') !== -1) {
+    localStorage.setItem('macau_debug', '1');
+  }
+  if (localStorage.getItem('macau_debug') === '1') {
+    // 延遲顯示以確保 DOM 已就緒
+    var _di = setInterval(function() {
+      var panel = document.getElementById('v13-debug-panel');
+      if (panel) { panel.style.display = 'block'; clearInterval(_di); }
+    }, 200);
+    setTimeout(function() { clearInterval(_di); }, 5000);
+  }
+})();
+
+// ============================================================================
 // 交易表单桥接
 // ============================================================================
 
@@ -10213,6 +10260,11 @@ Events.on(EVENTS.HC_CONFIG_UPDATED, function() {
     try {
       Store.loadAll(true);  // silent = true，不触发事件
 
+      // ★ 调试：显示加载结果
+      if (typeof debugLog === 'function') {
+        debugLog('v13-dlog-cya', '📦 loadAll done → agentList: ' + JSON.stringify(State.get('agentList')));
+      }
+
       // 如果没有工作月份，设为当前月
       if (!State.get('workingMonth')) {
         State.set('workingMonth', currentMonth());
@@ -10514,7 +10566,8 @@ Events.on(EVENTS.HC_CONFIG_UPDATED, function() {
 
     console.log('[v13:app] Booting v13...');
     console.log('[v13:app] Version:', APP.VERSION);
-    console.log('%c🔍 [v13:app] AGENT SYNC DEBUG BUILD — v13.0.1 — 打开Console查看详细日志', 'font-size:16px;color:#ff0;background:#000;padding:4px 8px');
+    console.log('%c🔍 [v13:app] v13.0.2 — 手機版? URL加 ?debug=1 開啟螢幕診斷面板', 'font-size:16px;color:#0f0;background:#000;padding:4px 8px');
+    if (typeof debugLog === 'function') debugLog('v13-dlog-grn', '🚀 App boot v13.0.2 — 診斷面板已啟動');
     console.log('[v13:app] Events registered:', JSON.stringify(Events.listAll()));
 
     // 1. 检测依赖
