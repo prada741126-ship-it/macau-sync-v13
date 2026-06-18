@@ -5422,6 +5422,7 @@ function syncUploadAll() {
 
   var txs = State.get('txs');
   var fundWithdrawals = State.get('fundWithdrawals');
+  var agentList = State.get('agentList');
   var agentWallets = State.get('agentWallets');
   var workingMonth = State.get('workingMonth');
   var bookings = State.get('bookings');
@@ -5460,9 +5461,16 @@ function syncUploadAll() {
     }
   });
 
-  // 3. 代理名單：移除 — 個別 CRUD (addAgent/removeAgent/renameAgent) 已即時推送
-  //    原先用 mergeAgentLists 做並集合併導致刪除操作無法傳播，
-  //    syncUploadAll 作為安全網不應覆寫遠端代理名單，避免用本機過時數據覆蓋新變更
+  // 3. 代理名單：直接 set() 推送本地到 Firebase（不合并）
+  //    CRUD 操作（addAgent/removeAgent/renameAgent）已透過 syncAgentListToFirebase 即時推送，
+  //    此處作為安全網確保頁面加載時本地正確數據能到達 Firebase
+  db.ref(FB_PATH.AGENT_LIST).set(agentList.slice().sort(function(a, b) { return a.localeCompare(b); }), function(err) {
+    if (err) {
+      console.error('[v13:uploader] AGENT_LIST set FAILED:', err.message || err);
+    } else {
+      console.log('[v13:uploader] ✅ AGENT_LIST pushed: ' + agentList.length + ' agents');
+    }
+  });
 
   // 4. 代理钱包：transaction 原子合併（★ 使用 mergeWallets 时间戳决胜策略）
   // ★ FIX: mergeWallets(local, remote) — local=agentWallets, remote=rw
@@ -5542,7 +5550,8 @@ function syncSetWithRetry(ref, data, attempt) {
  * 对照档: 第九节 initSync() — 7 个监听器
  */
 
-var _watchers = {};  // 已注册的监听器引用
+var _watchers = {};           // 已注册的监听器引用
+var _agentListWatcherReady = false;  // 跳过首次触发（防止 F5 后用 Firebase 旧数据覆盖 localStorage 正确数据）
 
 /**
  * 启动所有 Firebase 即时监听器 (对照档 initSync)
@@ -5596,22 +5605,29 @@ function startWatchers() {
   });
 
   // 3. 监听代理名单
-  //    ★ 用直接替换（非 mergeAgentLists 并集合并），确保删除操作能传播
-  //      原先 mergeAgentLists 做并集合并，删掉的代理会被远端数据合并回来
+  //    ★ 策略：首次触发跳过（localStorage 在 CRUD 操作中先于 Firebase 保存，是权威来源）
+  //       后续触发才处理（来自其他设备的远程变更）
   _watchers.agentList = db.ref(FB_PATH.AGENT_LIST).on('value', function(snap) {
     var remote = snap.val();
     if (!remote || !Array.isArray(remote)) return;
 
-    // ★ 寬限期檢查：本地剛修改代理名單，跳過遠端覆蓋（防止 set() 未到達 Firebase 時被舊數據覆蓋）
+    // ★ 首次触发（页面加载时）跳过：localStorage 已保存正确数据，不讓 Firebase 可能尚存的舊數據覆蓋
+    if (!_agentListWatcherReady) {
+      _agentListWatcherReady = true;
+      console.log('[v13:watchers] 🔇 Agent list watcher first fire skipped (localStorage is authoritative)');
+      return;
+    }
+
+    // ★ 寬限期檢查：本地剛修改代理名單，跳過遠端覆蓋
     if (typeof isAgentListGracePeriod === 'function' && isAgentListGracePeriod()) {
       console.log('[v13:watchers] ⏳ Agent list grace period active, skip remote overwrite');
       return;
     }
 
     var local = State.get('agentList');
-    // 直接用远端名单替换本地（远端是权威来源）
     var merged = remote.slice().sort(function(a, b) { return a.localeCompare(b); });
     if (JSON.stringify(merged) !== JSON.stringify(local)) {
+      console.log('[v13:watchers] 🔄 Agent list remote update: ' + local.length + ' → ' + merged.length + ' agents');
       State.set('agentList', merged);
       Store.saveAgentList(merged);
       Events.emit(EVENTS.AGENT_LIST_UPDATED, merged);
@@ -5738,23 +5754,8 @@ function syncDownloadAll() {
     }
   });
 
-  db.ref(FB_PATH.AGENT_LIST).once('value', function(snap) {
-    var remote = snap.val();
-    if (!remote || !Array.isArray(remote)) return;
-    var local = State.get('agentList');
-    // ★ 寬限期檢查：本地剛修改代理名單，跳過遠端覆蓋
-    if (typeof isAgentListGracePeriod === 'function' && isAgentListGracePeriod()) {
-      console.log('[v13:watchers] ⏳ syncDownloadAll agent list grace period active, skip');
-      return;
-    }
-    // ★ 直接替换（非 mergeAgentLists），确保删除操作能传播
-    var merged = remote.slice().sort(function(a, b) { return a.localeCompare(b); });
-    if (JSON.stringify(merged) !== JSON.stringify(local)) {
-      State.set('agentList', merged);
-      Store.saveAgentList(merged);
-      Events.emit(EVENTS.AGENT_LIST_UPDATED, merged);
-    }
-  });
+  // 3. 代理名單：不從 Firebase 拉取（localStorage 在 CRUD 先保存，是權威來源）
+  //    syncUploadAll 會將本地推送到 Firebase；watcher 處理來自其他設備的即時變更
 
   db.ref(FB_PATH.AGENT_WALLETS).once('value', function(snap) {
     var remote = fbObjToWallets(snap.val());
