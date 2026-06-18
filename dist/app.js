@@ -5659,20 +5659,12 @@ function startWatchers() {
       return;
     }
 
-    // CASE 3: 兩邊都有數據 → 取并集（不丢失任何一方的代理）
-    var merged = remote.slice();
-    var localSet = {};
-    for (var _la = 0; _la < local.length; _la++) { localSet[local[_la]] = true; }
-    for (var _ra = 0; _ra < remote.length; _ra++) {
-      if (!localSet[remote[_ra]]) {
-        local.push(remote[_ra]);
-        localSet[remote[_ra]] = true;
-      }
-    }
-    console.log('[v13:watchers] AGENT_LIST MERGE: ' + local.length + ' agents');
-    State.set('agentList', local);
-    Store.saveAgentList(local);
-    Events.emit(EVENTS.AGENT_LIST_UPDATED, local);
+    // CASE 3: 兩邊都有數據但內容不同 → remote 為 Firebase 權威來源，直接覆蓋
+    //   取并集會導致刪除同步失敗（被刪代理復活），必須用 remote 覆蓋
+    console.log('[v13:watchers] AGENT_LIST OVERRIDE: local=' + local.length + ' → remote=' + remote.length, 'local:', JSON.stringify(local), 'remote:', JSON.stringify(remote));
+    State.set('agentList', remote);
+    Store.saveAgentList(remote);
+    Events.emit(EVENTS.AGENT_LIST_UPDATED, remote);
   });
 
   // 4. 监听代理钱包
@@ -5818,20 +5810,12 @@ function syncDownloadAll() {
       return;
     }
 
-    // 兩邊都有 → 取并集
-    var merged = remote.slice();
-    var localSet = {};
-    for (var _la = 0; _la < local.length; _la++) { localSet[local[_la]] = true; }
-    for (var _rb = 0; _rb < remote.length; _rb++) {
-      if (!localSet[remote[_rb]]) {
-        merged.push(remote[_rb]);
-      }
-    }
-    if (JSON.stringify(merged.sort()) !== JSON.stringify(local.slice().sort())) {
-      console.log('[v13:watchers] syncDownloadAll AGENT_LIST merged: ' + merged.length + ' agents');
-      State.set('agentList', merged);
-      Store.saveAgentList(merged);
-      Events.emit(EVENTS.AGENT_LIST_UPDATED, merged);
+    // 兩邊都有 → remote 為 Firebase 權威來源，直接覆蓋
+    if (JSON.stringify(remote.slice().sort()) !== JSON.stringify(local.slice().sort())) {
+      console.log('[v13:watchers] syncDownloadAll AGENT_LIST override: local=' + local.length + ' → remote=' + remote.length);
+      State.set('agentList', remote);
+      Store.saveAgentList(remote);
+      Events.emit(EVENTS.AGENT_LIST_UPDATED, remote);
     }
   });
 
