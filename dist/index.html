@@ -11,7 +11,7 @@
   <!-- 版本快取清除 -->
   <script>
     (function() {
-      var APP_VERSION = '13.0.0.1781783930295';
+      var APP_VERSION = '13.0.0.1781786476564';
       var stored = localStorage.getItem('macau_app_version');
       var qs = location.search || '';
       if (stored && stored !== APP_VERSION && !sessionStorage.getItem('_v13_reloaded')) {
@@ -117,13 +117,20 @@ html {
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', 'Source Han Sans TC', sans-serif;
   background: var(--bg-base);
   color: var(--text-primary);
   line-height: 1.6;
   overflow-x: hidden;
   min-height: 100vh;
 }
+
+/* 字重增强: light装饰 / normal / semibold / bold / heavy-KPI */
+.fw-light  { font-weight: 300; }
+.fw-normal { font-weight: 400; }
+.fw-semibold { font-weight: 600; }
+.fw-bold   { font-weight: 700; }
+.fw-heavy  { font-weight: 800; }
 
 a { color: var(--tech-cyan); text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -189,8 +196,12 @@ th {
   top: 0;
   z-index: 1;
 }
+/* Zebra striping — 偶數行微亮，提升長表格可讀性 */
+tr:nth-child(even) td {
+  background: rgba(255,255,255,0.012);
+}
 tr:hover td {
-  background: rgba(255,255,255,0.02);
+  background: rgba(255,255,255,0.03);
 }
 
 /* css/layout.css */
@@ -405,6 +416,29 @@ tr:hover td {
   font-size: 15px;
   font-weight: 700;
   color: var(--gold-soft);
+}
+/* ── Month Nav Arrows ── */
+.month-nav-btn {
+  background: none;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: 12px;
+  width: 28px; height: 28px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+.month-nav-btn:hover {
+  color: var(--gold-soft);
+  border-color: var(--gold-soft);
+  background: rgba(201,168,76,0.08);
+}
+.month-nav-btn:active {
+  transform: scale(0.92);
+  background: rgba(201,168,76,0.15);
 }
 #month-status { font-size: 12px; color: var(--text-muted); }
 #sync-dot {
@@ -2217,7 +2251,7 @@ tr.rank-1 td {
   <!-- Firebase 初始化已统一由 src/sync/firebase.js 的 initFirebase() 处理（带重试） -->
 
   <!-- JS: 合并后由 build.js 输出为 app.js -->
-  <script src="app.js?v=13.0.0.1781783930295"></script>
+  <script src="app.js?v=13.0.0.1781786476564"></script>
 </head>
 <body>
 
@@ -2310,7 +2344,9 @@ tr.rank-1 td {
 
         <!-- 月份栏 -->
         <div class="month-bar" id="month-bar">
+          <button class="month-nav-btn" id="btn-prev-month" onclick="switchMonth(-1)" title="上个月 (Ctrl+◀)">◀</button>
           <div id="month-badge">2026-06</div>
+          <button class="month-nav-btn" id="btn-next-month" onclick="switchMonth(1)" title="下个月 (Ctrl+▶)">▶</button>
           <div id="month-status">工作中</div>
           <div id="sync-dot" class="connected"></div>
           <div id="sync-text">已同步</div>
@@ -2358,7 +2394,7 @@ tr.rank-1 td {
               <thead>
                 <tr>
                   <th>類型</th><th>日期</th><th>代理</th><th>客戶</th><th>地點</th>
-                  <th>洗碼量</th><th>佣金</th><th>碼糧</th><th>已提領</th><th>未提領</th>
+                  <th class="text-right">洗碼量</th><th class="text-right">佣金</th><th class="text-right">碼糧</th><th class="text-right">已提領</th><th class="text-right">未提領</th>
                   <th>備註</th><th>操作</th>
                 </tr>
               </thead>
@@ -2394,14 +2430,14 @@ tr.rank-1 td {
           <div id="query-kpi" class="kpi-grid"></div>
           <div class="table-scroll">
             <table id="query-table">
-              <thead id="query-thead"><tr><th>日期</th><th>代理</th><th>地點</th><th>洗碼量</th><th>碼糧</th><th>已提領</th><th>未提領</th><th>備註</th></tr></thead>
+              <thead id="query-thead"><tr><th>日期</th><th>代理</th><th>地點</th><th class="text-right">洗碼量</th><th class="text-right">碼糧</th><th class="text-right">已提領</th><th class="text-right">未提領</th><th>備註</th></tr></thead>
               <tbody id="query-tbody"></tbody>
             </table>
           </div>
           <div id="query-agent-summary-section" style="margin-top:20px"><strong>代理帳務匯總</strong>
           <div class="table-scroll" style="margin-top:8px">
             <table class="agent-summary-table">
-              <thead><tr><th>代理</th><th>洗碼量</th><th>碼糧</th><th>已提領</th><th>未提領</th><th>💰 錢包餘額</th></tr></thead>
+              <thead><tr><th>代理</th><th class="text-right">洗碼量</th><th class="text-right">碼糧</th><th class="text-right">已提領</th><th class="text-right">未提領</th><th class="text-right">💰 錢包餘額</th></tr></thead>
               <tbody></tbody>
             </table>
           </div></div>
@@ -2412,7 +2448,7 @@ tr.rank-1 td {
           <div id="summary-kpi" class="kpi-grid"></div>
           <div class="table-scroll">
             <table id="summary-table">
-              <thead><tr><th>代理</th><th>場地</th><th>洗碼量</th><th>碼糧</th><th>已提領</th><th>未提領</th></tr></thead>
+              <thead><tr><th>代理</th><th>場地</th><th class="text-right">洗碼量</th><th class="text-right">碼糧</th><th class="text-right">已提領</th><th class="text-right">未提領</th></tr></thead>
               <tbody></tbody>
             </table>
           </div>
@@ -2460,7 +2496,7 @@ tr.rank-1 td {
               <table class="room-table">
                 <thead>
                   <tr><th>日期</th><th>代理</th><th>客戶</th><th>體系</th><th>酒店</th><th>房型</th>
-                      <th>入住</th><th>退房</th><th>天數</th><th>單價</th><th>總費用</th><th>狀態</th><th>操作</th></tr>
+                      <th>入住</th><th>退房</th><th class="text-right">天數</th><th class="text-right">單價</th><th class="text-right">總費用</th><th>狀態</th><th>操作</th></tr>
                 </thead>
                 <tbody></tbody>
               </table>
@@ -2728,6 +2764,6 @@ tr.rank-1 td {
     <div id="v13-debug-log"></div>
   </div>
 
-  <!-- BUILD: v13.0.0 | 2026-06-11 | 2026-06-18T11:58:50.295Z -->
+  <!-- BUILD: v13.0.0 | 2026-06-11 | 2026-06-18T12:41:16.564Z -->
 </body>
 </html>
