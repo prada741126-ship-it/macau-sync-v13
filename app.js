@@ -5188,7 +5188,12 @@ function removeBookingFromFirebase(fbKey) {
 }
 
 /**
- * 同步代理名单到 Firebase（用 transaction 原子合併，防止并发丢失）
+ * 同步代理名单到 Firebase（用 set() 覆写，支持新增和删除同步）
+ *
+ * 原先用 transaction() 做并集合并，导致删除操作无法传播——
+ * 删掉的代理会被远端数据合并回来。改用 set() 覆写整个名单，
+ * 确保删除操作能正确推送到 Firebase 并传播到所有设备。
+ *
  * @param {Array} agentList - 當前本地代理名單
  */
 function syncAgentListToFirebase(agentList) {
@@ -5198,24 +5203,13 @@ function syncAgentListToFirebase(agentList) {
     return;
   }
   try {
-    _db.ref(FB_PATH.AGENT_LIST).transaction(function(remote) {
-      if (!remote || !Array.isArray(remote)) return agentList;
-      // 原子合併：本地 + 遠端（去重）
-      var merged = remote.slice();
-      for (var i = 0; i < agentList.length; i++) {
-        if (merged.indexOf(agentList[i]) === -1) {
-          merged.push(agentList[i]);
-        }
-      }
-      merged.sort(function(a, b) { return a.localeCompare(b); });
-      // 只有当真正有变化时才返回新值（返回 undefined 表示中止事务）
-      if (JSON.stringify(merged) === JSON.stringify(remote)) return;
-      return merged;
-    }, function(err, committed, snapshot) {
+    var sorted = agentList.slice().sort(function(a, b) { return a.localeCompare(b); });
+    _db.ref(FB_PATH.AGENT_LIST).set(sorted, function(err) {
       if (err) {
-        console.error('[v13:firebase] syncAgentList transaction FAILED:', err.message || err);
-        // 失败时重试（用 enqueueUpload 排队）
+        console.error('[v13:firebase] syncAgentList set FAILED:', err.message || err);
         enqueueUpload(function() { syncAgentListToFirebase(agentList); });
+      } else {
+        console.log('[v13:firebase] ✅ syncAgentList OK:', sorted.length + ' agents');
       }
     });
   } catch (e) {
@@ -5586,12 +5580,15 @@ function startWatchers() {
   });
 
   // 3. 监听代理名单
+  //    ★ 用直接替换（非 mergeAgentLists 并集合并），确保删除操作能传播
+  //      原先 mergeAgentLists 做并集合并，删掉的代理会被远端数据合并回来
   _watchers.agentList = db.ref(FB_PATH.AGENT_LIST).on('value', function(snap) {
     var remote = snap.val();
     if (!remote || !Array.isArray(remote)) return;
 
     var local = State.get('agentList');
-    var merged = mergeAgentLists(local, remote);
+    // 直接用远端名单替换本地（远端是权威来源）
+    var merged = remote.slice().sort(function(a, b) { return a.localeCompare(b); });
     if (JSON.stringify(merged) !== JSON.stringify(local)) {
       State.set('agentList', merged);
       Store.saveAgentList(merged);
@@ -5723,7 +5720,8 @@ function syncDownloadAll() {
     var remote = snap.val();
     if (!remote || !Array.isArray(remote)) return;
     var local = State.get('agentList');
-    var merged = mergeAgentLists(local, remote);
+    // ★ 直接替换（非 mergeAgentLists），确保删除操作能传播
+    var merged = remote.slice().sort(function(a, b) { return a.localeCompare(b); });
     if (JSON.stringify(merged) !== JSON.stringify(local)) {
       State.set('agentList', merged);
       Store.saveAgentList(merged);
@@ -10457,6 +10455,41 @@ Events.on(EVENTS.HC_CONFIG_UPDATED, function() {
     Events.on(EVENTS.WALLET_UPDATED, function() { if (typeof renderWallet === 'function') renderWallet(); _updateTopbarWallet(); });
     Events.on(EVENTS.WALLET_DELETED, function() { if (typeof renderWallet === 'function') renderWallet(); _updateTopbarWallet(); });
     Events.on(EVENTS.TXS_LOADED, function() { if (typeof renderWallet === 'function') renderWallet(); });
+
+    // ★ 代理名单变更（含 Firebase 同步）→ 刷新所有代理下拉选单 + 页面渲染
+    Events.on(EVENTS.AGENT_LIST_UPDATED, function() {
+      // 刷新交易表单代理下拉
+      if (typeof _populateTxAgentDropdown === 'function') _populateTxAgentDropdown();
+      // 刷新查询页代理筛选器
+      if (typeof _populateQueryFilters === 'function') _populateQueryFilters();
+      // 刷新房务系统代理下拉和筛选器
+      if (typeof RM !== 'undefined' && RM.populateAgentDropdown) RM.populateAgentDropdown();
+      if (typeof RM !== 'undefined' && RM.populateAgentFilter) RM.populateAgentFilter();
+      // 刷新代理管理弹窗列表（如果弹窗开着）
+      if (typeof _renderAgentMgrList === 'function') _renderAgentMgrList();
+      // 重新渲染当前页面（代理相关数据可能变化）
+      var page = State.get('currentPage');
+      if (page === 'overview') renderOverview();
+      if (page === 'all') renderAll();
+      if (page === 'query') doQuery();
+      if (page === 'summary') renderSummary();
+      if (page === 'wallet' && typeof renderWallet === 'function') renderWallet();
+      if (page === 'room' && typeof RM !== 'undefined' && RM.render) RM.render();
+      _updateTopbarWallet();
+    });
+
+    // ★ 代理钱包从 Firebase 同步下来 → 刷新总钱包页和 topbar
+    Events.on(EVENTS.WALLETS_LOADED, function() {
+      if (typeof renderWallet === 'function') renderWallet();
+      _updateTopbarWallet();
+    });
+
+    // ★ 公基金从 Firebase 同步下来 → 刷新总览和总钱包页
+    Events.on(EVENTS.FUND_LOADED, function() {
+      renderOverview();
+      if (typeof renderWallet === 'function') renderWallet();
+      _updateTopbarWallet();
+    });
   }
 
   function _updateTopbarWallet() {
