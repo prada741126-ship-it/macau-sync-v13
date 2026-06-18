@@ -112,9 +112,7 @@ function _renderAllTable(txs) {
         return function(e) {
           e.stopPropagation();
           console.log('[v13:all] 🗑️ 刪除按鈕點擊, fbKey=' + key);
-          var confirmed = confirm('確定刪除這筆交易？');
-          console.log('[v13:all] confirm 返回值: ' + confirmed);
-          if (confirmed) {
+          showConfirm('確定刪除這筆交易？', function() {
             console.log('[v13:all] 📤 呼叫 deleteTx(' + key + ')...');
             var result = deleteTx(key);
             console.log('[v13:all] deleteTx 返回: ' + (result ? '成功 (' + result._fbKey + ')' : 'null (刪除失敗!)'));
@@ -128,7 +126,7 @@ function _renderAllTable(txs) {
               console.log('[v13:all] ⚠️ 數據已成功刪除，請手動刷新頁面');
             }
             console.log('[v13:all] ✅ renderAll 完成, 當前 txs 數量: ' + State.get('txs').length);
-          }
+          });
         };
       })(fbKey);
       tdBtn.appendChild(delBtn);

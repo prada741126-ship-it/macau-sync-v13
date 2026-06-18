@@ -90,6 +90,7 @@ function deleteFund(fbKey) {
 
   if (!deleted) return null;
   Store.saveFund(State.get('fundWithdrawals'));
+  trackRecentlyDeleted('fund', fbKey);
   removeFundFromFirebase(fbKey);
   Events.emit(EVENTS.FUND_DELETED, deleted);
   return deleted;

@@ -5,6 +5,10 @@
  * 对照档: 第七节模块11
  * 
  * 事件: emit agentList:updated
+ * 
+ * ★ 同步策略：Push-only（本地權威）
+ *   CRUD 操作即時推送 Firebase，監聽器同步跨設備變更。
+ *   跨設備同步：最後推送者勝出。無競態條件。
  */
 
 /**
@@ -41,23 +45,33 @@ function addAgent(name) {
  * @returns {object}
  */
 function removeAgent(name) {
+  debugLog('v13-dlog-red', '🔴 removeAgent(' + name + ') before=' + JSON.stringify(State.get('agentList')));
   var removed = false;
   State.update('agentList', function(arr) {
     var idx = arr.indexOf(name);
     if (idx >= 0) {
       arr.splice(idx, 1);
       removed = true;
+      debugLog('v13-dlog-red', '🔴 spliced idx=' + idx + ' after=' + JSON.stringify(arr));
     }
     return arr;
   });
 
   if (!removed) {
+    debugLog('v13-dlog-ylw', '⚠ removeAgent NOT FOUND: ' + name);
     return { success: false, error: '代理 "' + name + '" 不存在' };
   }
 
-  Store.saveAgentList(State.get('agentList'));
-  syncAgentListToFirebase(State.get('agentList'));
-  Events.emit(EVENTS.AGENT_LIST_UPDATED, State.get('agentList'));
+  var newList = State.get('agentList');
+  debugLog('v13-dlog-red', '🔴 State.get → ' + JSON.stringify(newList));
+  Store.saveAgentList(newList);
+  trackRecentlyDeleted('agent', name);
+  // ★ 验证写入
+  var verify = Store.loadAgentList();
+  debugLog('v13-dlog-red', '🔴 localStorage verify: ' + JSON.stringify(verify) + ' match=' + (JSON.stringify(verify) === JSON.stringify(newList)));
+  syncAgentListToFirebase(newList);
+  Events.emit(EVENTS.AGENT_LIST_UPDATED, newList);
+  debugLog('v13-dlog-grn', '✅ removeAgent DONE. remaining=' + JSON.stringify(newList));
   return { success: true, name: name };
 }
 

@@ -16,6 +16,8 @@
 // ============================================================================
 var _cryptoReady = false;
 var _cryptoError = '';
+var _cryptoPollTimer = null;
+var _cryptoRetryDone = false;
 
 /**
  * 检测 CryptoJS 是否可用
@@ -25,11 +27,20 @@ function checkCrypto() {
   if (typeof CryptoJS !== 'undefined' && CryptoJS.AES) {
     _cryptoReady = true;
     _cryptoError = '';
+    if (_cryptoPollTimer) { clearInterval(_cryptoPollTimer); _cryptoPollTimer = null; }
+    _cryptoRetryDone = true;
     return true;
   }
   _cryptoReady = false;
   _cryptoError = 'CryptoJS 未載入 — 加密功能不可用，請檢查 CDN 連線';
   console.error('[v13:crypto] FATAL: CryptoJS is not defined. Encryption is UNAVAILABLE.');
+
+  // ★ 如果还没设置重试，启动轮询（参照 Firebase 模式）
+  if (!_cryptoRetryDone) {
+    _cryptoRetryDone = true;
+    _startCryptoPoll();
+  }
+
   return false;
 }
 
@@ -39,6 +50,68 @@ function checkCrypto() {
  */
 function isCryptoReady() {
   return _cryptoReady;
+}
+
+/**
+ * 启动 CryptoJS 轮询重试
+ * 当 CDN 异步加载晚于 app.js 执行时，通过轮询等待 CryptoJS 就绪
+ */
+function _startCryptoPoll() {
+  var pollCount = 0;
+  _cryptoPollTimer = setInterval(function() {
+    pollCount++;
+    if (typeof CryptoJS !== 'undefined' && CryptoJS.AES) {
+      _cryptoReady = true;
+      _cryptoError = '';
+      clearInterval(_cryptoPollTimer);
+      _cryptoPollTimer = null;
+      console.log('[v13:crypto] ✅ CryptoJS loaded via poll #' + pollCount + ' — encryption ACTIVE');
+
+      // ★ 加密就绪后：尝试从 localStorage 重新加载加密数据
+      // 之前因为 decryptData 返回 [] 导致数据丢失，现在重新解密
+      try {
+        var rawTxs = localStorage.getItem(STORAGE_KEYS.DATA);
+        if (rawTxs && rawTxs.indexOf('ENC:') === 0) {
+          var decrypted = decryptData(rawTxs);
+          if (decrypted.length > 0) {
+            State.set('txs', decrypted);
+            Events.emit(EVENTS.TXS_LOADED, decrypted);
+            console.log('[v13:crypto] 🔓 Restored ' + decrypted.length + ' encrypted TXS records');
+          }
+        }
+        var rawFund = localStorage.getItem(STORAGE_KEYS.FUND);
+        if (rawFund && rawFund.indexOf('ENC:') === 0) {
+          var decFund = decryptData(rawFund);
+          if (decFund.length > 0) {
+            State.set('fundWithdrawals', decFund);
+            Events.emit(EVENTS.FUND_LOADED, decFund);
+            console.log('[v13:crypto] 🔓 Restored ' + decFund.length + ' encrypted FUND records');
+          }
+        }
+        var rawWallets = localStorage.getItem(STORAGE_KEYS.AGENT_WALLETS);
+        if (rawWallets && rawWallets.indexOf('ENC:') === 0) {
+          var decWallets = decryptWallets(rawWallets);
+          if (decWallets && Object.keys(decWallets).length > 0) {
+            State.set('agentWallets', decWallets);
+            Events.emit(EVENTS.WALLETS_LOADED, decWallets);
+            console.log('[v13:crypto] 🔓 Restored encrypted WALLET records');
+          }
+        }
+      } catch(re) {
+        console.error('[v13:crypto] Crypto restore error:', re);
+      }
+
+      // ★ 触发加密就绪事件
+      Events.emit(EVENTS.CRYPTO_READY);
+    }
+
+    if (pollCount >= 30) {
+      clearInterval(_cryptoPollTimer);
+      _cryptoPollTimer = null;
+      console.error('[v13:crypto] ❌ CryptoJS failed to load after 30s. Encryption permanently DISABLED.');
+      console.error('[v13:crypto]    请检查: 1) 网络是否可访问 cdn.jsdelivr.net  2) 防火墙/广告拦截器是否屏蔽');
+    }
+  }, 1000);
 }
 
 /**

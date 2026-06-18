@@ -31,14 +31,18 @@ function mergeTxs(local, remote) {
         var localTs = merged[rKey]._updatedAt || 0;
         var remoteTs = remote[j]._updatedAt || 0;
         if (remoteTs > localTs) {
+          // 远端胜出（可能是墓碑 _deleted:true）
           merged[rKey] = remote[j];
         }
       } else {
+        // 本地没有 → 远端胜出（包括墓碑）
         merged[rKey] = remote[j];
       }
     }
   }
 
+  // ★ 不过滤墓碑 — 墓碑由 watchers.js 在客户端侧过滤
+  //   Transaction 写回 Firebase 时需要保留墓碑，否则其他设备收不到删除通知
   for (var k in merged) {
     result.push(merged[k]);
   }
@@ -85,7 +89,7 @@ function mergeWallets(local, remote) {
 
     var result = [];
     for (var k in recordMap) {
-      result.push(recordMap[k]);
+      result.push(recordMap[k]);  // ★ 不过滤墓碑 — 由 watchers.js 在客户端侧过滤
     }
     if (result.length > 0) {
       merged[agent] = result;
@@ -117,7 +121,50 @@ function mergeArrays(local, remote) {
 
   var result = [];
   for (var k in map) {
-    result.push(map[k]);
+    // ★ 墓碑过滤：排除 _deleted:true 的远端删除标记
+    if (!map[k]._deleted) {
+      result.push(map[k]);
+    }
+  }
+  return result;
+}
+
+/**
+ * 合并订房数组（时间戳决胜策略，与 mergeTxs 一致）
+ * @param {Array} local - 本地订房数组
+ * @param {Array} remote - 远端订房数组
+ * @returns {Array} 合并结果（含墓碑，由调用方过滤）
+ */
+function mergeBookings(local, remote) {
+  var merged = {};
+
+  // 先收集本地
+  for (var i = 0; i < local.length; i++) {
+    var key = local[i]._fbKey;
+    if (key) merged[key] = local[i];
+  }
+  // 再合并远端（时间戳决胜）
+  for (var j = 0; j < remote.length; j++) {
+    var rKey = remote[j]._fbKey;
+    if (rKey) {
+      if (merged[rKey]) {
+        var localTs  = merged[rKey]._updatedAt || 0;
+        var remoteTs = remote[j]._updatedAt || 0;
+        if (remoteTs > localTs) {
+          // 远端更新（包括墓碑 _deleted:true）胜出
+          merged[rKey] = remote[j];
+        }
+      } else {
+        // 本地没有 → 远端胜出（包括新增和墓碑）
+        merged[rKey] = remote[j];
+      }
+    }
+  }
+
+  // ★ 不过滤墓碑 — 由 watchers.js 在客户端侧过滤
+  var result = [];
+  for (var k in merged) {
+    result.push(merged[k]);
   }
   return result;
 }

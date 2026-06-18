@@ -11,13 +11,29 @@
   <!-- 版本快取清除 -->
   <script>
     (function() {
-      var APP_VERSION = 'v13.0.0';
+      var APP_VERSION = '__VERSION__';
       var stored = localStorage.getItem('macau_app_version');
+      var qs = location.search || '';
       if (stored && stored !== APP_VERSION && !sessionStorage.getItem('_v13_reloaded')) {
         sessionStorage.setItem('_v13_reloaded', '1');
-        location.replace(location.href.split('?')[0] + '?v=' + APP_VERSION);
+        // 保留现有 URL 参数，附加版本号
+        var sep = qs ? '&' : '?';
+        location.replace(location.href.split('?')[0] + qs + sep + 'v=' + APP_VERSION);
       }
       localStorage.setItem('macau_app_version', APP_VERSION);
+    })();
+  </script>
+
+  <!-- vConsole 手机调试工具 (URL: ?debug=1 或 localStorage macau_debug=1) -->
+  <script>
+    (function() {
+      var debugOn = (location.search.indexOf('debug=1') !== -1) || localStorage.getItem('macau_debug') === '1';
+      if (!debugOn) return;
+      var s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/vconsole@3.15.1/dist/vconsole.min.js';
+      s.onload = function() { new VConsole(); console.log('[v13] vConsole 手机调试已启动'); };
+      s.onerror = function() { console.warn('[v13] vConsole 加载失败'); };
+      document.head.appendChild(s);
     })();
   </script>
 
@@ -165,6 +181,7 @@
           <button class="btn btn-sm" onclick="doBackup()"><span>📦 備份</span></button>
           <button class="btn btn-sm" onclick="syncUploadAll();showToast('同步中…','info')"><span>🔄 同步</span></button>
           <button class="btn btn-sm" onclick="openModal('shortcut-help-modal')"><span>⌨️ 快捷鍵</span></button>
+          <button class="btn btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="clearAllDataConfirm()" title="清除所有數據（危險操作）"><span>🗑️ 清除</span></button>
         </div>
       </div>
 
@@ -567,6 +584,29 @@
   <!-- 隐藏文件上传 -->
   <input type="file" id="file-input" accept=".csv" style="display:none" onchange="handleCSVImport(event)">
   <input type="file" id="rm-file-input" accept=".csv" style="display:none" onchange="rmHandleImport(event)">
+
+  <!-- 全局自訂確認框 (替代 window.confirm，兼容手機/iOS Safari/微信) -->
+  <div id="g-confirm-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:14px;padding:28px 24px 20px;max-width:320px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.25);text-align:center;">
+      <div id="g-confirm-msg" style="font-size:15px;color:#333;line-height:1.6;margin-bottom:22px;word-break:break-all;"></div>
+      <div style="display:flex;gap:12px;justify-content:center;">
+        <button id="g-confirm-cancel" style="flex:1;padding:10px 0;border:1.5px solid #ccc;border-radius:8px;background:#f5f5f5;color:#555;font-size:14px;cursor:pointer;">取消</button>
+        <button id="g-confirm-ok"     style="flex:1;padding:10px 0;border:none;border-radius:8px;background:#e53935;color:#fff;font-size:14px;font-weight:bold;cursor:pointer;">確定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 📱 手機調試面板 (URL: ?debug=1 開啟, 預設折疊不擋操作) -->
+  <div id="v13-debug-panel" class="collapsed">
+    <div id="v13-debug-header" onclick="debugToggle()">
+      <span><span id="v13-debug-toggle">▶</span>🔍 v13 診斷</span>
+      <div>
+        <button id="v13-debug-clear" onclick="event.stopPropagation();debugClear()">清空</button>
+        <button id="v13-debug-close" onclick="event.stopPropagation();debugHide()">✕</button>
+      </div>
+    </div>
+    <div id="v13-debug-log"></div>
+  </div>
 
   <!-- BUILD_INFO_PLACEHOLDER -->
 </body>

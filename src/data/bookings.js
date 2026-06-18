@@ -17,8 +17,7 @@
  * 支持 YYYY/MM/DD 和 YYYY-MM-DD 输入
  */
 function normalizeMonth(dateStr) {
-  if (!dateStr) return nowStr().substring(0, 7); // "YYYY-MM"
-  return dateStr.replace(/\//g, '-').substring(0, 7);
+  return extractMonth(dateStr) || nowStr().substring(0, 7);
 }
 
 /**
@@ -128,6 +127,7 @@ function deleteBooking(fbKey) {
 
   if (!deleted) return null;
   Store.saveBookings(State.get('bookings'));
+  trackRecentlyDeleted('booking', fbKey);
   removeBookingFromFirebase(fbKey);
   Events.emit(EVENTS.BOOKING_DELETED, deleted);
   return deleted;

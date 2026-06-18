@@ -103,9 +103,13 @@ var Store = (function() {
   // --- 代理名单 ---
   function saveAgentList(list) {
     save(STORAGE_KEYS.AGENT_LIST, list, false);
+    if (typeof debugLog === 'function') debugLog('v13-dlog-cya', '💾 saveAgentList: ' + JSON.stringify(list));
   }
   function loadAgentList() {
-    return load(STORAGE_KEYS.AGENT_LIST, false) || [];
+    var raw = localStorage.getItem(STORAGE_KEYS.AGENT_LIST);
+    var result = load(STORAGE_KEYS.AGENT_LIST, false) || [];
+    if (typeof debugLog === 'function') debugLog('v13-dlog-cya', '📖 loadAgentList: raw=' + raw + ' → ' + JSON.stringify(result));
+    return result;
   }
 
   // --- 草稿 ---
@@ -258,6 +262,42 @@ var Store = (function() {
   }
 
   /**
+   * 清空本地业务数据（交易、公基金、代理钱包、代理名单、订房）
+   * 保留：hotelConfig、workingMonth、auth、密码、appVersion
+   * 同时将 State 重置为空状态
+   */
+  function clearLocalData() {
+    // 清除 localStorage 中的业务数据 key
+    var businessKeys = [
+      STORAGE_KEYS.DATA,          // 交易 'macau_data'
+      STORAGE_KEYS.FUND,          // 公基金 'macau_fund_data'
+      STORAGE_KEYS.AGENT_WALLETS, // 代理钱包 'macau_agent_wallets'
+      STORAGE_KEYS.AGENT_LIST,    // 代理名单 'macau_agent_list'
+      STORAGE_KEYS.RM_BOOKINGS,   // 订房 'rm_bookings'
+      STORAGE_KEYS.RM_LAST_ID,    // 订房ID 'rm_last_id'
+      STORAGE_KEYS.BACKUP_LIST,   // 备份清单 'macau_backup_list'
+      STORAGE_KEYS.DRAFT,         // 草稿 'macau_draft'
+    ];
+    for (var i = 0; i < businessKeys.length; i++) {
+      try { localStorage.removeItem(businessKeys[i]); } catch(e) {}
+    }
+    // 重置 State 中的业务字段（保留 hotelConfig/workingMonth/auth）
+    State.batchSet({
+      txs:             [],
+      fundWithdrawals: [],
+      agentWallets:    {},
+      agentList:       [],
+      bookings:        [],
+      backupList:      [],
+    }, 'store:cleared');
+    State.resetNextId('tx', 1);
+    State.resetNextId('fund', 1);
+    State.resetNextId('wallet', 1);
+    State.resetNextId('booking', 1);
+    console.log('[v13:store] clearLocalData: business data cleared');
+  }
+
+  /**
    * 从 localStorage 全部加载到 State
    * @param {boolean} [silent=false] - 是否抑制事件
    */
@@ -340,5 +380,6 @@ var Store = (function() {
     // 全量
     saveAll:      saveAll,
     loadAll:      loadAll,
+    clearLocalData: clearLocalData,
   };
 })();

@@ -68,6 +68,7 @@ function createTx(formData) {
   Store.saveTxs(State.get('txs'));
 
   // ★ 即時同步到 Firebase
+  console.log('[v13:tx] 📤 createTx → calling syncTxToFirebase... fbKey=' + tx._fbKey + ' type=' + tx.type);
   syncTxToFirebase(tx);
 
   // 通知事件
@@ -141,6 +142,7 @@ function updateTx(fbKey, formData) {
  * @returns {object|null} 被删除的交易对象，找不到返回 null
  */
 function deleteTx(fbKey) {
+  console.log('[v13:tx] 🔵 deleteTx ENTERED, fbKey=' + fbKey + ', 當前 txs 數量=' + State.get('txs').length);
   var deleted = null;
 
   State.update('txs', function(arr) {
@@ -148,22 +150,31 @@ function deleteTx(fbKey) {
       if (arr[i]._fbKey === fbKey) {
         deleted = arr[i];
         arr.splice(i, 1);
+        console.log('[v13:tx] 🗑️  從陣列移除 index=' + i + ', 剩餘=' + arr.length);
         break;
       }
     }
     return arr;
   });
 
-  if (!deleted) return null;
+  if (!deleted) {
+    console.warn('[v13:tx] ⚠️ deleteTx 未找到 fbKey=' + fbKey + '! 可能已被刪除');
+    return null;
+  }
 
+  console.log('[v13:tx] 💾 持久化 Storage...');
   // 持久化
   Store.saveTxs(State.get('txs'));
 
+  console.log('[v13:tx] 🔥 從 Firebase 移除...');
+  // ★ 追踪删除 (防止 syncUploadAll transaction 复活)
+  trackRecentlyDeleted('tx', fbKey);
   // ★ 即時從 Firebase 刪除
   removeTxFromFirebase(fbKey);
 
   // 通知事件
   Events.emit(EVENTS.TX_DELETED, deleted);
+  console.log('[v13:tx] ✅ deleteTx 完成, 新 txs 數量=' + State.get('txs').length);
 
   return deleted;
 }

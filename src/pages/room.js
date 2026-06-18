@@ -293,14 +293,15 @@ var RM = {
   },
 
   delete: function(id) {
-    if (!confirm('確定刪除這筆訂房？')) return;
-    var b = getBookingById(id);
-    if (b) {
-      deleteBooking(b._fbKey);
-      RM.load();
-      RM.render();
-      toastCRUDDone();
-    }
+    showConfirm('確定刪除這筆訂房？', function() {
+      var b = getBookingById(id);
+      if (b) {
+        deleteBooking(b._fbKey);
+        RM.load();
+        RM.render();
+        toastCRUDDone();
+      }
+    });
   },
 
   // ===== 渲染 =====
@@ -371,7 +372,7 @@ var RM = {
     // 调试日志
     console.log('[v13:room] _updateQuota month=' + month + ' txs=' + (txs ? txs.length : 0) + ' totalVol=' + quota.totalVolume + ' usedThr=' + quota.usedThreshold + ' rooms=' + roomCount);
 
-    var pct = Math.min(100, quota.usageRate);
+    var pct = Math.min(100, Math.max(0, quota.usageRate));
     var el = $('.rm-quota-bar');
     if (el) {
       el.style.width = pct.toFixed(1) + '%';
@@ -404,7 +405,15 @@ var RM = {
     if (usedEl) usedEl.textContent = fmt(quota.usedThreshold) + '萬';
 
     var remEl = $('.rm-quota-rem');
-    if (remEl) remEl.textContent = fmt(quota.remainingThreshold) + '萬';
+    if (remEl) {
+      remEl.textContent = fmt(quota.remainingThreshold) + '萬';
+      // 赤字时显示红色
+      if (quota.remainingThreshold < 0) {
+        remEl.style.color = 'var(--danger)';
+      } else {
+        remEl.style.color = '';
+      }
+    }
 
     var countEl = $('.rm-booking-count');
     if (countEl) countEl.textContent = roomCount + '間';

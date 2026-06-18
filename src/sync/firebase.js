@@ -14,7 +14,6 @@
 var _db = null;              // Firebase database 实例
 var _fbRetryDone = false;    // 是否已完成重试/setup
 var _fbPollTimer = null;     // 轮询定时器
-var _initialSyncDone = false; // 首次连通后已完成双向同步
 
 /**
  * 真正执行 Firebase 初始化
@@ -149,18 +148,11 @@ function _watchConnection() {
 
     if (connected) {
       console.log('[v13:firebase] ✅ Firebase RTDB 已連線');
-      // 首次连通：延迟 2 秒后执行双向同步（给 SDK 时间稳定连接）
+      // 安全网：2 秒后推送本地数据到 Firebase（transaction 合并，幂等）
       setTimeout(function() {
-        if (!State.get('syncConnected')) return;  // 又断开了，跳过
-        console.log('[v13:firebase] 🔄 执行双向同步...');
-        // 先上传本地数据
+        if (!State.get('syncConnected')) return;
+        console.log('[v13:firebase] 🔄 安全網推送...');
         try { syncUploadAll(); } catch(e) { console.error('[v13:firebase] syncUploadAll error:', e); }
-        // 然后下载远端数据（如果还没做过首次同步）
-        if (!_initialSyncDone) {
-          _initialSyncDone = true;
-          console.log('[v13:firebase] 🔽 首次同步: 拉取遠端數據...');
-          try { syncDownloadAll(); } catch(e) { console.error('[v13:firebase] syncDownloadAll error:', e); }
-        }
       }, 2000);
     } else {
       // 只有从 connected→disconnected 变化时才警告（避免首次 false 状态误报）
@@ -180,17 +172,24 @@ function _watchConnection() {
  * @param {object} tx
  */
 function syncTxToFirebase(tx) {
-  if (!_db || !tx._fbKey) {
-    if (!_db) console.warn('[v13:firebase] syncTx skipped: _db is null');
-    if (!tx._fbKey) console.warn('[v13:firebase] syncTx skipped: missing _fbKey');
+  console.log('[v13:firebase] 🔵 syncTxToFirebase ENTERED, _db=' + (!!_db) + ', fbKey=' + (tx && tx._fbKey));
+  if (!tx._fbKey) {
+    console.warn('[v13:firebase] syncTx skipped: missing _fbKey');
+    return;
+  }
+  if (!_db) {
+    console.warn('[v13:firebase] syncTx deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { syncTxToFirebase(tx); });
     return;
   }
   try {
+    console.log('[v13:firebase] 🚀 syncTx WRITE:', tx._fbKey, 'agent=' + (tx.agent || '?'), 'vol=' + (tx.volume || 0));
     _db.ref(FB_PATH.TXS + '/' + tx._fbKey).set(tx, function(err) {
       if (err) {
-        console.error('[v13:firebase] syncTx FAILED:', err.message || err);
-        // 写入失败时重新入队
+        console.error('[v13:firebase] ❌ syncTx FAILED:', tx._fbKey, err.message || err);
         enqueueUpload(function() { syncTxToFirebase(tx); });
+      } else {
+        console.log('[v13:firebase] ✅ syncTx OK:', tx._fbKey);
       }
     });
   } catch (e) {
@@ -203,10 +202,26 @@ function syncTxToFirebase(tx) {
  * @param {string} fbKey
  */
 function removeTxFromFirebase(fbKey) {
-  if (!_db) return;
+  if (!_db) {
+    console.warn('[v13:firebase] removeTx deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { removeTxFromFirebase(fbKey); });
+    return;
+  }
   try {
-    _db.ref(FB_PATH.TXS + '/' + fbKey).set(null, function(err) {
-      if (err) console.error('[v13:firebase] removeTx FAILED:', err.message || err);
+    console.log('[v13:firebase] 🗑️  removeTx TOMBSTONE:', fbKey);
+    // ★ 墓碑策略：不设 null，而是写一个墓碑对象
+    // 这样另一端的 mergeTxs 可以识别并移除该条目
+    _db.ref(FB_PATH.TXS + '/' + fbKey).set({
+      _fbKey: fbKey,
+      _deleted: true,
+      _updatedAt: Date.now()
+    }, function(err) {
+      if (err) {
+        console.error('[v13:firebase] ❌ removeTx FAILED:', fbKey, err.message || err);
+        enqueueUpload(function() { removeTxFromFirebase(fbKey); });
+      } else {
+        console.log('[v13:firebase] ✅ removeTx TOMBSTONE OK:', fbKey);
+      }
     });
   } catch (e) {
     console.error('[v13:firebase] removeTx error:', e);
@@ -218,15 +233,23 @@ function removeTxFromFirebase(fbKey) {
  * @param {object} record
  */
 function syncFundToFirebase(record) {
-  if (!_db || !record._fbKey) {
-    if (!_db) console.warn('[v13:firebase] syncFund skipped: _db is null');
+  if (!record._fbKey) {
+    console.warn('[v13:firebase] syncFund skipped: missing _fbKey');
+    return;
+  }
+  if (!_db) {
+    console.warn('[v13:firebase] syncFund deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { syncFundToFirebase(record); });
     return;
   }
   try {
+    console.log('[v13:firebase] 🚀 syncFund WRITE:', record._fbKey);
     _db.ref(FB_PATH.FUND + '/' + record._fbKey).set(record, function(err) {
       if (err) {
-        console.error('[v13:firebase] syncFund FAILED:', err.message || err);
+        console.error('[v13:firebase] ❌ syncFund FAILED:', record._fbKey, err.message || err);
         enqueueUpload(function() { syncFundToFirebase(record); });
+      } else {
+        console.log('[v13:firebase] ✅ syncFund OK:', record._fbKey);
       }
     });
   } catch (e) {
@@ -239,10 +262,23 @@ function syncFundToFirebase(record) {
  * @param {string} fbKey
  */
 function removeFundFromFirebase(fbKey) {
-  if (!_db) return;
+  if (!_db) {
+    console.warn('[v13:firebase] removeFund deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { removeFundFromFirebase(fbKey); });
+    return;
+  }
   try {
-    _db.ref(FB_PATH.FUND + '/' + fbKey).set(null, function(err) {
-      if (err) console.error('[v13:firebase] removeFund FAILED:', err.message || err);
+    console.log('[v13:firebase] 🗑️  removeFund TOMBSTONE:', fbKey);
+    _db.ref(FB_PATH.FUND + '/' + fbKey).set({
+      _fbKey: fbKey,
+      _deleted: true,
+      _updatedAt: Date.now()
+    }, function(err) {
+      if (err) {
+        console.error('[v13:firebase] ❌ removeFund FAILED:', fbKey, err.message || err);
+      } else {
+        console.log('[v13:firebase] ✅ removeFund TOMBSTONE OK:', fbKey);
+      }
     });
   } catch (e) {
     console.error('[v13:firebase] removeFund error:', e);
@@ -255,15 +291,23 @@ function removeFundFromFirebase(fbKey) {
  * @param {object} record
  */
 function syncWalletToFirebase(agent, record) {
-  if (!_db || !record._fbKey) {
-    if (!_db) console.warn('[v13:firebase] syncWallet skipped: _db is null');
+  if (!record._fbKey) {
+    console.warn('[v13:firebase] syncWallet skipped: missing _fbKey');
+    return;
+  }
+  if (!_db) {
+    console.warn('[v13:firebase] syncWallet deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { syncWalletToFirebase(agent, record); });
     return;
   }
   try {
+    console.log('[v13:firebase] 🚀 syncWallet WRITE:', agent, record._fbKey);
     _db.ref(FB_PATH.AGENT_WALLETS + '/' + encodeFirebaseKey(agent) + '/' + record._fbKey).set(record, function(err) {
       if (err) {
-        console.error('[v13:firebase] syncWallet FAILED:', err.message || err);
+        console.error('[v13:firebase] ❌ syncWallet FAILED:', agent, record._fbKey, err.message || err);
         enqueueUpload(function() { syncWalletToFirebase(agent, record); });
+      } else {
+        console.log('[v13:firebase] ✅ syncWallet OK:', agent, record._fbKey);
       }
     });
   } catch (e) {
@@ -277,10 +321,23 @@ function syncWalletToFirebase(agent, record) {
  * @param {string} fbKey
  */
 function removeWalletFromFirebase(agent, fbKey) {
-  if (!_db) return;
+  if (!_db) {
+    console.warn('[v13:firebase] removeWallet deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { removeWalletFromFirebase(agent, fbKey); });
+    return;
+  }
   try {
-    _db.ref(FB_PATH.AGENT_WALLETS + '/' + encodeFirebaseKey(agent) + '/' + fbKey).set(null, function(err) {
-      if (err) console.error('[v13:firebase] removeWallet FAILED:', err.message || err);
+    console.log('[v13:firebase] 🗑️  removeWallet TOMBSTONE:', agent, fbKey);
+    _db.ref(FB_PATH.AGENT_WALLETS + '/' + encodeFirebaseKey(agent) + '/' + fbKey).set({
+      _fbKey: fbKey,
+      _deleted: true,
+      _updatedAt: Date.now()
+    }, function(err) {
+      if (err) {
+        console.error('[v13:firebase] ❌ removeWallet FAILED:', agent, fbKey, err.message || err);
+      } else {
+        console.log('[v13:firebase] ✅ removeWallet TOMBSTONE OK:', agent, fbKey);
+      }
     });
   } catch (e) {
     console.error('[v13:firebase] removeWallet error:', e);
@@ -292,15 +349,23 @@ function removeWalletFromFirebase(agent, fbKey) {
  * @param {object} booking
  */
 function syncBookingToFirebase(booking) {
-  if (!_db || !booking._fbKey) {
-    if (!_db) console.warn('[v13:firebase] syncBooking skipped: _db is null');
+  if (!booking._fbKey) {
+    console.warn('[v13:firebase] syncBooking skipped: missing _fbKey');
+    return;
+  }
+  if (!_db) {
+    console.warn('[v13:firebase] syncBooking deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { syncBookingToFirebase(booking); });
     return;
   }
   try {
+    console.log('[v13:firebase] 🚀 syncBooking WRITE:', booking._fbKey);
     _db.ref(FB_PATH.RM_BOOKINGS + '/' + booking._fbKey).set(booking, function(err) {
       if (err) {
-        console.error('[v13:firebase] syncBooking FAILED:', err.message || err);
+        console.error('[v13:firebase] ❌ syncBooking FAILED:', booking._fbKey, err.message || err);
         enqueueUpload(function() { syncBookingToFirebase(booking); });
+      } else {
+        console.log('[v13:firebase] ✅ syncBooking OK:', booking._fbKey);
       }
     });
   } catch (e) {
@@ -313,10 +378,23 @@ function syncBookingToFirebase(booking) {
  * @param {string} fbKey
  */
 function removeBookingFromFirebase(fbKey) {
-  if (!_db) return;
+  if (!_db) {
+    console.warn('[v13:firebase] removeBooking deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { removeBookingFromFirebase(fbKey); });
+    return;
+  }
   try {
-    _db.ref(FB_PATH.RM_BOOKINGS + '/' + fbKey).set(null, function(err) {
-      if (err) console.error('[v13:firebase] removeBooking FAILED:', err.message || err);
+    console.log('[v13:firebase] 🗑️  removeBooking TOMBSTONE:', fbKey);
+    _db.ref(FB_PATH.RM_BOOKINGS + '/' + fbKey).set({
+      _fbKey: fbKey,
+      _deleted: true,
+      _updatedAt: Date.now()
+    }, function(err) {
+      if (err) {
+        console.error('[v13:firebase] ❌ removeBooking FAILED:', fbKey, err.message || err);
+      } else {
+        console.log('[v13:firebase] ✅ removeBooking TOMBSTONE OK:', fbKey);
+      }
     });
   } catch (e) {
     console.error('[v13:firebase] removeBooking error:', e);
@@ -324,33 +402,88 @@ function removeBookingFromFirebase(fbKey) {
 }
 
 /**
- * 同步代理名单到 Firebase（用 transaction 原子合併，防止并发丢失）
+ * 同步单笔酒店设定到 Firebase
+ * @param {object} entry
+ */
+function syncHCConfigToFirebase(entry) {
+  if (!entry._fbKey) {
+    console.warn('[v13:firebase] syncHCConfig skipped: missing _fbKey');
+    return;
+  }
+  if (!_db) {
+    console.warn('[v13:firebase] syncHCConfig deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { syncHCConfigToFirebase(entry); });
+    return;
+  }
+  try {
+    console.log('[v13:firebase] 🚀 syncHCConfig WRITE:', entry._fbKey, 'casino=' + (entry.casino || '?'), 'hotel=' + (entry.hotel || '?'));
+    _db.ref(FB_PATH.HC_CONFIG + '/' + entry._fbKey).set(entry, function(err) {
+      if (err) {
+        console.error('[v13:firebase] ❌ syncHCConfig FAILED:', entry._fbKey, err.message || err);
+        enqueueUpload(function() { syncHCConfigToFirebase(entry); });
+      } else {
+        console.log('[v13:firebase] ✅ syncHCConfig OK:', entry._fbKey);
+      }
+    });
+  } catch (e) {
+    console.error('[v13:firebase] syncHCConfig error:', e);
+  }
+}
+
+/**
+ * 从 Firebase 删除单笔酒店设定
+ * @param {string} fbKey
+ */
+function removeHCFromFirebase(fbKey) {
+  if (!_db) {
+    console.warn('[v13:firebase] removeHCConfig deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { removeHCFromFirebase(fbKey); });
+    return;
+  }
+  try {
+    console.log('[v13:firebase] 🗑️  removeHCConfig TOMBSTONE:', fbKey);
+    _db.ref(FB_PATH.HC_CONFIG + '/' + fbKey).set({
+      _fbKey: fbKey,
+      _deleted: true,
+      _updatedAt: Date.now()
+    }, function(err) {
+      if (err) {
+        console.error('[v13:firebase] ❌ removeHCConfig FAILED:', fbKey, err.message || err);
+      } else {
+        console.log('[v13:firebase] ✅ removeHCConfig TOMBSTONE OK:', fbKey);
+      }
+    });
+  } catch (e) {
+    console.error('[v13:firebase] removeHCConfig error:', e);
+  }
+}
+
+/**
+ * 同步代理名单到 Firebase（用 set() 覆写，支持新增和删除同步）
+ *
+ * 原先用 transaction() 做并集合并，导致删除操作无法传播——
+ * 删掉的代理会被远端数据合并回来。改用 set() 覆写整个名单，
+ * 确保删除操作能正确推送到 Firebase 并传播到所有设备。
+ *
  * @param {Array} agentList - 當前本地代理名單
  */
 function syncAgentListToFirebase(agentList) {
   if (!_db) {
-    console.warn('[v13:firebase] syncAgentList skipped: _db is null');
+    console.warn('[v13:firebase] syncAgentList deferred (_db null) → auto-enqueue');
+    // ★ FIX: 不捕获入队时的 agentList，执行时从 State 实时读取
+    //    避免竞态：入队后 agentList 变化（删除/新增）时推送旧数据覆盖新数据
+    enqueueUpload(function() { syncAgentListToFirebase(State.get('agentList')); });
     return;
   }
   try {
-    _db.ref(FB_PATH.AGENT_LIST).transaction(function(remote) {
-      if (!remote || !Array.isArray(remote)) return agentList;
-      // 原子合併：本地 + 遠端（去重）
-      var merged = remote.slice();
-      for (var i = 0; i < agentList.length; i++) {
-        if (merged.indexOf(agentList[i]) === -1) {
-          merged.push(agentList[i]);
-        }
-      }
-      merged.sort(function(a, b) { return a.localeCompare(b); });
-      // 只有当真正有变化时才返回新值（返回 undefined 表示中止事务）
-      if (JSON.stringify(merged) === JSON.stringify(remote)) return;
-      return merged;
-    }, function(err, committed, snapshot) {
+    var sorted = agentList.slice().sort(function(a, b) { return a.localeCompare(b); });
+    _db.ref(FB_PATH.AGENT_LIST).set(sorted, function(err) {
       if (err) {
-        console.error('[v13:firebase] syncAgentList transaction FAILED:', err.message || err);
-        // 失败时重试（用 enqueueUpload 排队）
-        enqueueUpload(function() { syncAgentListToFirebase(agentList); });
+        console.error('[v13:firebase] syncAgentList set FAILED:', err.message || err);
+        // ★ 重试时也实时读取 State
+        enqueueUpload(function() { syncAgentListToFirebase(State.get('agentList')); });
+      } else {
+        console.log('[v13:firebase] ✅ syncAgentList OK:', sorted.length + ' agents', JSON.stringify(sorted));
       }
     });
   } catch (e) {
@@ -445,4 +578,31 @@ function decodeFirebaseKey(encoded) {
                 .replace(/_LB_/g, '[')
                 .replace(/_RB_/g, ']')
                 .replace(/_SLASH_/g, '/');
+}
+
+// ============================================================================
+// 管理员操作：清除 Firebase 全部数据
+// ============================================================================
+
+/**
+ * 清除 Firebase macau_data/ 下的所有数据（交易、公基金、代理钱包、订房等）
+ * 警告：此操作不可逆，执行前须由 UI 确认
+ * @param {function} onDone - 成功回调 function(err)
+ */
+function clearFirebaseData(onDone) {
+  var db = getDB();
+  if (!db) {
+    console.error('[v13:firebase] clearFirebaseData: _db not ready');
+    if (onDone) onDone(new Error('Firebase 未連線'));
+    return;
+  }
+  console.warn('[v13:firebase] 🗑️  clearFirebaseData: nuking macau_data/...');
+  db.ref('macau_data').set(null, function(err) {
+    if (err) {
+      console.error('[v13:firebase] ❌ clearFirebaseData FAILED:', err.message || err);
+    } else {
+      console.log('[v13:firebase] ✅ clearFirebaseData OK — macau_data/ cleared');
+    }
+    if (onDone) onDone(err);
+  });
 }

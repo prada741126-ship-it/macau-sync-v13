@@ -91,6 +91,7 @@ var FB_PATH = {
   AGENT_WALLETS:   'macau_data/agentWallets',
   WORKING_MONTH:   'macau_data/workingMonth',
   RM_BOOKINGS:     'macau_data/rmBookings',
+  HC_CONFIG:       'macau_data/hcConfig',
   ARCHIVES:        'macau_data/archives',
   CONNECTED:       '.info/connected',
 };
@@ -4102,6 +4103,8 @@ function createHC(data) {
 
   Store.saveHCConfig(State.get('hotelConfig'));
   Events.emit(EVENTS.HC_CONFIG_UPDATED, State.get('hotelConfig'));
+  // ★ Firebase 同步
+  try { syncHCConfigToFirebase(entry); } catch(e) { console.error('[hc] createHC sync error:', e); }
   return entry;
 }
 
@@ -4134,6 +4137,8 @@ function updateHC(fbKey, data) {
   if (!updated) return null;
   Store.saveHCConfig(State.get('hotelConfig'));
   Events.emit(EVENTS.HC_CONFIG_UPDATED, State.get('hotelConfig'));
+  // ★ Firebase 同步
+  try { syncHCConfigToFirebase(updated); } catch(e) { console.error('[hc] updateHC sync error:', e); }
   return updated;
 }
 
@@ -4156,6 +4161,9 @@ function deleteHC(fbKey) {
   });
 
   if (!deleted) return null;
+  // ★ 追踪最近删除 + Firebase 墓碑同步
+  try { trackRecentlyDeleted('hc', fbKey); } catch(e) { console.error('[hc] trackRecentlyDeleted error:', e); }
+  try { removeHCFromFirebase(fbKey); } catch(e) { console.error('[hc] deleteHC sync error:', e); }
   Store.saveHCConfig(State.get('hotelConfig'));
   Events.emit(EVENTS.HC_CONFIG_UPDATED, State.get('hotelConfig'));
   return deleted;
@@ -4176,6 +4184,12 @@ function resetHCToPreset() {
   Store.saveHCConfig(preset);
   Store.saveHCPresetVersion(PRESET_VERSION);
   Events.emit(EVENTS.HC_CONFIG_UPDATED, preset);
+  // ★ Firebase 同步：逐笔推送所有预设
+  try {
+    for (var j = 0; j < preset.length; j++) {
+      syncHCConfigToFirebase(preset[j]);
+    }
+  } catch(e) { console.error('[hc] resetHCToPreset sync error:', e); }
   return preset.length;
 }
 
@@ -5230,6 +5244,63 @@ function removeBookingFromFirebase(fbKey) {
 }
 
 /**
+ * 同步单笔酒店设定到 Firebase
+ * @param {object} entry
+ */
+function syncHCConfigToFirebase(entry) {
+  if (!entry._fbKey) {
+    console.warn('[v13:firebase] syncHCConfig skipped: missing _fbKey');
+    return;
+  }
+  if (!_db) {
+    console.warn('[v13:firebase] syncHCConfig deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { syncHCConfigToFirebase(entry); });
+    return;
+  }
+  try {
+    console.log('[v13:firebase] 🚀 syncHCConfig WRITE:', entry._fbKey, 'casino=' + (entry.casino || '?'), 'hotel=' + (entry.hotel || '?'));
+    _db.ref(FB_PATH.HC_CONFIG + '/' + entry._fbKey).set(entry, function(err) {
+      if (err) {
+        console.error('[v13:firebase] ❌ syncHCConfig FAILED:', entry._fbKey, err.message || err);
+        enqueueUpload(function() { syncHCConfigToFirebase(entry); });
+      } else {
+        console.log('[v13:firebase] ✅ syncHCConfig OK:', entry._fbKey);
+      }
+    });
+  } catch (e) {
+    console.error('[v13:firebase] syncHCConfig error:', e);
+  }
+}
+
+/**
+ * 从 Firebase 删除单笔酒店设定
+ * @param {string} fbKey
+ */
+function removeHCFromFirebase(fbKey) {
+  if (!_db) {
+    console.warn('[v13:firebase] removeHCConfig deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { removeHCFromFirebase(fbKey); });
+    return;
+  }
+  try {
+    console.log('[v13:firebase] 🗑️  removeHCConfig TOMBSTONE:', fbKey);
+    _db.ref(FB_PATH.HC_CONFIG + '/' + fbKey).set({
+      _fbKey: fbKey,
+      _deleted: true,
+      _updatedAt: Date.now()
+    }, function(err) {
+      if (err) {
+        console.error('[v13:firebase] ❌ removeHCConfig FAILED:', fbKey, err.message || err);
+      } else {
+        console.log('[v13:firebase] ✅ removeHCConfig TOMBSTONE OK:', fbKey);
+      }
+    });
+  } catch (e) {
+    console.error('[v13:firebase] removeHCConfig error:', e);
+  }
+}
+
+/**
  * 同步代理名单到 Firebase（用 set() 覆写，支持新增和删除同步）
  *
  * 原先用 transaction() 做并集合并，导致删除操作无法传播——
@@ -5436,7 +5507,7 @@ function _processQueue() {
 // ============================================================================
 
 /**
- * 全量同步到 Firebase (7 路径)
+ * 全量同步到 Firebase (8 路径)
  */
 function syncUploadAll() {
   if (!getDB()) {
@@ -5564,7 +5635,29 @@ function syncUploadAll() {
     }
   });
 
-  // 7. 月度存档
+  // 7. 酒店设定：transaction 原子合併（★ 使用 mergeTxs 时间戳决胜策略）
+  var hcConfig = State.get('hotelConfig');
+  db.ref(FB_PATH.HC_CONFIG).transaction(function(remote) {
+    if (!remote) return fbArrayToObj(hcConfig);
+    var rArr = fbObjToArray(remote);
+    // ★ 为最近删除的远端项写入墓碑
+    for (var i = 0; i < rArr.length; i++) {
+      if (rArr[i]._fbKey && isRecentlyDeleted('hc', rArr[i]._fbKey)) {
+        rArr[i] = { _fbKey: rArr[i]._fbKey, _deleted: true, _updatedAt: Date.now() };
+      }
+    }
+    var merged = mergeTxs(hcConfig, rArr);
+    console.log('[v13:uploader] HC_CONFIG transaction: local=' + hcConfig.length + ' remote=' + rArr.length + ' merged=' + merged.length);
+    return fbArrayToObj(merged);
+  }, function(err, committed, snapshot) {
+    if (err) {
+      console.error('[v13:uploader] HC_CONFIG transaction FAILED:', err.message || err);
+    } else if (committed) {
+      console.log('[v13:uploader] ✅ HC_CONFIG transaction committed');
+    }
+  });
+
+  // 8. 月度存档
   db.ref(FB_PATH.ARCHIVES).set(archives);
 
   Events.emit(EVENTS.SYNC_COMPLETE);
@@ -5784,7 +5877,26 @@ function startWatchers() {
     }
   });
 
-  console.log('[v13:watchers] All 7 watchers started (agent list: smart sync)');
+  // 8. 监听酒店设定
+  _watchers.hcConfig = db.ref(FB_PATH.HC_CONFIG).on('value', function(snap) {
+    var remote = fbObjToArray(snap.val());
+    var local = State.get('hotelConfig');
+
+    // ★ 用 mergeTxs（时间戳决胜），确保编辑/删除能跨端同步
+    var merged = mergeTxs(local, remote);
+
+    // ★ 客户端侧过滤墓碑
+    merged = merged.filter(function(r) { return !r._deleted; });
+
+    if (JSON.stringify(merged) !== JSON.stringify(local)) {
+      console.log('[v13:watchers] HC_CONFIG CHANGED: ' + local.length + ' → ' + merged.length + ' entries');
+      State.set('hotelConfig', merged);
+      Store.saveHCConfig(merged);
+      Events.emit(EVENTS.HC_CONFIG_UPDATED, merged);
+    }
+  });
+
+  console.log('[v13:watchers] All 8 watchers started (agent list: smart sync)');
   return true;
 }
 
@@ -5924,6 +6036,20 @@ function syncDownloadAll() {
     if (archives) {
       State.set('archives', archives);
       Store.saveArchives(archives);
+    }
+  });
+
+  // 8. 酒店设定
+  db.ref(FB_PATH.HC_CONFIG).once('value', function(snap) {
+    var remote = fbObjToArray(snap.val());
+    var local = State.get('hotelConfig');
+    var merged = mergeTxs(local, remote);
+    // ★ 客户端侧过滤墓碑
+    merged = merged.filter(function(r) { return !r._deleted; });
+    if (JSON.stringify(merged) !== JSON.stringify(local)) {
+      State.set('hotelConfig', merged);
+      Store.saveHCConfig(merged);
+      Events.emit(EVENTS.HC_CONFIG_UPDATED, merged);
     }
   });
 }

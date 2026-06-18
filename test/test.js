@@ -75,6 +75,26 @@ test('getDow 返回周X格式', function() {
   assert(/^周[一二三四五六日]$/.test(dow), 'Invalid dow: ' + dow);
 });
 
+test('extractMonth("2026-06-15") → "2026-06"', function() {
+  assertEqual(extractMonth('2026-06-15'), '2026-06');
+});
+
+test('extractMonth("2026/06/15") → "2026-06"', function() {
+  assertEqual(extractMonth('2026/06/15'), '2026-06');
+});
+
+test('extractMonth("2026-6-15") → "2026-06"', function() {
+  assertEqual(extractMonth('2026-6-15'), '2026-06');
+});
+
+test('extractMonth("2026/6/15") → "2026-06"', function() {
+  assertEqual(extractMonth('2026/6/15'), '2026-06');
+});
+
+test('extractMonth("") → ""', function() {
+  assertEqual(extractMonth(''), '');
+});
+
 // ============================================================================
 // 计算公式测试
 // ============================================================================
@@ -185,6 +205,63 @@ test('calcTotalWallet → correct', function() {
   assert(total >= 0);
 });
 
+// --- calcRoomQuota ---
+test('calcRoomQuota with matching data', function() {
+  var bookings = [
+    { month: '2026-06', threshold: 80, checkIn: '2026-06-01' },
+    { month: '2026-06', threshold: 180, checkIn: '2026-06-10' },
+  ];
+  var txs = [
+    { date: '2026-06-05', volume: 1000 },
+    { date: '2026-06-15', volume: 500 },
+  ];
+  var q = calcRoomQuota(bookings, txs, '2026-06');
+  assertEqual(q.totalVolume, 1500);
+  assertEqual(q.usedThreshold, 260);
+  assertEqual(q.remainingThreshold, 1240);
+  assert(q.usageRate > 0 && q.usageRate < 100);
+});
+
+test('calcRoomQuota with no transactions (deficit)', function() {
+  var bookings = [{ month: '2026-06', threshold: 100, checkIn: '2026-06-01' }];
+  var q = calcRoomQuota(bookings, [], '2026-06');
+  assertEqual(q.totalVolume, 0);
+  assertEqual(q.usedThreshold, 100);
+  assertEqual(q.remainingThreshold, -100);
+  assertEqual(q.usageRate, 100);
+});
+
+test('calcRoomQuota with no bookings', function() {
+  var txs = [{ date: '2026-06-05', volume: 1000 }];
+  var q = calcRoomQuota([], txs, '2026-06');
+  assertEqual(q.totalVolume, 1000);
+  assertEqual(q.usedThreshold, 0);
+  assertEqual(q.remainingThreshold, 1000);
+  assertEqual(q.usageRate, 0);
+});
+
+test('calcRoomQuota with various date formats', function() {
+  var bookings = [
+    { month: '2026-06', threshold: 80, checkIn: '2026-06-01' },
+    { month: '2026/6', threshold: 50, checkIn: '2026/6/15' },  // 无前导零
+  ];
+  var txs = [
+    { date: '2026/6/5', volume: 500 },   // 斜杠+无前导零
+    { date: '2026-06-20', volume: 300 },
+  ];
+  var q = calcRoomQuota(bookings, txs, '2026-06');
+  assertEqual(q.totalVolume, 800);
+  assertEqual(q.usedThreshold, 130);
+});
+
+test('calcRoomQuota with empty data', function() {
+  var q = calcRoomQuota([], [], '2026-06');
+  assertEqual(q.totalVolume, 0);
+  assertEqual(q.usedThreshold, 0);
+  assertEqual(q.remainingThreshold, 0);
+  assertEqual(q.usageRate, 0);
+});
+
 // ============================================================================
 // 筛选测试
 // ============================================================================
@@ -269,15 +346,15 @@ test('APP.VERSION 非空', function() {
   assert(APP.VERSION.length > 0);
 });
 
-test('STORAGE_KEYS 有 16 个 key', function() {
+test('STORAGE_KEYS 有 19 个 key', function() {
   var count = 0;
   for (var k in STORAGE_KEYS) { if (STORAGE_KEYS.hasOwnProperty(k)) count++; }
-  assertEqual(count, 18); // 16 original + APP_VERSION + HC_PRESET_VERSION
+  assertEqual(count, 19); // 16 original + APP_VERSION + HC_PRESET_VERSION + RECENTLY_DELETED
 });
 
-test('FB_PATH 有 7 条路径', function() {
+test('FB_PATH 有 8 条路径', function() {
   var paths = [FB_PATH.TXS, FB_PATH.FUND, FB_PATH.AGENT_LIST, FB_PATH.AGENT_WALLETS,
-               FB_PATH.WORKING_MONTH, FB_PATH.RM_BOOKINGS, FB_PATH.ARCHIVES];
+               FB_PATH.WORKING_MONTH, FB_PATH.RM_BOOKINGS, FB_PATH.HC_CONFIG, FB_PATH.ARCHIVES];
   for (var i = 0; i < paths.length; i++) {
     assert(paths[i] && paths[i].length > 0, 'Missing path at index ' + i);
   }

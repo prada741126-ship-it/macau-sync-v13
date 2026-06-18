@@ -103,6 +103,7 @@ function deleteWallet(agentName, fbKey) {
 
   if (!deleted) return null;
   Store.saveWallets(State.get('agentWallets'));
+  trackRecentlyDeleted('wallet', fbKey);
   removeWalletFromFirebase(agentName, fbKey);
   Events.emit(EVENTS.WALLET_DELETED, { agent: agentName, record: deleted });
   return deleted;

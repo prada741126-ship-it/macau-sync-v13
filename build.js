@@ -63,6 +63,7 @@ const JS_FILES = [
   'src/sync/uploader.js',
   'src/sync/watchers.js',
   'src/sync/merger.js',
+  'src/sync/recently-deleted.js',
 
   // Phase 5-6: UI + Pages + Charts
   'src/ui/toast.js',
@@ -165,8 +166,8 @@ function build() {
     replaceCount++;
     return 'v' + version.version;
   });
-  // cache-busting for app.js
-  html = html.replace(/__VERSION__/g, version.version);
+  // cache-busting for app.js (用構建時間戳確保每次部署唯一，強制 CDN 刷新)
+  html = html.replace(/__VERSION__/g, version.version + '.' + Date.now());
   replaceCount++;
   console.log('\n🔄 Version replacements:', replaceCount);
 

@@ -16,7 +16,7 @@
 // 系统识别
 // ============================================================================
 var APP = {
-  VERSION:       'v13.0.0',
+  VERSION:       'v13.0.2',
   TITLE:         '澳門洗碼報表',
   SYSTEM_NAME:   '博盈國際會',
   SYSTEM_SUB:    '洗碼管理系統',
@@ -63,6 +63,7 @@ var STORAGE_KEYS = {
   HC_CONFIG:         'hc_config',              // 酒店设定
   HC_PRESET_VERSION: 'hc_preset_version',      // 酒店预设版本号
   APP_VERSION:       'macau_app_version',      // 版本快取清除
+  RECENTLY_DELETED:  'macau_recently_deleted', // 最近删除追踪
 };
 
 // ============================================================================
@@ -89,6 +90,7 @@ var FB_PATH = {
   AGENT_WALLETS:   'macau_data/agentWallets',
   WORKING_MONTH:   'macau_data/workingMonth',
   RM_BOOKINGS:     'macau_data/rmBookings',
+  HC_CONFIG:       'macau_data/hcConfig',
   ARCHIVES:        'macau_data/archives',
   CONNECTED:       '.info/connected',
 };
@@ -131,6 +133,7 @@ var EVENTS = {
   SYNC_COMPLETE:    'sync:complete',
   SYNC_ERROR:       'sync:error',
   CONNECTION_CHANGED: 'connection:changed',
+  CRYPTO_READY:      'crypto:ready',
   // 页面
   PAGE_CHANGED:     'page:changed',
   // UI

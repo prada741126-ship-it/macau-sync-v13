@@ -246,27 +246,28 @@ function calcTotalWallet(txs, fundWithdrawals, agentWallets) {
  */
 function calcRoomQuota(bookings, txs, month) {
   var totalVolume = 0;
-  // 月份归一化 ("2026/06" → "2026-06")
-  var normMonth = month ? month.replace(/\//g, '-') : '';
+  // 月份归一化 (使用 extractMonth 处理各种日期格式)
+  var normMonth = extractMonth(month || '');
 
   for (var i = 0; i < txs.length; i++) {
-    // 日期归一化后再匹配 (支持 "YYYY-MM-DD" 和 "YYYY/MM/DD")
-    var txDate = (txs[i].date || '').replace(/\//g, '-');
-    if (!normMonth || txDate.indexOf(normMonth) === 0) {
+    // ★ 使用 extractMonth 提取交易月份，支持 "YYYY-MM-DD" 和 "YYYY/MM/DD" 及无前导零格式
+    var txMonth = extractMonth(txs[i].date);
+    if (!normMonth || txMonth === normMonth) {
       totalVolume += toNum(txs[i].volume);
     }
   }
 
   var usedThreshold = 0;
   for (var j = 0; j < bookings.length; j++) {
-    // month 字段归一化后再匹配
-    var bkMonth = (bookings[j].month || '').replace(/\//g, '-');
+    // ★ 使用 extractMonth 提取订房月份
+    var bkMonth = extractMonth(bookings[j].month) || extractMonth(bookings[j].checkIn);
     if (!normMonth || bkMonth === normMonth) {
       usedThreshold += toNum(bookings[j].threshold) || 0;
     }
   }
 
-  var remaining = Math.max(0, totalVolume - usedThreshold);
+  // ★ 剩余额度 = 总洗码量 - 已用转变门槛（可为负数，表示不足）
+  var remaining = totalVolume - usedThreshold;
   // 额度使用率计算
   // 业务规则：
   //   1. 有出场量 → 使用率 = 已用额度 / 总出场量
@@ -282,10 +283,10 @@ function calcRoomQuota(bookings, txs, month) {
   }
 
   return {
-    totalVolume:      totalVolume,
-    usedThreshold:    usedThreshold,
+    totalVolume:        totalVolume,
+    usedThreshold:      usedThreshold,
     remainingThreshold: remaining,
-    usageRate:        Math.min(100, rate),
+    usageRate:          rate,
   };
 }
 

@@ -48,6 +48,24 @@ function currentMonth() {
 }
 
 /**
+ * 从日期字符串提取月份 (YYYY-MM)
+ * 支持 "YYYY-MM-DD", "YYYY/MM/DD", "YYYY-M-D", "YYYY/M/D" 等格式
+ * @param {string} dateStr
+ * @returns {string} "YYYY-MM" 或空字符串
+ */
+function extractMonth(dateStr) {
+  if (!dateStr) return '';
+  var parts = String(dateStr).split(/[-\/]/);
+  if (parts.length < 2) return '';
+  var year = parts[0];
+  var month = parts[1];
+  if (!year || !month) return '';
+  // 确保月份两位数
+  if (month.length === 1) month = '0' + month;
+  return year + '-' + month;
+}
+
+/**
  * 获取月份的第一天
  * @param {string} ym - "YYYY-MM"
  * @returns {string} "YYYY-MM-01"

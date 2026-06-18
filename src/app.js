@@ -91,6 +91,14 @@
     try {
       Store.loadAll(true);  // silent = true，不触发事件
 
+      // 加载本地数据
+      loadRecentlyDeleted();  // ★ 恢复删除追踪表
+
+      // ★ 调试：显示加载结果
+      if (typeof debugLog === 'function') {
+        debugLog('v13-dlog-cya', '📦 loadAll done → agentList: ' + JSON.stringify(State.get('agentList')));
+      }
+
       // 如果没有工作月份，设为当前月
       if (!State.get('workingMonth')) {
         State.set('workingMonth', currentMonth());
@@ -180,6 +188,9 @@
     var pwOverlay = document.getElementById('pw-overlay');
     if (pwOverlay) { pwOverlay.style.display = 'none'; pwOverlay.style.opacity = '0'; }
 
+    // ★ 周期性清理过期删除追踪 (每 30 秒)
+    setInterval(function() { cleanRecentlyDeleted(); }, 30000);
+
     // ★ 首先绑定交互: 先保侧栏能点、页面能切，再渲染数据
     _setupSidebar();
     _setupMonthBar();
@@ -192,8 +203,7 @@
     // 启动 Firebase 监听器 (非致命) — watchers 在连线建立后会自动拉取远端数据
     try { startWatchers(); } catch(e) { console.warn('[v13:app] startWatchers error:', e); }
 
-    // 尝試同步 — 如果连线已建立就立即同步，否则由 _watchConnection 在连通时补触发
-    try { syncDownloadAll(); } catch(e) { console.warn('[v13:app] syncDownloadAll error:', e); }
+    // 立即推送本地数据到 Firebase（异步安全网）
     try { syncUploadAll(); } catch(e) { console.warn('[v13:app] syncUploadAll error:', e); }
 
     // 渲染: 加 try-catch 确保一个页面失败不影响其他
@@ -333,6 +343,41 @@
     Events.on(EVENTS.WALLET_UPDATED, function() { if (typeof renderWallet === 'function') renderWallet(); _updateTopbarWallet(); });
     Events.on(EVENTS.WALLET_DELETED, function() { if (typeof renderWallet === 'function') renderWallet(); _updateTopbarWallet(); });
     Events.on(EVENTS.TXS_LOADED, function() { if (typeof renderWallet === 'function') renderWallet(); });
+
+    // ★ 代理名单变更（含 Firebase 同步）→ 刷新所有代理下拉选单 + 页面渲染
+    Events.on(EVENTS.AGENT_LIST_UPDATED, function() {
+      // 刷新交易表单代理下拉
+      if (typeof _populateTxAgentDropdown === 'function') _populateTxAgentDropdown();
+      // 刷新查询页代理筛选器
+      if (typeof _populateQueryFilters === 'function') _populateQueryFilters();
+      // 刷新房务系统代理下拉和筛选器
+      if (typeof RM !== 'undefined' && RM.populateAgentDropdown) RM.populateAgentDropdown();
+      if (typeof RM !== 'undefined' && RM.populateAgentFilter) RM.populateAgentFilter();
+      // 刷新代理管理弹窗列表（如果弹窗开着）
+      if (typeof _renderAgentMgrList === 'function') _renderAgentMgrList();
+      // 重新渲染当前页面（代理相关数据可能变化）
+      var page = State.get('currentPage');
+      if (page === 'overview') renderOverview();
+      if (page === 'all') renderAll();
+      if (page === 'query') doQuery();
+      if (page === 'summary') renderSummary();
+      if (page === 'wallet' && typeof renderWallet === 'function') renderWallet();
+      if (page === 'room' && typeof RM !== 'undefined' && RM.render) RM.render();
+      _updateTopbarWallet();
+    });
+
+    // ★ 代理钱包从 Firebase 同步下来 → 刷新总钱包页和 topbar
+    Events.on(EVENTS.WALLETS_LOADED, function() {
+      if (typeof renderWallet === 'function') renderWallet();
+      _updateTopbarWallet();
+    });
+
+    // ★ 公基金从 Firebase 同步下来 → 刷新总览和总钱包页
+    Events.on(EVENTS.FUND_LOADED, function() {
+      renderOverview();
+      if (typeof renderWallet === 'function') renderWallet();
+      _updateTopbarWallet();
+    });
   }
 
   function _updateTopbarWallet() {
@@ -358,6 +403,8 @@
 
     console.log('[v13:app] Booting v13...');
     console.log('[v13:app] Version:', APP.VERSION);
+    console.log('%c🔍 [v13:app] v13.0.2 — 手機版? URL加 ?debug=1 開啟螢幕診斷面板', 'font-size:16px;color:#0f0;background:#000;padding:4px 8px');
+    if (typeof debugLog === 'function') debugLog('v13-dlog-grn', '🚀 App boot v13.0.2 — 診斷面板已啟動');
     console.log('[v13:app] Events registered:', JSON.stringify(Events.listAll()));
 
     // 1. 检测依赖

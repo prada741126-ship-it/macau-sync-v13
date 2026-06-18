@@ -177,6 +177,8 @@ function createHC(data) {
 
   Store.saveHCConfig(State.get('hotelConfig'));
   Events.emit(EVENTS.HC_CONFIG_UPDATED, State.get('hotelConfig'));
+  // ★ Firebase 同步
+  try { syncHCConfigToFirebase(entry); } catch(e) { console.error('[hc] createHC sync error:', e); }
   return entry;
 }
 
@@ -209,6 +211,8 @@ function updateHC(fbKey, data) {
   if (!updated) return null;
   Store.saveHCConfig(State.get('hotelConfig'));
   Events.emit(EVENTS.HC_CONFIG_UPDATED, State.get('hotelConfig'));
+  // ★ Firebase 同步
+  try { syncHCConfigToFirebase(updated); } catch(e) { console.error('[hc] updateHC sync error:', e); }
   return updated;
 }
 
@@ -231,6 +235,9 @@ function deleteHC(fbKey) {
   });
 
   if (!deleted) return null;
+  // ★ 追踪最近删除 + Firebase 墓碑同步
+  try { trackRecentlyDeleted('hc', fbKey); } catch(e) { console.error('[hc] trackRecentlyDeleted error:', e); }
+  try { removeHCFromFirebase(fbKey); } catch(e) { console.error('[hc] deleteHC sync error:', e); }
   Store.saveHCConfig(State.get('hotelConfig'));
   Events.emit(EVENTS.HC_CONFIG_UPDATED, State.get('hotelConfig'));
   return deleted;
@@ -251,6 +258,12 @@ function resetHCToPreset() {
   Store.saveHCConfig(preset);
   Store.saveHCPresetVersion(PRESET_VERSION);
   Events.emit(EVENTS.HC_CONFIG_UPDATED, preset);
+  // ★ Firebase 同步：逐笔推送所有预设
+  try {
+    for (var j = 0; j < preset.length; j++) {
+      syncHCConfigToFirebase(preset[j]);
+    }
+  } catch(e) { console.error('[hc] resetHCToPreset sync error:', e); }
   return preset.length;
 }
 
