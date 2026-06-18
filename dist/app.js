@@ -1789,6 +1789,42 @@ var Store = (function() {
   }
 
   /**
+   * 清空本地业务数据（交易、公基金、代理钱包、代理名单、订房）
+   * 保留：hotelConfig、workingMonth、auth、密码、appVersion
+   * 同时将 State 重置为空状态
+   */
+  function clearLocalData() {
+    // 清除 localStorage 中的业务数据 key
+    var businessKeys = [
+      STORAGE_KEYS.DATA,          // 交易 'macau_data'
+      STORAGE_KEYS.FUND,          // 公基金 'macau_fund_data'
+      STORAGE_KEYS.AGENT_WALLETS, // 代理钱包 'macau_agent_wallets'
+      STORAGE_KEYS.AGENT_LIST,    // 代理名单 'macau_agent_list'
+      STORAGE_KEYS.RM_BOOKINGS,   // 订房 'rm_bookings'
+      STORAGE_KEYS.RM_LAST_ID,    // 订房ID 'rm_last_id'
+      STORAGE_KEYS.BACKUP_LIST,   // 备份清单 'macau_backup_list'
+      STORAGE_KEYS.DRAFT,         // 草稿 'macau_draft'
+    ];
+    for (var i = 0; i < businessKeys.length; i++) {
+      try { localStorage.removeItem(businessKeys[i]); } catch(e) {}
+    }
+    // 重置 State 中的业务字段（保留 hotelConfig/workingMonth/auth）
+    State.batchSet({
+      txs:             [],
+      fundWithdrawals: [],
+      agentWallets:    {},
+      agentList:       [],
+      bookings:        [],
+      backupList:      [],
+    }, 'store:cleared');
+    State.resetNextId('tx', 1);
+    State.resetNextId('fund', 1);
+    State.resetNextId('wallet', 1);
+    State.resetNextId('booking', 1);
+    console.log('[v13:store] clearLocalData: business data cleared');
+  }
+
+  /**
    * 从 localStorage 全部加载到 State
    * @param {boolean} [silent=false] - 是否抑制事件
    */
@@ -1871,6 +1907,7 @@ var Store = (function() {
     // 全量
     saveAll:      saveAll,
     loadAll:      loadAll,
+    clearLocalData: clearLocalData,
   };
 })();
 
@@ -5273,6 +5310,33 @@ function decodeFirebaseKey(encoded) {
                 .replace(/_LB_/g, '[')
                 .replace(/_RB_/g, ']')
                 .replace(/_SLASH_/g, '/');
+}
+
+// ============================================================================
+// 管理员操作：清除 Firebase 全部数据
+// ============================================================================
+
+/**
+ * 清除 Firebase macau_data/ 下的所有数据（交易、公基金、代理钱包、订房等）
+ * 警告：此操作不可逆，执行前须由 UI 确认
+ * @param {function} onDone - 成功回调 function(err)
+ */
+function clearFirebaseData(onDone) {
+  var db = getDB();
+  if (!db) {
+    console.error('[v13:firebase] clearFirebaseData: _db not ready');
+    if (onDone) onDone(new Error('Firebase 未連線'));
+    return;
+  }
+  console.warn('[v13:firebase] 🗑️  clearFirebaseData: nuking macau_data/...');
+  db.ref('macau_data').set(null, function(err) {
+    if (err) {
+      console.error('[v13:firebase] ❌ clearFirebaseData FAILED:', err.message || err);
+    } else {
+      console.log('[v13:firebase] ✅ clearFirebaseData OK — macau_data/ cleared');
+    }
+    if (onDone) onDone(err);
+  });
 }
 
 // src/sync/uploader.js
@@ -10000,6 +10064,49 @@ function _v13LoginFallback() {
       var maxAttempts = (typeof CONFIG !== 'undefined' && CONFIG.MAX_PW_ATTEMPTS) ? CONFIG.MAX_PW_ATTEMPTS : 3;
       attemptsEl.textContent = '剩餘 ' + maxAttempts + ' 次機會';
     }
+  }
+}
+
+// ============================================================================
+// 管理员：清除所有数据（Firebase + 本地）
+// ============================================================================
+
+/**
+ * 清除全部数据 (Firebase + 本地 localStorage + State)
+ * 二次确认保护，防止误操作
+ */
+function clearAllDataConfirm() {
+  if (!confirm('⚠️ 警告：此操作將清除 Firebase 及本機所有業務數據（交易、公基金、代理錢包、訂房）！\n\n此操作不可逆，建議先備份！\n\n確定要繼續嗎？')) {
+    return;
+  }
+  if (!confirm('再次確認：您確定要清除全部數據嗎？\n\n清除後所有記錄將消失，無法恢復！')) {
+    return;
+  }
+
+  showToast('正在清除數據...', 'info');
+
+  // 1. 先清除本地
+  try {
+    Store.clearLocalData();
+  } catch(e) {
+    console.error('[v13:bridge] clearAllData: Store.clearLocalData error:', e);
+  }
+
+  // 2. 再清除 Firebase
+  if (typeof clearFirebaseData === 'function') {
+    clearFirebaseData(function(err) {
+      if (err) {
+        showToast('本機數據已清除，Firebase 清除失敗：' + (err.message || err), 'error');
+        console.error('[v13:bridge] clearFirebaseData error:', err);
+      } else {
+        showToast('全部數據已清除！', 'success');
+        // 刷新所有页面
+        try { renderAll(); } catch(e2) {}
+      }
+    });
+  } else {
+    showToast('本機數據已清除（Firebase 清除函數未加載）', 'warning');
+    try { renderAll(); } catch(e2) {}
   }
 }
 

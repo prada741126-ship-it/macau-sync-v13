@@ -11,7 +11,7 @@
   <!-- 版本快取清除 -->
   <script>
     (function() {
-      var APP_VERSION = '13.0.0.1781348046505';
+      var APP_VERSION = '13.0.0.1781760597304';
       var stored = localStorage.getItem('macau_app_version');
       var qs = location.search || '';
       if (stored && stored !== APP_VERSION && !sessionStorage.getItem('_v13_reloaded')) {
@@ -2118,7 +2118,7 @@ tr.rank-1 td {
   <!-- Firebase 初始化已统一由 src/sync/firebase.js 的 initFirebase() 处理（带重试） -->
 
   <!-- JS: 合并后由 build.js 输出为 app.js -->
-  <script src="app.js?v=13.0.0.1781348046505"></script>
+  <script src="app.js?v=13.0.0.1781760597304"></script>
 </head>
 <body>
 
@@ -2202,6 +2202,7 @@ tr.rank-1 td {
           <button class="btn btn-sm" onclick="doBackup()"><span>📦 備份</span></button>
           <button class="btn btn-sm" onclick="syncUploadAll();showToast('同步中…','info')"><span>🔄 同步</span></button>
           <button class="btn btn-sm" onclick="openModal('shortcut-help-modal')"><span>⌨️ 快捷鍵</span></button>
+          <button class="btn btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="clearAllDataConfirm()" title="清除所有數據（危險操作）"><span>🗑️ 清除</span></button>
         </div>
       </div>
 
@@ -2616,6 +2617,6 @@ tr.rank-1 td {
     </div>
   </div>
 
-  <!-- BUILD: v13.0.0 | 2026-06-11 | 2026-06-13T10:54:06.505Z -->
+  <!-- BUILD: v13.0.0 | 2026-06-11 | 2026-06-18T05:29:57.304Z -->
 </body>
 </html>
