@@ -64,6 +64,7 @@ var STORAGE_KEYS = {
   HC_CONFIG:         'hc_config',              // 酒店设定
   HC_PRESET_VERSION: 'hc_preset_version',      // 酒店预设版本号
   APP_VERSION:       'macau_app_version',      // 版本快取清除
+  RECENTLY_DELETED:  'macau_recently_deleted', // 最近删除追踪
 };
 
 // ============================================================================
@@ -3040,6 +3041,8 @@ function deleteTx(fbKey) {
   Store.saveTxs(State.get('txs'));
 
   console.log('[v13:tx] 🔥 從 Firebase 移除...');
+  // ★ 追踪删除 (防止 syncUploadAll transaction 复活)
+  trackRecentlyDeleted('tx', fbKey);
   // ★ 即時從 Firebase 刪除
   removeTxFromFirebase(fbKey);
 
@@ -3353,6 +3356,7 @@ function deleteFund(fbKey) {
 
   if (!deleted) return null;
   Store.saveFund(State.get('fundWithdrawals'));
+  trackRecentlyDeleted('fund', fbKey);
   removeFundFromFirebase(fbKey);
   Events.emit(EVENTS.FUND_DELETED, deleted);
   return deleted;
@@ -3484,6 +3488,7 @@ function deleteWallet(agentName, fbKey) {
 
   if (!deleted) return null;
   Store.saveWallets(State.get('agentWallets'));
+  trackRecentlyDeleted('wallet', fbKey);
   removeWalletFromFirebase(agentName, fbKey);
   Events.emit(EVENTS.WALLET_DELETED, { agent: agentName, record: deleted });
   return deleted;
@@ -3631,6 +3636,7 @@ function removeAgent(name) {
   var newList = State.get('agentList');
   debugLog('v13-dlog-red', '🔴 State.get → ' + JSON.stringify(newList));
   Store.saveAgentList(newList);
+  trackRecentlyDeleted('agent', name);
   // ★ 验证写入
   var verify = Store.loadAgentList();
   debugLog('v13-dlog-red', '🔴 localStorage verify: ' + JSON.stringify(verify) + ' match=' + (JSON.stringify(verify) === JSON.stringify(newList)));
@@ -3867,6 +3873,7 @@ function deleteBooking(fbKey) {
 
   if (!deleted) return null;
   Store.saveBookings(State.get('bookings'));
+  trackRecentlyDeleted('booking', fbKey);
   removeBookingFromFirebase(fbKey);
   Events.emit(EVENTS.BOOKING_DELETED, deleted);
   return deleted;
@@ -5433,9 +5440,16 @@ function syncUploadAll() {
 
   // 1. 交易：transaction 原子合併 (個別 CRUD 已即時推送，此為安全網)
   // ★ FIX: mergeTxs(local, remote) — 第一个参数是本地，第二个是远端
+  // ★ 防止删除回魂: 为最近删除的项写入墓碑
   db.ref(FB_PATH.TXS).transaction(function(remote) {
     if (!remote) return fbArrayToObj(txs);
     var rArr = fbObjToArray(remote);
+    // ★ 为最近删除的远端项写入墓碑，防止被复活
+    for (var i = 0; i < rArr.length; i++) {
+      if (rArr[i]._fbKey && isRecentlyDeleted('tx', rArr[i]._fbKey)) {
+        rArr[i] = { _fbKey: rArr[i]._fbKey, _deleted: true, _updatedAt: Date.now() };
+      }
+    }
     var merged = mergeTxs(txs, rArr);  // ✓ local=txs, remote=rArr
     console.log('[v13:uploader] TXS transaction: local=' + txs.length + ' remote=' + rArr.length + ' merged=' + merged.length);
     return fbArrayToObj(merged);
@@ -5451,6 +5465,12 @@ function syncUploadAll() {
   db.ref(FB_PATH.FUND).transaction(function(remote) {
     if (!remote) return fbArrayToObj(fundWithdrawals);
     var rArr = fbObjToArray(remote);
+    // ★ 为最近删除的远端项写入墓碑
+    for (var i = 0; i < rArr.length; i++) {
+      if (rArr[i]._fbKey && isRecentlyDeleted('fund', rArr[i]._fbKey)) {
+        rArr[i] = { _fbKey: rArr[i]._fbKey, _deleted: true, _updatedAt: Date.now() };
+      }
+    }
     var merged = mergeTxs(fundWithdrawals, rArr);
     console.log('[v13:uploader] FUND transaction: local=' + fundWithdrawals.length + ' remote=' + rArr.length + ' merged=' + merged.length);
     return fbArrayToObj(merged);
@@ -5483,6 +5503,16 @@ function syncUploadAll() {
   db.ref(FB_PATH.AGENT_WALLETS).transaction(function(remote) {
     if (!remote) return fbWalletsToObj(agentWallets);
     var rw = fbObjToWallets(remote);
+    // ★ 为最近删除的远端项写入墓碑
+    for (var ag in rw) {
+      var records = rw[ag];
+      if (!Array.isArray(records)) continue;
+      for (var i = 0; i < records.length; i++) {
+        if (records[i]._fbKey && isRecentlyDeleted('wallet', records[i]._fbKey)) {
+          records[i] = { _fbKey: records[i]._fbKey, _deleted: true, _updatedAt: Date.now() };
+        }
+      }
+    }
     return fbWalletsToObj(mergeWallets(agentWallets, rw));
   }, function(err, committed, snapshot) {
     if (err) {
@@ -5499,6 +5529,12 @@ function syncUploadAll() {
   db.ref(FB_PATH.RM_BOOKINGS).transaction(function(remote) {
     if (!remote) return fbArrayToObj(bookings);
     var rArr = fbObjToArray(remote);
+    // ★ 为最近删除的远端项写入墓碑
+    for (var i = 0; i < rArr.length; i++) {
+      if (rArr[i]._fbKey && isRecentlyDeleted('booking', rArr[i]._fbKey)) {
+        rArr[i] = { _fbKey: rArr[i]._fbKey, _deleted: true, _updatedAt: Date.now() };
+      }
+    }
     var merged = mergeBookings(bookings, rArr);
     console.log('[v13:uploader] BOOKINGS transaction: local=' + bookings.length + ' remote=' + rArr.length + ' merged=' + merged.length);
     return fbArrayToObj(merged);
@@ -6061,6 +6097,115 @@ function mergeAgentLists(local, remote) {
   }
   merged.sort(function(a, b) { return a.localeCompare(b); });
   return merged;
+}
+
+// src/sync/recently-deleted.js
+/**
+ * v13 Recently Deleted Tracking Module
+ * 
+ * 依赖: core/constants.js (STORAGE_KEYS), core/store.js (Store)
+ * 影响: sync/uploader.js (syncUploadAll transactions)
+ * 
+ * 用途: 追踪最近删除的 fbKey，防止 syncUploadAll 的 transaction 在墓碑到达 Firebase 前
+ *       将远端旧数据"复活"回本地。删除操作（deleteTx/deleteFund/deleteWallet/deleteBooking）
+ *       会将 fbKey 加入追踪表，syncUploadAll 的事务中会为这些 key 强制写入墓碑。
+ * 
+ * 过期策略: 60 秒后自动清理（单个 remove*FromFirebase 推送通常 < 3 秒完成）
+ */
+
+// ============================================================================
+// 追踪表 (module-level, 不存入 State)
+// ============================================================================
+var _recentlyDeleted = [];
+
+/**
+ * 追踪删除
+ * @param {string} type - 'tx' | 'fund' | 'wallet' | 'booking' | 'agent'
+ * @param {string} key - fbKey
+ */
+function trackRecentlyDeleted(type, key) {
+  if (!type || !key) return;
+  // 去重
+  for (var i = 0; i < _recentlyDeleted.length; i++) {
+    if (_recentlyDeleted[i].type === type && _recentlyDeleted[i].key === key) {
+      _recentlyDeleted[i].at = Date.now();  // 刷新时间戳
+      saveRecentlyDeleted();
+      return;
+    }
+  }
+  _recentlyDeleted.push({ type: type, key: key, at: Date.now() });
+  saveRecentlyDeleted();
+}
+
+/**
+ * 检查是否最近删除
+ * @param {string} type
+ * @param {string} key
+ * @returns {boolean}
+ */
+function isRecentlyDeleted(type, key) {
+  for (var i = 0; i < _recentlyDeleted.length; i++) {
+    if (_recentlyDeleted[i].type === type && _recentlyDeleted[i].key === key) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * 清理过期的追踪条目
+ * @param {number} [maxAge=60000] - 最长保留毫秒数 (默认 60 秒)
+ * @returns {number} 清理的条目数
+ */
+function cleanRecentlyDeleted(maxAge) {
+  if (!maxAge) maxAge = 60000;
+  var now = Date.now();
+  var cleaned = 0;
+  for (var i = _recentlyDeleted.length - 1; i >= 0; i--) {
+    if (now - _recentlyDeleted[i].at > maxAge) {
+      _recentlyDeleted.splice(i, 1);
+      cleaned++;
+    }
+  }
+  if (cleaned > 0) {
+    saveRecentlyDeleted();
+  }
+  return cleaned;
+}
+
+// ============================================================================
+// 持久化 (localStorage)
+// ============================================================================
+
+function saveRecentlyDeleted() {
+  try {
+    Store.save(STORAGE_KEYS.RECENTLY_DELETED, _recentlyDeleted, false);
+  } catch (e) {
+    console.error('[v13:rd] saveRecentlyDeleted error:', e);
+  }
+}
+
+function loadRecentlyDeleted() {
+  try {
+    var saved = Store.load(STORAGE_KEYS.RECENTLY_DELETED, false);
+    if (Array.isArray(saved)) {
+      _recentlyDeleted = saved;
+    }
+    // 清理过期项
+    cleanRecentlyDeleted();
+    console.log('[v13:rd] Loaded ' + _recentlyDeleted.length + ' recently deleted entries');
+  } catch (e) {
+    console.error('[v13:rd] loadRecentlyDeleted error:', e);
+    _recentlyDeleted = [];
+  }
+}
+
+/**
+ * 获取当前追踪数量
+ * @returns {number}
+ */
+function getRecentlyDeletedCount() {
+  return _recentlyDeleted.length;
 }
 
 // src/ui/toast.js
@@ -10377,6 +10522,9 @@ Events.on(EVENTS.HC_CONFIG_UPDATED, function() {
     try {
       Store.loadAll(true);  // silent = true，不触发事件
 
+      // 加载本地数据
+      loadRecentlyDeleted();  // ★ 恢复删除追踪表
+
       // ★ 调试：显示加载结果
       if (typeof debugLog === 'function') {
         debugLog('v13-dlog-cya', '📦 loadAll done → agentList: ' + JSON.stringify(State.get('agentList')));
@@ -10470,6 +10618,9 @@ Events.on(EVENTS.HC_CONFIG_UPDATED, function() {
     // ★ 确保密码遮罩完全移除，避免阻挡点击
     var pwOverlay = document.getElementById('pw-overlay');
     if (pwOverlay) { pwOverlay.style.display = 'none'; pwOverlay.style.opacity = '0'; }
+
+    // ★ 周期性清理过期删除追踪 (每 30 秒)
+    setInterval(function() { cleanRecentlyDeleted(); }, 30000);
 
     // ★ 首先绑定交互: 先保侧栏能点、页面能切，再渲染数据
     _setupSidebar();
