@@ -9083,9 +9083,29 @@ function debugLog(className, msg) {
   console.log(msg);
 }
 
+function debugToggle() {
+  var panel = document.getElementById('v13-debug-panel');
+  if (!panel) return;
+  var toggle = document.getElementById('v13-debug-toggle');
+  if (panel.classList.contains('collapsed')) {
+    panel.classList.remove('collapsed');
+    panel.classList.add('expanded');
+    if (toggle) toggle.textContent = '▼';
+  } else {
+    panel.classList.remove('expanded');
+    panel.classList.add('collapsed');
+    if (toggle) toggle.textContent = '▶';
+  }
+}
+
 function debugShow() {
   var panel = document.getElementById('v13-debug-panel');
-  if (panel) panel.style.display = 'block';
+  if (panel) {
+    panel.style.display = 'block';
+    // 預設折疊，不擋操作
+    panel.classList.add('collapsed');
+    panel.classList.remove('expanded');
+  }
   localStorage.setItem('macau_debug', '1');
 }
 function debugHide() {

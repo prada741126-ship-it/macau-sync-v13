@@ -11,7 +11,7 @@
   <!-- 版本快取清除 -->
   <script>
     (function() {
-      var APP_VERSION = '13.0.0.1781779050873';
+      var APP_VERSION = '13.0.0.1781779438183';
       var stored = localStorage.getItem('macau_app_version');
       var qs = location.search || '';
       if (stored && stored !== APP_VERSION && !sessionStorage.getItem('_v13_reloaded')) {
@@ -1662,7 +1662,8 @@ tr.rank-1 td {
 
 /* css/mobile.css */
 /* ============================================================================
- * v13 手机调试面板 — 内建可视线，不需开 Console
+ * v13 手机调试面板 — 可折叠，不挡操作
+ *   默认只显示标题栏（40px高），点击展开
  * ============================================================================ */
 #v13-debug-panel {
   display: none;
@@ -1670,27 +1671,48 @@ tr.rank-1 td {
   bottom: 0;
   left: 0;
   right: 0;
-  z-index: 99999;
-  background: rgba(0,0,0,0.92);
+  z-index: 5000;
+  background: rgba(0,0,0,0.95);
   color: #0f0;
   font-family: monospace;
   font-size: 11px;
-  line-height: 1.3;
-  max-height: 38vh;
-  overflow-y: auto;
   border-top: 2px solid #0f0;
-  padding: 4px 6px;
   -webkit-overflow-scrolling: touch;
+  transition: max-height 0.25s ease;
+}
+/* 折叠状态：只显示标题栏 */
+#v13-debug-panel.collapsed {
+  max-height: 40px;
+  overflow: hidden;
+}
+/* 展开状态：显示日志区 */
+#v13-debug-panel.expanded {
+  max-height: 35vh;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 #v13-debug-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 2px 0 4px 0;
+  padding: 6px 10px;
   border-bottom: 1px solid rgba(0,255,0,0.3);
-  margin-bottom: 4px;
+  cursor: pointer;
+  min-height: 38px;
+  user-select: none;
+  -webkit-user-select: none;
 }
+#v13-debug-header:hover { background: rgba(0,255,0,0.05); }
 #v13-debug-header span { color: #ff0; font-weight: bold; font-size: 12px; }
+#v13-debug-toggle {
+  color: #0f0;
+  font-size: 14px;
+  font-weight: bold;
+  margin-right: 6px;
+  display: inline-block;
+  width: 16px;
+  text-align: center;
+}
 #v13-debug-close {
   background: #c00;
   color: #fff;
@@ -1710,15 +1732,32 @@ tr.rank-1 td {
   cursor: pointer;
   margin-right: 4px;
 }
+#v13-debug-log {
+  padding: 4px 8px;
+  line-height: 1.35;
+}
 .v13-dlog { padding: 0 0 1px 0; word-break: break-all; }
 .v13-dlog-ts  { color: #666; }
 .v13-dlog-red { color: #f55; }
 .v13-dlog-ylw { color: #ff0; }
 .v13-dlog-grn { color: #0f0; }
 .v13-dlog-cya { color: #0ff; }
-/* 桌面端面板更窄 */
+/* 手机底部导航上方留空间 */
+@media (max-width: 700px) {
+  /* 折叠态不占空间，底部导航正常 */
+  #v13-debug-panel.collapsed { bottom: 55px; }
+  #v13-debug-panel.expanded { bottom: 55px; }
+}
+/* 桌面端缩小到右下角 */
 @media (min-width: 701px) {
-  #v13-debug-panel { max-width: 500px; left: auto; right: 8px; bottom: 8px; border-radius: 8px; border: 2px solid #0f0; }
+  #v13-debug-panel {
+    max-width: 420px;
+    left: auto;
+    right: 8px;
+    bottom: 8px;
+    border-radius: 8px;
+    border: 2px solid #0f0;
+  }
 }
 
 /* ============================================================================
@@ -2178,7 +2217,7 @@ tr.rank-1 td {
   <!-- Firebase 初始化已统一由 src/sync/firebase.js 的 initFirebase() 处理（带重试） -->
 
   <!-- JS: 合并后由 build.js 输出为 app.js -->
-  <script src="app.js?v=13.0.0.1781779050873"></script>
+  <script src="app.js?v=13.0.0.1781779438183"></script>
 </head>
 <body>
 
@@ -2677,18 +2716,18 @@ tr.rank-1 td {
     </div>
   </div>
 
-  <!-- 📱 手機調試面板 (URL: ?debug=1 開啟) -->
-  <div id="v13-debug-panel">
-    <div id="v13-debug-header">
-      <span>🔍 v13 診斷面板</span>
+  <!-- 📱 手機調試面板 (URL: ?debug=1 開啟, 預設折疊不擋操作) -->
+  <div id="v13-debug-panel" class="collapsed">
+    <div id="v13-debug-header" onclick="debugToggle()">
+      <span><span id="v13-debug-toggle">▶</span>🔍 v13 診斷</span>
       <div>
-        <button id="v13-debug-clear" onclick="debugClear()">清空</button>
-        <button id="v13-debug-close" onclick="debugHide()">✕ 關閉</button>
+        <button id="v13-debug-clear" onclick="event.stopPropagation();debugClear()">清空</button>
+        <button id="v13-debug-close" onclick="event.stopPropagation();debugHide()">✕</button>
       </div>
     </div>
     <div id="v13-debug-log"></div>
   </div>
 
-  <!-- BUILD: v13.0.0 | 2026-06-11 | 2026-06-18T10:37:30.873Z -->
+  <!-- BUILD: v13.0.0 | 2026-06-11 | 2026-06-18T10:43:58.183Z -->
 </body>
 </html>
