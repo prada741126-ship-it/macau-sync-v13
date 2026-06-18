@@ -3573,7 +3573,7 @@ function syncAgentDrawn(agentName) {
  * 事件: emit agentList:updated
  * 
  * ★ 同步策略：Push-only（本地權威）
- *   CRUD 操作和 syncUploadAll 只推送到 Firebase，不從 Firebase 拉取。
+ *   CRUD 操作即時推送 Firebase，監聽器同步跨設備變更。
  *   跨設備同步：最後推送者勝出。無競態條件。
  */
 
@@ -5548,16 +5548,17 @@ function syncSetWithRetry(ref, data, attempt) {
  * 依赖: sync/firebase.js (getDB, fbObjToArray, fbObjToWallets)
  *        core/state.js, core/events.js, core/store.js
  *        core/constants.js (FB_PATH, EVENTS, STORAGE_KEYS, CONFIG)
- * 对照档: 第九节 initSync() — 6 个监听器（代理名單改為 Push-only，不在此監聽）
+ * 对照档: 第九节 initSync() — 6 个监听器 + 代理名單智能監聽
  */
 
 var _watchers = {};  // 已注册的监听器引用
 
 /**
  * 启动所有 Firebase 即时监听器 (对照档 initSync)
- * ★ 代理名單不再監聽 — 改為本地權威 Push-only 策略：
- *   CRUD 操作和 syncUploadAll 只推送到 Firebase，不從 Firebase 拉取。
- *   跨設備同步：最後推送者勝出（簡單可靠，無競態條件）。
+ * ★ 代理名單使用智能監聽，區分刪除同步和新增同步：
+ *   - 遠端為空 + 本地有數據 → 刪除同步（清空本地）
+ *   - 本地為空 + 遠端有數據 → 新增同步（接受遠端）
+ *   - 兩邊都有數據 → 取并集
  */
 function startWatchers() {
   var db = getDB();
@@ -5607,7 +5608,67 @@ function startWatchers() {
     }
   });
 
-  // 3. 代理名單：不再監聽（Push-only 策略，見頂部說明）
+  // 3. 代理名單：智能監聽（區分刪除同步和新增同步）★ FIX: Push-only 無法跨設備同步刪除
+  var _agentListReceivedFirst = false;
+  _watchers.agentList = db.ref(FB_PATH.AGENT_LIST).on('value', function(snap) {
+    var remote = snap.val() || [];
+    var local = State.get('agentList');
+    if (!Array.isArray(local)) local = [];
+
+    console.log('[v13:watchers] AGENT_LIST onValue: remote=' + remote.length + ' local=' + local.length + ' first=' + _agentListReceivedFirst);
+
+    // 首次觸發：跳過（避免頁面載入時被 Firebase 回調覆蓋本地數據）
+    if (!_agentListReceivedFirst) {
+      _agentListReceivedFirst = true;
+      console.log('[v13:watchers] AGENT_LIST skip first watcher fire (init)');
+      // 如果本地為空但遠程有數據，接受首次初始化
+      if (local.length === 0 && remote.length > 0) {
+        console.log('[v13:watchers] AGENT_LIST init: local empty, applying remote=' + remote.length);
+        State.set('agentList', remote);
+        Store.saveAgentList(remote);
+        Events.emit(EVENTS.AGENT_LIST_UPDATED, remote);
+      }
+      return;
+    }
+
+    // 檢測是否真正有變化
+    var localSorted = local.slice().sort().join(',');
+    var remoteSorted = remote.slice().sort().join(',');
+    if (localSorted === remoteSorted) return;  // 無變化，跳過
+
+    // CASE 1: 遠程為空（其他設備刪除了代理）→ 同步刪除
+    if (remote.length === 0 && local.length > 0) {
+      console.log('[v13:watchers] AGENT_LIST DELETE sync: remote empty, clearing local ' + local.length + ' agents');
+      State.set('agentList', []);
+      Store.saveAgentList([]);
+      Events.emit(EVENTS.AGENT_LIST_UPDATED, []);
+      return;
+    }
+
+    // CASE 2: 本地為空，遠程有數據（其他設備新增了代理）→ 同步新增
+    if (local.length === 0 && remote.length > 0) {
+      console.log('[v13:watchers] AGENT_LIST ADD sync: local empty, applying remote ' + remote.length);
+      State.set('agentList', remote);
+      Store.saveAgentList(remote);
+      Events.emit(EVENTS.AGENT_LIST_UPDATED, remote);
+      return;
+    }
+
+    // CASE 3: 兩邊都有數據 → 取并集（不丢失任何一方的代理）
+    var merged = remote.slice();
+    var localSet = {};
+    for (var _la = 0; _la < local.length; _la++) { localSet[local[_la]] = true; }
+    for (var _ra = 0; _ra < remote.length; _ra++) {
+      if (!localSet[remote[_ra]]) {
+        local.push(remote[_ra]);
+        localSet[remote[_ra]] = true;
+      }
+    }
+    console.log('[v13:watchers] AGENT_LIST MERGE: ' + local.length + ' agents');
+    State.set('agentList', local);
+    Store.saveAgentList(local);
+    Events.emit(EVENTS.AGENT_LIST_UPDATED, local);
+  });
 
   // 4. 监听代理钱包
   _watchers.agentWallets = db.ref(FB_PATH.AGENT_WALLETS).on('value', function(snap) {
@@ -5672,7 +5733,7 @@ function startWatchers() {
     }
   });
 
-  console.log('[v13:watchers] All 6 watchers started (agent list: push-only)');
+  console.log('[v13:watchers] All 7 watchers started (agent list: smart sync)');
   return true;
 }
 
@@ -5729,7 +5790,45 @@ function syncDownloadAll() {
     }
   });
 
-  // 3. 代理名單：不從 Firebase 拉取（Push-only 策略 — 本地權威，永不拉取）
+  // 3. 代理名單：從 Firebase 拉取（智能合併 — 本地刪除優先）
+  db.ref(FB_PATH.AGENT_LIST).once('value', function(snap) {
+    var remote = snap.val() || [];
+    var local = State.get('agentList');
+    if (!Array.isArray(local)) local = [];
+
+    // 如果兩邊一樣就跳過
+    var localSorted = local.slice().sort().join(',');
+    var remoteSorted = remote.slice().sort().join(',');
+    if (localSorted === remoteSorted) return;
+
+    // 本地有數據但遠程為空 → 本地優先（可能是剛刪除了遠程數據）
+    if (local.length > 0 && remote.length === 0) return;
+
+    // 本地為空，遠程有數據 → 接受遠程
+    if (local.length === 0 && remote.length > 0) {
+      console.log('[v13:watchers] syncDownloadAll AGENT_LIST: remote=' + remote.length + ' → local empty, applying');
+      State.set('agentList', remote);
+      Store.saveAgentList(remote);
+      Events.emit(EVENTS.AGENT_LIST_UPDATED, remote);
+      return;
+    }
+
+    // 兩邊都有 → 取并集
+    var merged = remote.slice();
+    var localSet = {};
+    for (var _la = 0; _la < local.length; _la++) { localSet[local[_la]] = true; }
+    for (var _rb = 0; _rb < remote.length; _rb++) {
+      if (!localSet[remote[_rb]]) {
+        merged.push(remote[_rb]);
+      }
+    }
+    if (JSON.stringify(merged.sort()) !== JSON.stringify(local.slice().sort())) {
+      console.log('[v13:watchers] syncDownloadAll AGENT_LIST merged: ' + merged.length + ' agents');
+      State.set('agentList', merged);
+      Store.saveAgentList(merged);
+      Events.emit(EVENTS.AGENT_LIST_UPDATED, merged);
+    }
+  });
 
   db.ref(FB_PATH.AGENT_WALLETS).once('value', function(snap) {
     var remote = fbObjToWallets(snap.val());
