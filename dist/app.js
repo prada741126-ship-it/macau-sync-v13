@@ -17,7 +17,7 @@
 // 系统识别
 // ============================================================================
 var APP = {
-  VERSION:       'v13.0.0',
+  VERSION:       'v13.0.1',
   TITLE:         '澳門洗碼報表',
   SYSTEM_NAME:   '博盈國際會',
   SYSTEM_SUB:    '洗碼管理系統',
@@ -1634,9 +1634,13 @@ var Store = (function() {
   // --- 代理名单 ---
   function saveAgentList(list) {
     save(STORAGE_KEYS.AGENT_LIST, list, false);
+    console.log('[v13:store] 💾 saveAgentList: ' + JSON.stringify(list));
   }
   function loadAgentList() {
-    return load(STORAGE_KEYS.AGENT_LIST, false) || [];
+    var raw = localStorage.getItem(STORAGE_KEYS.AGENT_LIST);
+    var result = load(STORAGE_KEYS.AGENT_LIST, false) || [];
+    console.log('[v13:store] 📖 loadAgentList: raw=' + raw + ' parsed=' + JSON.stringify(result));
+    return result;
   }
 
   // --- 草稿 ---
@@ -3607,23 +3611,32 @@ function addAgent(name) {
  * @returns {object}
  */
 function removeAgent(name) {
+  console.log('[v13:agent] 🔴 removeAgent CALLED: name=' + name + ', before=' + JSON.stringify(State.get('agentList')));
   var removed = false;
   State.update('agentList', function(arr) {
     var idx = arr.indexOf(name);
     if (idx >= 0) {
       arr.splice(idx, 1);
       removed = true;
+      console.log('[v13:agent] 🔴 spliced index=' + idx + ', after splice=' + JSON.stringify(arr));
     }
     return arr;
   });
 
   if (!removed) {
+    console.warn('[v13:agent] 🔴 removeAgent NOT FOUND: ' + name);
     return { success: false, error: '代理 "' + name + '" 不存在' };
   }
 
-  Store.saveAgentList(State.get('agentList'));
-  syncAgentListToFirebase(State.get('agentList'));
-  Events.emit(EVENTS.AGENT_LIST_UPDATED, State.get('agentList'));
+  var newList = State.get('agentList');
+  console.log('[v13:agent] 🔴 State updated: ' + JSON.stringify(newList));
+  Store.saveAgentList(newList);
+  // ★ 验证写入：立即读回确认
+  var verify = Store.loadAgentList();
+  console.log('[v13:agent] 🔴 localStorage saved, verify readback: ' + JSON.stringify(verify) + ' (match=' + (JSON.stringify(verify) === JSON.stringify(newList)) + ')');
+  syncAgentListToFirebase(newList);
+  Events.emit(EVENTS.AGENT_LIST_UPDATED, newList);
+  console.log('[v13:agent] ✅ removeAgent DONE: ' + name + ' removed, remaining=' + JSON.stringify(newList));
   return { success: true, name: name };
 }
 
@@ -10501,6 +10514,7 @@ Events.on(EVENTS.HC_CONFIG_UPDATED, function() {
 
     console.log('[v13:app] Booting v13...');
     console.log('[v13:app] Version:', APP.VERSION);
+    console.log('%c🔍 [v13:app] AGENT SYNC DEBUG BUILD — v13.0.1 — 打开Console查看详细日志', 'font-size:16px;color:#ff0;background:#000;padding:4px 8px');
     console.log('[v13:app] Events registered:', JSON.stringify(Events.listAll()));
 
     // 1. 检测依赖
