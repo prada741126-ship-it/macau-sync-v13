@@ -43,7 +43,7 @@ var CONFIG = {
 };
 
 // ============================================================================
-// localStorage 键 (对照档第四节 - 16 个 key)
+// localStorage 键 (对照档第四节 - 20 个 key)
 // ============================================================================
 var STORAGE_KEYS = {
   DATA:              'macau_data',            // 交易数组 (AES加密)
@@ -65,6 +65,7 @@ var STORAGE_KEYS = {
   HC_PRESET_VERSION: 'hc_preset_version',      // 酒店预设版本号
   APP_VERSION:       'macau_app_version',      // 版本快取清除
   RECENTLY_DELETED:  'macau_recently_deleted', // 最近删除追踪
+  LAST_SYNC_TIME:    'macau_last_sync_time',   // 最后同步时间 ISO
 };
 
 // ============================================================================
@@ -1735,6 +1736,14 @@ var Store = (function() {
     return localStorage.getItem(STORAGE_KEYS.WORKING_MONTH) || '';
   }
 
+  // --- 最后同步时间 ---
+  function saveLastSyncTime(iso) {
+    localStorage.setItem(STORAGE_KEYS.LAST_SYNC_TIME, iso || '');
+  }
+  function loadLastSyncTime() {
+    return localStorage.getItem(STORAGE_KEYS.LAST_SYNC_TIME) || '';
+  }
+
   // --- 月度存档 ---
   function saveArchives(archives) {
     save(STORAGE_KEYS.ARCHIVES, archives, false);
@@ -1954,6 +1963,8 @@ var Store = (function() {
     loadConfig:         loadConfig,
     saveWorkingMonth:   saveWorkingMonth,
     loadWorkingMonth:   loadWorkingMonth,
+    saveLastSyncTime:   saveLastSyncTime,
+    loadLastSyncTime:   loadLastSyncTime,
     saveArchives:       saveArchives,
     loadArchives:       loadArchives,
     saveFilters:        saveFilters,
@@ -10977,6 +10988,7 @@ Events.on(EVENTS.HC_CONFIG_UPDATED, function() {
     // ★ 首先绑定交互: 先保侧栏能点、页面能切，再渲染数据
     _setupSidebar();
     _setupMonthBar();
+    _setupSyncStatus();
     _setupBackToTop();
     _setupAutoRefresh();
 
@@ -11110,6 +11122,81 @@ Events.on(EVENTS.HC_CONFIG_UPDATED, function() {
       try { if (typeof renderWallet === 'function') renderWallet(); } catch(e) {}
       try { if (typeof RM !== 'undefined' && RM.render) RM.render(); } catch(e) {}
     });
+  }
+
+  // 同步状态指示器
+  function _setupSyncStatus() {
+    var capsule = $('#sync-status-capsule');
+    var textEl = $('#sync-status-text');
+    var timeEl = $('#sync-last-time');
+
+    // 初始状态
+    if (capsule && State.get('syncConnected')) {
+      capsule.className = 'sync-capsule connected';
+      if (textEl) textEl.textContent = '已同步';
+    }
+
+    // 恢复最后同步时间
+    var lastTime = Store.loadLastSyncTime();
+    if (lastTime && timeEl) {
+      timeEl.textContent = _formatSyncTime(lastTime);
+    }
+
+    // 连接状态变化
+    Events.on(EVENTS.CONNECTION_CHANGED, function(connected) {
+      if (!capsule) return;
+      if (connected) {
+        capsule.className = 'sync-capsule connected';
+        if (textEl) textEl.textContent = '已同步';
+      } else {
+        capsule.className = 'sync-capsule disconnected';
+        if (textEl) textEl.textContent = '已断开';
+      }
+    });
+
+    // 同步开始
+    Events.on(EVENTS.SYNC_START, function() {
+      if (capsule) {
+        capsule.className = 'sync-capsule syncing';
+        if (textEl) textEl.textContent = '同步中';
+      }
+    });
+
+    // 同步完成 → 记录时间
+    Events.on(EVENTS.SYNC_COMPLETE, function() {
+      if (capsule) {
+        capsule.className = 'sync-capsule connected';
+        if (textEl) textEl.textContent = '已同步';
+      }
+      var now = new Date().toISOString();
+      Store.saveLastSyncTime(now);
+      if (timeEl) timeEl.textContent = _formatSyncTime(now);
+    });
+
+    // 同步错误 → 恢复断开态
+    Events.on(EVENTS.SYNC_ERROR, function() {
+      if (capsule) {
+        capsule.className = 'sync-capsule disconnected';
+        if (textEl) textEl.textContent = '同步失败';
+      }
+    });
+  }
+
+  /** 格式化同步时间为友好显示 */
+  function _formatSyncTime(iso) {
+    if (!iso) return '';
+    try {
+      var diff = Date.now() - new Date(iso).getTime();
+      var seconds = Math.floor(diff / 1000);
+      if (seconds < 60) return '方才同步';
+      if (seconds < 3600) return Math.floor(seconds / 60) + ' 分前';
+      if (seconds < 86400) return Math.floor(seconds / 3600) + ' 小时前';
+      var d = new Date(iso);
+      return (d.getMonth() + 1) + '/' + d.getDate() + ' ' +
+             ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+    } catch(e) {
+      return '';
+    }
   }
 
   // 自动刷新: 数据变更 → 渲染

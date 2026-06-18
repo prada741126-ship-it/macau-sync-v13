@@ -11,7 +11,7 @@
   <!-- 版本快取清除 -->
   <script>
     (function() {
-      var APP_VERSION = '13.0.0.1781786562133';
+      var APP_VERSION = '13.0.0.1781786735288';
       var stored = localStorage.getItem('macau_app_version');
       var qs = location.search || '';
       if (stored && stored !== APP_VERSION && !sessionStorage.getItem('_v13_reloaded')) {
@@ -467,6 +467,66 @@ tr:hover td {
 }
 #sync-dot.connected { background: var(--success); }
 #sync-text { font-size: 11px; color: var(--text-muted); }
+
+/* ── Sync Status Capsule ── */
+.sync-capsule {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 7px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: var(--fw-medium);
+  transition: all 0.3s ease;
+  border: 1px solid;
+  flex-shrink: 0;
+}
+.sync-capsule-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background 0.3s ease;
+}
+/* 已连接 */
+.sync-capsule.connected {
+  background: rgba(39,174,96,0.08);
+  border-color: rgba(39,174,96,0.25);
+  color: var(--success);
+}
+.sync-capsule.connected .sync-capsule-dot {
+  background: var(--success);
+  box-shadow: 0 0 4px var(--success);
+}
+/* 同步中 */
+.sync-capsule.syncing {
+  background: rgba(243,156,18,0.08);
+  border-color: rgba(243,156,18,0.25);
+  color: var(--warning);
+}
+.sync-capsule.syncing .sync-capsule-dot {
+  background: var(--warning);
+  animation: sync-pulse 1s ease-in-out infinite;
+}
+/* 断开 */
+.sync-capsule.disconnected {
+  background: rgba(231,76,60,0.08);
+  border-color: rgba(231,76,60,0.25);
+  color: var(--danger);
+}
+.sync-capsule.disconnected .sync-capsule-dot {
+  background: var(--danger);
+}
+@keyframes sync-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
+}
+/* 最后同步时间 */
+.sync-last-time {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.7;
+  flex-shrink: 0;
+}
 
 /* ── Pages ── */
 .page {
@@ -2269,7 +2329,7 @@ tr.rank-1 td {
   <!-- Firebase 初始化已统一由 src/sync/firebase.js 的 initFirebase() 处理（带重试） -->
 
   <!-- JS: 合并后由 build.js 输出为 app.js -->
-  <script src="app.js?v=13.0.0.1781786562133"></script>
+  <script src="app.js?v=13.0.0.1781786735288"></script>
 </head>
 <body>
 
@@ -2366,8 +2426,11 @@ tr.rank-1 td {
           <div id="month-badge">2026-06</div>
           <button class="month-nav-btn" id="btn-next-month" onclick="switchMonth(1)" title="下个月 (Ctrl+▶)">▶</button>
           <div id="month-status">工作中</div>
-          <div id="sync-dot" class="connected"></div>
-          <div id="sync-text">已同步</div>
+          <div id="sync-status-capsule" class="sync-capsule connected">
+            <span class="sync-capsule-dot"></span>
+            <span id="sync-status-text">已同步</span>
+          </div>
+          <div id="sync-last-time" class="sync-last-time"></div>
           <button class="btn btn-sm" id="btn-close-month" onclick="closeCurrentMonth()">🔒 月末結算</button>
           <div id="total-wallet-badge" style="margin-left:auto;font-size:13px;color:var(--gold-soft)">💰 總錢包: ¥0</div>
         </div>
@@ -2782,6 +2845,6 @@ tr.rank-1 td {
     <div id="v13-debug-log"></div>
   </div>
 
-  <!-- BUILD: v13.0.0 | 2026-06-11 | 2026-06-18T12:42:42.133Z -->
+  <!-- BUILD: v13.0.0 | 2026-06-11 | 2026-06-18T12:45:35.288Z -->
 </body>
 </html>
