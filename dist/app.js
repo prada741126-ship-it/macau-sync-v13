@@ -3567,23 +3567,11 @@ function syncAgentDrawn(agentName) {
  * 对照档: 第七节模块11
  * 
  * 事件: emit agentList:updated
+ * 
+ * ★ 同步策略：Push-only（本地權威）
+ *   CRUD 操作和 syncUploadAll 只推送到 Firebase，不從 Firebase 拉取。
+ *   跨設備同步：最後推送者勝出。無競態條件。
  */
-
-// ★ 本地最後修改時間戳 — 用於防止 watcher 在 set() 完成前用舊 Firebase 數據覆蓋
-var _agentListLocalModifiedAt = 0;
-var AGENT_LIST_GRACE_MS = 5000;  // 5 秒寬限期
-
-function _markAgentListModified() {
-  _agentListLocalModifiedAt = Date.now();
-}
-
-/**
- * 檢查是否在寬限期內（本地剛修改，不應被遠端覆蓋）
- * @returns {boolean}
- */
-function isAgentListGracePeriod() {
-  return (Date.now() - _agentListLocalModifiedAt) < AGENT_LIST_GRACE_MS;
-}
 
 /**
  * 新增代理
@@ -3608,7 +3596,6 @@ function addAgent(name) {
   });
 
   Store.saveAgentList(State.get('agentList'));
-  _markAgentListModified();
   syncAgentListToFirebase(State.get('agentList'));
   Events.emit(EVENTS.AGENT_LIST_UPDATED, State.get('agentList'));
   return { success: true, name: name };
@@ -3635,7 +3622,6 @@ function removeAgent(name) {
   }
 
   Store.saveAgentList(State.get('agentList'));
-  _markAgentListModified();
   syncAgentListToFirebase(State.get('agentList'));
   Events.emit(EVENTS.AGENT_LIST_UPDATED, State.get('agentList'));
   return { success: true, name: name };
@@ -3690,7 +3676,6 @@ function renameAgent(oldName, newName) {
   Store.saveTxs(State.get('txs'));
   Store.saveWallets(State.get('agentWallets'));
 
-  _markAgentListModified();
   syncAgentListToFirebase(State.get('agentList'));
 
   Events.emit(EVENTS.AGENT_LIST_UPDATED, State.get('agentList'));
@@ -5547,14 +5532,16 @@ function syncSetWithRetry(ref, data, attempt) {
  * 依赖: sync/firebase.js (getDB, fbObjToArray, fbObjToWallets)
  *        core/state.js, core/events.js, core/store.js
  *        core/constants.js (FB_PATH, EVENTS, STORAGE_KEYS, CONFIG)
- * 对照档: 第九节 initSync() — 7 个监听器
+ * 对照档: 第九节 initSync() — 6 个监听器（代理名單改為 Push-only，不在此監聽）
  */
 
-var _watchers = {};           // 已注册的监听器引用
-var _agentListWatcherReady = false;  // 跳过首次触发（防止 F5 后用 Firebase 旧数据覆盖 localStorage 正确数据）
+var _watchers = {};  // 已注册的监听器引用
 
 /**
  * 启动所有 Firebase 即时监听器 (对照档 initSync)
+ * ★ 代理名單不再監聽 — 改為本地權威 Push-only 策略：
+ *   CRUD 操作和 syncUploadAll 只推送到 Firebase，不從 Firebase 拉取。
+ *   跨設備同步：最後推送者勝出（簡單可靠，無競態條件）。
  */
 function startWatchers() {
   var db = getDB();
@@ -5604,35 +5591,7 @@ function startWatchers() {
     }
   });
 
-  // 3. 监听代理名单
-  //    ★ 策略：首次触发跳过（localStorage 在 CRUD 操作中先于 Firebase 保存，是权威来源）
-  //       后续触发才处理（来自其他设备的远程变更）
-  _watchers.agentList = db.ref(FB_PATH.AGENT_LIST).on('value', function(snap) {
-    var remote = snap.val();
-    if (!remote || !Array.isArray(remote)) return;
-
-    // ★ 首次触发（页面加载时）跳过：localStorage 已保存正确数据，不讓 Firebase 可能尚存的舊數據覆蓋
-    if (!_agentListWatcherReady) {
-      _agentListWatcherReady = true;
-      console.log('[v13:watchers] 🔇 Agent list watcher first fire skipped (localStorage is authoritative)');
-      return;
-    }
-
-    // ★ 寬限期檢查：本地剛修改代理名單，跳過遠端覆蓋
-    if (typeof isAgentListGracePeriod === 'function' && isAgentListGracePeriod()) {
-      console.log('[v13:watchers] ⏳ Agent list grace period active, skip remote overwrite');
-      return;
-    }
-
-    var local = State.get('agentList');
-    var merged = remote.slice().sort(function(a, b) { return a.localeCompare(b); });
-    if (JSON.stringify(merged) !== JSON.stringify(local)) {
-      console.log('[v13:watchers] 🔄 Agent list remote update: ' + local.length + ' → ' + merged.length + ' agents');
-      State.set('agentList', merged);
-      Store.saveAgentList(merged);
-      Events.emit(EVENTS.AGENT_LIST_UPDATED, merged);
-    }
-  });
+  // 3. 代理名單：不再監聽（Push-only 策略，見頂部說明）
 
   // 4. 监听代理钱包
   _watchers.agentWallets = db.ref(FB_PATH.AGENT_WALLETS).on('value', function(snap) {
@@ -5697,7 +5656,7 @@ function startWatchers() {
     }
   });
 
-  console.log('[v13:watchers] All 7 watchers started');
+  console.log('[v13:watchers] All 6 watchers started (agent list: push-only)');
   return true;
 }
 
@@ -5754,8 +5713,7 @@ function syncDownloadAll() {
     }
   });
 
-  // 3. 代理名單：不從 Firebase 拉取（localStorage 在 CRUD 先保存，是權威來源）
-  //    syncUploadAll 會將本地推送到 Firebase；watcher 處理來自其他設備的即時變更
+  // 3. 代理名單：不從 Firebase 拉取（Push-only 策略 — 本地權威，永不拉取）
 
   db.ref(FB_PATH.AGENT_WALLETS).once('value', function(snap) {
     var remote = fbObjToWallets(snap.val());
