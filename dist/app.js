@@ -5563,7 +5563,7 @@ var _watchers = {};  // 已注册的监听器引用
  * ★ 代理名單使用智能監聽，區分刪除同步和新增同步：
  *   - 遠端為空 + 本地有數據 → 刪除同步（清空本地）
  *   - 本地為空 + 遠端有數據 → 新增同步（接受遠端）
- *   - 兩邊都有數據 → 取并集
+ *   - 兩邊都有數據 → remote 覆蓋（Firebase 權威來源）
  */
 function startWatchers() {
   var db = getDB();
@@ -5798,8 +5798,14 @@ function syncDownloadAll() {
     var remoteSorted = remote.slice().sort().join(',');
     if (localSorted === remoteSorted) return;
 
-    // 本地有數據但遠程為空 → 本地優先（可能是剛刪除了遠程數據）
-    if (local.length > 0 && remote.length === 0) return;
+    // CASE: 遠程為空（其他設備刪除了所有代理）→ 同步刪除（與 watchers CASE 1 一致）
+    if (local.length > 0 && remote.length === 0) {
+      console.log('[v13:watchers] syncDownloadAll AGENT_LIST DELETE sync: remote empty, clearing local ' + local.length + ' agents');
+      State.set('agentList', []);
+      Store.saveAgentList([]);
+      Events.emit(EVENTS.AGENT_LIST_UPDATED, []);
+      return;
+    }
 
     // 本地為空，遠程有數據 → 接受遠程
     if (local.length === 0 && remote.length > 0) {
