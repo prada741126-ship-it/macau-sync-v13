@@ -42,12 +42,12 @@ function _renderKPI(kpi) {
   }
 
   var cards = [
-    { label: TERMS.volume,  value: fmt(kpi.totalVolume),  unit: '萬', accent: 'cyan', color: UI_COLORS.techCyan },
-    { label: TERMS.comm,    value: fmtMoney(kpi.totalComm),   accent: 'blue',  color: UI_COLORS.skyBlue },
-    { label: TERMS.bonus,   value: fmtMoney(kpi.totalBonus),  accent: 'violet',color: UI_COLORS.electricViolet },
-    { label: TERMS.fund,    value: fmtMoney(kpi.totalFund),   accent: 'gold',  color: UI_COLORS.goldSoft },
-    { label: TERMS.drawn,   value: fmtMoney(kpi.totalDrawn),  accent: 'orange',color: UI_COLORS.warning },
-    { label: TERMS.undrawn, value: fmtMoney(kpi.totalUndrawn),accent: 'red',   color: UI_COLORS.danger },
+    { label: '📊 ' + TERMS.volume,  value: fmt(kpi.totalVolume),  raw: kpi.totalVolume,  cuOpts: { suffix: '萬' },       accent: 'cyan', color: UI_COLORS.techCyan },
+    { label: '💰 ' + TERMS.comm,    value: fmtMoney(kpi.totalComm),   raw: kpi.totalComm,    cuOpts: { prefix: '¥' },         accent: 'blue',  color: UI_COLORS.skyBlue },
+    { label: '🎁 ' + TERMS.bonus,   value: fmtMoney(kpi.totalBonus),  raw: kpi.totalBonus,   cuOpts: { prefix: '¥' },         accent: 'violet',color: UI_COLORS.electricViolet },
+    { label: '🏦 ' + TERMS.fund,    value: fmtMoney(kpi.totalFund),   raw: kpi.totalFund,    cuOpts: { prefix: '¥' },         accent: 'gold',  color: UI_COLORS.goldSoft },
+    { label: '📤 ' + TERMS.drawn,   value: fmtMoney(kpi.totalDrawn),  raw: kpi.totalDrawn,   cuOpts: { prefix: '¥' },         accent: 'orange',color: UI_COLORS.warning },
+    { label: '📥 ' + TERMS.undrawn, value: fmtMoney(kpi.totalUndrawn),raw: kpi.totalUndrawn, cuOpts: { prefix: '¥' },         accent: 'red',   color: UI_COLORS.danger },
   ];
 
   grid.innerHTML = '';
@@ -59,7 +59,9 @@ function _renderKPI(kpi) {
 
     var label = h('div', { className: 'kpi-card-label' }, c.label);
     var value = h('div', { className: 'kpi-card-value ' + c.accent });
-    value.innerHTML = c.value + (c.unit ? ' <span style="font-size:14px;opacity:0.6">' + c.unit + '</span>' : '');
+    value.textContent = '0';  // countUp 起始值
+    value._cuRaw = c.raw;
+    value._cuOpts = c.cuOpts;
 
     card.appendChild(label);
     card.appendChild(value);
@@ -72,11 +74,29 @@ function _renderKPI(kpi) {
     grid.appendChild(card);
   }
 
+  // KPI 数字动画 (countUp)
+  var valueEls = grid.querySelectorAll('.kpi-card-value');
+  for (var j = 0; j < valueEls.length; j++) {
+    var el = valueEls[j];
+    if (el._cuRaw != null) {
+      countUp(el, el._cuRaw, el._cuOpts || {});
+    }
+  }
+
   // 笔数/代理数
   var info = h('div', { className: 'kpi-info' });
   info.style.cssText = 'grid-column:1/-1;text-align:center;padding:10px 0;font-size:12px;color:var(--text-muted)';
   info.textContent = '共 ' + kpi.txCount + ' 筆交易 · ' + kpi.agentCount + ' 位代理';
   grid.appendChild(info);
+
+  // ★ countUp 动画
+  var vals = grid.querySelectorAll('.kpi-card-value');
+  for (var j = 0; j < vals.length; j++) {
+    var v = vals[j];
+    if (v._cuRaw != null && typeof countUp === 'function') {
+      countUp(v, v._cuRaw, v._cuOpts);
+    }
+  }
 }
 
 function _renderRecentActivity(txs) {

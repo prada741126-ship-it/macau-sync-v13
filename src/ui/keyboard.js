@@ -42,6 +42,20 @@ function initKeyboard() {
       return;
     }
 
+    // Ctrl + ◀ (ArrowLeft): 上个月
+    if (ctrl && e.key === 'ArrowLeft') {
+      e.preventDefault();
+      if (typeof switchMonth === 'function') switchMonth(-1);
+      return;
+    }
+
+    // Ctrl + ▶ (ArrowRight): 下个月
+    if (ctrl && e.key === 'ArrowRight') {
+      e.preventDefault();
+      if (typeof switchMonth === 'function') switchMonth(1);
+      return;
+    }
+
     // ?: 快捷键帮助
     if (e.key === '?' && !ctrl) {
       e.preventDefault();

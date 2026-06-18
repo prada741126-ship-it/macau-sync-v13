@@ -5,8 +5,23 @@
 
 var _trendChart = null;
 
+/** 设置 Chart.js 全局 tooltip 暗色主题 */
+function _initChartDefaults() {
+  if (typeof Chart === 'undefined' || _initChartDefaults._done) return;
+  _initChartDefaults._done = true;
+  Chart.defaults.plugins.tooltip.backgroundColor = UI_COLORS.bgElevated;
+  Chart.defaults.plugins.tooltip.titleColor = UI_COLORS.textPrimary;
+  Chart.defaults.plugins.tooltip.bodyColor = UI_COLORS.textSecondary;
+  Chart.defaults.plugins.tooltip.borderColor = UI_COLORS.borderSubtle;
+  Chart.defaults.plugins.tooltip.borderWidth = 1;
+  Chart.defaults.plugins.tooltip.padding = 10;
+  Chart.defaults.plugins.tooltip.cornerRadius = 8;
+  Chart.defaults.plugins.tooltip.displayColors = false;
+}
+
 function renderTrendChart(txs, month) {
   if (typeof Chart === 'undefined') return;
+  _initChartDefaults();
   var canvas = document.querySelector('#page-overview .chart-full canvas');
   if (!canvas) return;
 
@@ -29,7 +44,7 @@ function renderTrendChart(txs, month) {
         label: '洗碼量 (萬)',
         data: volumes,
         borderColor: UI_COLORS.techCyan,
-        backgroundColor: 'rgba(0,212,255,0.08)',
+        backgroundColor: hexToRgba(UI_COLORS.techCyan, 0.08),
         fill: true,
         tension: 0.3,
         pointRadius: 3,

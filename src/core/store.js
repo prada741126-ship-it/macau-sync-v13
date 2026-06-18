@@ -136,6 +136,14 @@ var Store = (function() {
     return localStorage.getItem(STORAGE_KEYS.WORKING_MONTH) || '';
   }
 
+  // --- 最后同步时间 ---
+  function saveLastSyncTime(iso) {
+    localStorage.setItem(STORAGE_KEYS.LAST_SYNC_TIME, iso || '');
+  }
+  function loadLastSyncTime() {
+    return localStorage.getItem(STORAGE_KEYS.LAST_SYNC_TIME) || '';
+  }
+
   // --- 月度存档 ---
   function saveArchives(archives) {
     save(STORAGE_KEYS.ARCHIVES, archives, false);
@@ -355,6 +363,8 @@ var Store = (function() {
     loadConfig:         loadConfig,
     saveWorkingMonth:   saveWorkingMonth,
     loadWorkingMonth:   loadWorkingMonth,
+    saveLastSyncTime:   saveLastSyncTime,
+    loadLastSyncTime:   loadLastSyncTime,
     saveArchives:       saveArchives,
     loadArchives:       loadArchives,
     saveFilters:        saveFilters,

@@ -346,10 +346,10 @@ test('APP.VERSION 非空', function() {
   assert(APP.VERSION.length > 0);
 });
 
-test('STORAGE_KEYS 有 19 个 key', function() {
+test('STORAGE_KEYS 有 20 个 key', function() {
   var count = 0;
   for (var k in STORAGE_KEYS) { if (STORAGE_KEYS.hasOwnProperty(k)) count++; }
-  assertEqual(count, 19); // 16 original + APP_VERSION + HC_PRESET_VERSION + RECENTLY_DELETED
+  assertEqual(count, 20); // 19 original + LAST_SYNC_TIME
 });
 
 test('FB_PATH 有 8 条路径', function() {

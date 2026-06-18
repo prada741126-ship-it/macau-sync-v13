@@ -628,6 +628,82 @@ function rmHandleImport(event) {
   }
 }
 
+/** 桌面端日期输入同步到三联动 select 和 hidden input */
+function rmSyncDateInput(prefix) {
+  var dtInput = document.getElementById('rm-' + prefix + '-dt');
+  var hidden = document.getElementById('rm-' + prefix);
+  if (!dtInput || !hidden) return;
+  var val = dtInput.value;
+  hidden.value = val;
+  // 同步到三联动 select
+  if (typeof rmSetDateSels === 'function') {
+    rmSetDateSels('rm-' + prefix, val);
+  }
+  rmCalcNights();
+}
+
+// ============================================================================
+// 月份导航桥接
+// ============================================================================
+
+/**
+ * 月份切换（◀ ▶ 箭头导航）
+ * @param {number} dir — -1（上一月）或 1（下一月）
+ */
+function switchMonth(dir) {
+  var current = State.get('workingMonth');
+  if (!current) {
+    current = currentMonth();
+  }
+  
+  var parts = current.split('-');
+  var year = parseInt(parts[0], 10);
+  var month = parseInt(parts[1], 10);
+  
+  // 计算新月
+  month += dir;
+  while (month > 12) { year++; month -= 12; }
+  while (month < 1)  { year--; month += 12; }
+  
+  var newMonth = year + '-' + (month < 10 ? '0' + month : month);
+  
+  // 更新 State & Store
+  State.set('workingMonth', newMonth);
+  Store.saveWorkingMonth(newMonth);
+  
+  // 更新 UI
+  var badge = document.getElementById('month-badge');
+  if (badge) badge.textContent = newMonth;
+  
+  // 如果工作月份被"鎖定"（已归档），清除锁定状态
+  if (State.get('isLocked')) {
+    State.set('isLocked', false);
+  }
+  
+  // 触发全局事件 → 所有页面重新渲染
+  Events.emit(EVENTS.MONTH_CHANGED, newMonth);
+  
+  // 同步到 Firebase（如果已连接）
+  try {
+    if (typeof _db !== 'undefined' && _db) {
+      _db.ref(FB_PATH.WORKING_MONTH).set(newMonth);
+    }
+  } catch(e) {
+    console.error('[bridge] switchMonth sync error:', e);
+  }
+  
+  // 小动画 — 滑动方向暗示
+  var badgeEl = document.getElementById('month-badge');
+  if (badgeEl) {
+    badgeEl.style.transform = 'translateX(' + (dir > 0 ? -8 : 8) + 'px)';
+    badgeEl.style.transition = 'none';
+    requestAnimationFrame(function() {
+      badgeEl.style.transition = 'transform 0.3s ease';
+      badgeEl.style.transform = 'translateX(0)';
+    });
+  }
+}
+
 // ============================================================================
 // 移动端侧栏
 // ============================================================================

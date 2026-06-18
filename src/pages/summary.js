@@ -37,18 +37,26 @@ function _renderSummaryKPI(txs) {
   el.innerHTML = '';
 
   var items = [
-    { label: '總筆數', value: kpi.txCount, accent: 'cyan',   color: UI_COLORS.techCyan },
-    { label: '代理數', value: kpi.agentCount, accent: 'violet', color: UI_COLORS.electricViolet },
-    { label: TERMS.volume, value: fmt(kpi.totalVolume) + '萬', accent: 'blue',    color: UI_COLORS.skyBlue },
-    { label: TERMS.undrawn, value: fmtMoney(kpi.totalUndrawn), accent: 'orange',  color: UI_COLORS.warning },
+    { label: '總筆數', raw: kpi.txCount,       cuOpts: {},              accent: 'cyan',   color: UI_COLORS.techCyan },
+    { label: '代理數', raw: kpi.agentCount,    cuOpts: {},              accent: 'violet', color: UI_COLORS.electricViolet },
+    { label: TERMS.volume, raw: kpi.totalVolume, cuOpts: { suffix: '萬' }, accent: 'blue',    color: UI_COLORS.skyBlue },
+    { label: TERMS.undrawn, raw: kpi.totalUndrawn, cuOpts: { prefix: '¥' }, accent: 'orange',  color: UI_COLORS.warning },
   ];
 
   for (var i = 0; i < items.length; i++) {
     var card = h('div', { className: 'kpi-card' });
     card.style.borderLeft = '3px solid ' + items[i].color;
     card.innerHTML = '<div class="kpi-card-label">' + items[i].label + '</div>' +
-                     '<div class="kpi-card-value ' + items[i].accent + '">' + items[i].value + '</div>';
+                     '<div class="kpi-card-value ' + items[i].accent + '">0</div>';
     el.appendChild(card);
+  }
+
+  // ★ countUp 动画
+  var vals = el.querySelectorAll('.kpi-card-value');
+  for (var j = 0; j < vals.length; j++) {
+    if (items[j] && items[j].raw != null && typeof countUp === 'function') {
+      countUp(vals[j], items[j].raw, items[j].cuOpts);
+    }
   }
 }
 
@@ -64,7 +72,9 @@ function _renderSummaryTable(txs) {
     var tr = h('tr');
     var cells = [d.agent, d.venue, fmt(d.volume) + '萬', fmtMoney(d.bonus), fmtMoney(d.drawn), fmtMoney(d.undrawn)];
     for (var j = 0; j < cells.length; j++) {
-      tr.appendChild(h('td', {}, cells[j]));
+      var tdAttrs = {};
+      if (j >= 2) tdAttrs.class = 'text-right num-mono';
+      tr.appendChild(h('td', tdAttrs, cells[j]));
     }
     tbody.appendChild(tr);
   }

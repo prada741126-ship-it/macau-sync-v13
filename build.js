@@ -38,6 +38,7 @@ const JS_FILES = [
   'src/utils/format.js',
   'src/utils/dom.js',
   'src/utils/crypto.js',
+  'src/utils/countup.js',
   'src/core/events.js',
   'src/core/state.js',
   'src/core/store.js',

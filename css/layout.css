@@ -39,7 +39,15 @@
   text-align: center;
   border-bottom: 1px solid var(--border-gold);
 }
-.sb-logo-icon { font-size: 28px; color: var(--gold-soft); }
+.sb-logo-svg {
+  display: block;
+  margin: 0 auto 6px;
+  filter: drop-shadow(0 0 12px rgba(201,168,76,0.25));
+  transition: filter var(--trans-slow);
+}
+.sb-logo-svg:hover {
+  filter: drop-shadow(0 0 18px rgba(201,168,76,0.4));
+}
 .sb-logo-text { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
 .sb-logo-name { font-size: 15px; font-weight: 700; color: var(--text-primary); letter-spacing: 2px; }
 .sb-month {
@@ -63,19 +71,62 @@
   padding: 10px 16px;
   cursor: pointer;
   color: var(--text-secondary);
-  transition: all var(--trans-base);
+  transition: color 0.25s ease, background 0.25s ease, border-color 0.25s ease, padding-left 0.25s ease;
   font-size: 13px;
-  border-left: 2px solid transparent;
+  border-left: 3px solid transparent;
   position: relative;
+  margin: 1px 0;
+  border-radius: 0 6px 6px 0;
 }
 .sb-item:hover {
   background: rgba(0,212,255,0.06);
   color: var(--text-primary);
+  padding-left: 20px;
 }
 .sb-item.active {
-  background: rgba(0,212,255,0.1);
+  background: linear-gradient(90deg, rgba(0,180,216,0.12) 0%, rgba(123,47,247,0.05) 100%);
   color: var(--tech-cyan);
   border-left-color: var(--tech-cyan);
+  font-weight: var(--fw-semibold);
+  box-shadow: inset 0 0 12px rgba(0,180,216,0.05);
+  padding-left: 20px;
+}
+/* 选中态右侧金点 */
+.sb-item.active::after {
+  content: '';
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: var(--gold-soft);
+  opacity: 0.6;
+}
+/* 折叠模式 hover tooltip */
+#sidebar.collapsed .sb-item::before {
+  content: attr(data-page);
+  position: absolute;
+  left: 110%;
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, left 0.2s ease;
+  z-index: 200;
+}
+#sidebar.collapsed .sb-item:hover::before {
+  opacity: 1;
+  left: 115%;
 }
 .sb-item .icon { font-size: 16px; width: 20px; text-align: center; }
 .sb-divider {
@@ -210,7 +261,48 @@
   font-weight: 700;
   color: var(--gold-soft);
 }
+/* ── Month Nav Arrows ── */
+.month-nav-btn {
+  background: none;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: 12px;
+  width: 28px; height: 28px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+.month-nav-btn:hover {
+  color: var(--gold-soft);
+  border-color: var(--gold-soft);
+  background: rgba(201,168,76,0.08);
+}
+.month-nav-btn:active {
+  transform: scale(0.92);
+  background: rgba(201,168,76,0.15);
+}
 #month-status { font-size: 12px; color: var(--text-muted); }
+/* 总钱包小标签 */
+.wallet-total-badge {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gold-soft);
+  padding: 4px 14px;
+  background: rgba(201,168,76,0.06);
+  border: 1px solid var(--border-gold);
+  border-radius: 20px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all var(--trans-base);
+}
+.wallet-total-badge:hover {
+  background: rgba(201,168,76,0.1);
+  border-color: var(--gold-light);
+}
 #sync-dot {
   width: 8px; height: 8px;
   border-radius: 50%;
@@ -219,6 +311,66 @@
 }
 #sync-dot.connected { background: var(--success); }
 #sync-text { font-size: 11px; color: var(--text-muted); }
+
+/* ── Sync Status Capsule ── */
+.sync-capsule {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 7px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: var(--fw-medium);
+  transition: all 0.3s ease;
+  border: 1px solid;
+  flex-shrink: 0;
+}
+.sync-capsule-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background 0.3s ease;
+}
+/* 已连接 */
+.sync-capsule.connected {
+  background: rgba(39,174,96,0.08);
+  border-color: rgba(39,174,96,0.25);
+  color: var(--success);
+}
+.sync-capsule.connected .sync-capsule-dot {
+  background: var(--success);
+  box-shadow: 0 0 4px var(--success);
+}
+/* 同步中 */
+.sync-capsule.syncing {
+  background: rgba(243,156,18,0.08);
+  border-color: rgba(243,156,18,0.25);
+  color: var(--warning);
+}
+.sync-capsule.syncing .sync-capsule-dot {
+  background: var(--warning);
+  animation: sync-pulse 1s ease-in-out infinite;
+}
+/* 断开 */
+.sync-capsule.disconnected {
+  background: rgba(231,76,60,0.08);
+  border-color: rgba(231,76,60,0.25);
+  color: var(--danger);
+}
+.sync-capsule.disconnected .sync-capsule-dot {
+  background: var(--danger);
+}
+@keyframes sync-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
+}
+/* 最后同步时间 */
+.sync-last-time {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.7;
+  flex-shrink: 0;
+}
 
 /* ── Pages ── */
 .page {
@@ -262,8 +414,30 @@
 .kpi-card:hover::before { opacity: 1; }
 .kpi-card:hover {
   border-color: rgba(0,212,255,0.2);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+/* shimmer 光扫动画 */
+.kpi-card::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255,255,255,0.03) 40%,
+    rgba(255,255,255,0.06) 50%,
+    rgba(255,255,255,0.03) 60%,
+    transparent 100%
+  );
+  transform: skewX(-15deg);
+  transition: left 0.6s ease;
+  pointer-events: none;
+  z-index: 0;
+}
+.kpi-card:hover::after {
+  left: 120%;
 }
 .kpi-card-label {
   font-size: 12px;
@@ -317,6 +491,20 @@
 .chart-container canvas {
   width: 100% !important;
   height: 100% !important;
+  animation: chartFadeIn 0.6s ease;
+}
+@keyframes chartFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+/* 图表容器内标题 */
+.chart-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 /* ── Timeline ── */
@@ -443,4 +631,72 @@
 .content-card.interactive:hover {
   border-color: rgba(0,212,255,0.15);
   box-shadow: 0 2px 16px rgba(0,0,0,0.2);
+}
+
+/* ══════════════════════════════════════════════════════
+ * 侧栏折叠 — 按钮旋转动画
+ * ══════════════════════════════════════════════════════ */
+
+#sidebar-toggle {
+  transition: transform var(--trans-slow) cubic-bezier(0.4,0,0.2,1);
+  transform-origin: center;
+}
+#sidebar:not(.collapsed) #sidebar-toggle {
+  transform: rotate(180deg);
+}
+#sidebar.collapsed #sidebar-toggle {
+  transform: rotate(0deg);
+}
+
+/* ══════════════════════════════════════════════════════
+ * 表格排序指示器
+ * ══════════════════════════════════════════════════════ */
+
+.th-sortable {
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  padding-right: 20px;
+}
+.th-sortable::after {
+  content: '';
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0; height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-bottom: 5px solid var(--text-muted);
+  opacity: 0.3;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.th-sortable.sort-asc::after {
+  opacity: 1;
+  border-bottom-color: var(--tech-cyan);
+}
+.th-sortable.sort-desc::after {
+  opacity: 1;
+  border-bottom: none;
+  border-top: 5px solid var(--tech-cyan);
+}
+.th-sortable:hover::after {
+  opacity: 0.7;
+}
+
+/* ══════════════════════════════════════════════════════
+ * Firefox Scrollbar 美化
+ * ══════════════════════════════════════════════════════ */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.1) transparent;
+}
+.table-scroll,
+#page-scroll,
+.timeline-box,
+.modal-scroll,
+.rm-modal,
+.hc-modal {
+  scrollbar-color: rgba(255,255,255,0.12) var(--bg-surface);
 }

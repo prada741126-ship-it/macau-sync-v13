@@ -72,7 +72,7 @@ function rmReadDateSels(prefix) {
   return val;
 }
 
-/** 根据 YYYY/MM/DD 字符串反填三个 select */
+/** 根据 YYYY/MM/DD 字符串反填三个 select + 桌面端 date input */
 function rmSetDateSels(prefix, dateStr) {
   if (!dateStr) return;
   // 支持 YYYY/MM/DD 和 YYYY-MM-DD
@@ -86,6 +86,14 @@ function rmSetDateSels(prefix, dateStr) {
   if (dEl) dEl.value = parts[2].length === 1 ? '0' + parts[2] : parts[2];
   var hidden = $('#' + prefix);
   if (hidden) hidden.value = dateStr;
+  // 同步桌面端 date input
+  var dtEl = $('#' + prefix + '-dt');
+  if (dtEl) {
+    var y = parts[0];
+    var m = parts[1].length === 1 ? '0' + parts[1] : parts[1];
+    var d = parts[2].length === 1 ? '0' + parts[2] : parts[2];
+    dtEl.value = y + '-' + m + '-' + d;
+  }
 }
 
 var RM = {
@@ -338,7 +346,9 @@ var RM = {
       ];
 
       for (var j = 0; j < cells.length; j++) {
-        tr.appendChild(h('td', {}, String(cells[j])));
+        var tdAttrs = {};
+        if (j >= 8 && j <= 10) tdAttrs.class = 'text-right num-mono';
+        tr.appendChild(h('td', tdAttrs, String(cells[j])));
       }
 
       // 操作
@@ -399,14 +409,24 @@ var RM = {
     }
 
     var volEl = $('.rm-quota-volume');
-    if (volEl) volEl.textContent = fmt(quota.totalVolume) + '萬';
+    if (volEl) {
+      volEl.textContent = '0萬';
+      if (typeof countUp === 'function') countUp(volEl, quota.totalVolume || 0, { suffix: '萬' });
+      else volEl.textContent = fmt(quota.totalVolume) + '萬';
+    }
 
     var usedEl = $('.rm-quota-used');
-    if (usedEl) usedEl.textContent = fmt(quota.usedThreshold) + '萬';
+    if (usedEl) {
+      usedEl.textContent = '0萬';
+      if (typeof countUp === 'function') countUp(usedEl, quota.usedThreshold || 0, { suffix: '萬' });
+      else usedEl.textContent = fmt(quota.usedThreshold) + '萬';
+    }
 
     var remEl = $('.rm-quota-rem');
     if (remEl) {
-      remEl.textContent = fmt(quota.remainingThreshold) + '萬';
+      remEl.textContent = '0萬';
+      if (typeof countUp === 'function') countUp(remEl, quota.remainingThreshold || 0, { suffix: '萬' });
+      else remEl.textContent = fmt(quota.remainingThreshold) + '萬';
       // 赤字时显示红色
       if (quota.remainingThreshold < 0) {
         remEl.style.color = 'var(--danger)';
@@ -416,7 +436,11 @@ var RM = {
     }
 
     var countEl = $('.rm-booking-count');
-    if (countEl) countEl.textContent = roomCount + '間';
+    if (countEl) {
+      countEl.textContent = '0間';
+      if (typeof countUp === 'function') countUp(countEl, roomCount || 0, { suffix: '間' });
+      else countEl.textContent = roomCount + '間';
+    }
   },
 
   // ===== 辅助 =====

@@ -15,17 +15,20 @@
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  opacity: 0.012;
+  opacity: 0.025;
   background:
     /* 远山第一层 */
-    radial-gradient(ellipse 55% 28% at 18% 84%, rgba(201,168,76,0.02) 0%, transparent 70%),
-    radial-gradient(ellipse 48% 22% at 65% 87%, rgba(201,168,76,0.015) 0%, transparent 65%),
+    radial-gradient(ellipse 55% 28% at 18% 84%, rgba(201,168,76,0.03) 0%, transparent 70%),
+    radial-gradient(ellipse 48% 22% at 65% 87%, rgba(201,168,76,0.02) 0%, transparent 65%),
     /* 远山第二层 */
-    radial-gradient(ellipse 40% 20% at 35% 90%, rgba(201,168,76,0.012) 0%, transparent 60%),
-    radial-gradient(ellipse 35% 18% at 80% 92%, rgba(201,168,76,0.01) 0%, transparent 55%),
+    radial-gradient(ellipse 40% 20% at 35% 90%, rgba(201,168,76,0.018) 0%, transparent 60%),
+    radial-gradient(ellipse 35% 18% at 80% 92%, rgba(201,168,76,0.015) 0%, transparent 55%),
+    /* 近景山脉 (新增) */
+    radial-gradient(ellipse 30% 14% at 12% 95%, rgba(201,168,76,0.025) 0%, transparent 50%),
+    radial-gradient(ellipse 25% 12% at 88% 96%, rgba(201,168,76,0.02) 0%, transparent 48%),
     /* 云雾层 */
-    radial-gradient(ellipse 75% 12% at 50% 78%, rgba(255,255,255,0.006) 0%, transparent 55%),
-    radial-gradient(ellipse 60% 10% at 30% 82%, rgba(255,255,255,0.004) 0%, transparent 50%);
+    radial-gradient(ellipse 75% 12% at 50% 78%, rgba(255,255,255,0.01) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 10% at 30% 82%, rgba(255,255,255,0.006) 0%, transparent 50%);
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -131,10 +134,10 @@ tr.rank-1 td {
  * ═══════════════════════════════════════════════════════ */
 
 .kpi-card:hover {
-  box-shadow: 0 0 0 1px rgba(201,168,76,0.08), 0 4px 20px rgba(0,0,0,0.3);
+  box-shadow: var(--shadow-md), 0 0 0 1px rgba(201,168,76,0.08);
 }
 .dash-card:hover {
-  box-shadow: 0 0 0 1px rgba(201,168,76,0.06), 0 2px 12px rgba(0,0,0,0.25);
+  box-shadow: var(--shadow-sm), 0 0 0 1px rgba(201,168,76,0.06);
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -181,8 +184,40 @@ tr.rank-1 td {
 }
 
 /* ═══════════════════════════════════════════════════════
- * 金箔斑驳 — 卡片边框微光
+ * 金箔斑驳 — 侧栏 Logo 区域
  * ═══════════════════════════════════════════════════════ */
+
+.sb-logo {
+  position: relative;
+  overflow: hidden;
+}
+.sb-logo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.04;
+  background:
+    radial-gradient(circle 8px at 30% 40%, rgba(201,168,76,0.4) 0%, transparent 100%),
+    radial-gradient(circle 5px at 70% 20%, rgba(201,168,76,0.3) 0%, transparent 100%),
+    radial-gradient(circle 6px at 45% 75%, rgba(212,175,55,0.25) 0%, transparent 100%),
+    radial-gradient(circle 3px at 85% 60%, rgba(201,168,76,0.2) 0%, transparent 100%);
+}
+
+/* ═══════════════════════════════════════════════════════
+ * 金箔斑驳 — 页面标题分隔线
+ * ═══════════════════════════════════════════════════════ */
+
+.section-header::before {
+  content: '';
+  position: absolute;
+  top: 0; left: -10px; right: -10px; height: 100%;
+  pointer-events: none;
+  opacity: 0.03;
+  background:
+    radial-gradient(circle 3px at 5% 50%, rgba(201,168,76,0.3) 0%, transparent 100%),
+    radial-gradient(circle 2px at 15% 30%, rgba(201,168,76,0.2) 0%, transparent 100%);
+}
 
 .content-card::before {
   content: '';
@@ -199,3 +234,38 @@ tr.rank-1 td {
 }
 .content-card:hover::before { opacity: 1; }
 .content-card { position: relative; overflow: hidden; }
+
+/* ═══════════════════════════════════════════════════════
+ * 登录画面 — 浮动光点粒子动画
+ * ═══════════════════════════════════════════════════════ */
+
+#pw-overlay::before {
+  content: '';
+  position: fixed;
+  top: -50%; left: -50%;
+  width: 200%; height: 200%;
+  background:
+    radial-gradient(2px 2px at 10% 20%, rgba(201,168,76,0.3) 0%, transparent 100%),
+    radial-gradient(2px 2px at 25% 65%, rgba(201,168,76,0.2) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 40% 40%, rgba(0,212,255,0.15) 0%, transparent 100%),
+    radial-gradient(2px 2px at 55% 80%, rgba(201,168,76,0.25) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 70% 15%, rgba(0,212,255,0.12) 0%, transparent 100%),
+    radial-gradient(2px 2px at 85% 55%, rgba(201,168,76,0.2) 0%, transparent 100%),
+    radial-gradient(1px 1px at 15% 85%, rgba(0,212,255,0.1) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 92% 30%, rgba(201,168,76,0.15) 0%, transparent 100%);
+  animation: floatParticles 20s linear infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+@keyframes floatParticles {
+  0%   { transform: translate(0, 0); }
+  25%  { transform: translate(2%, -1.5%); }
+  50%  { transform: translate(-1%, 2%); }
+  75%  { transform: translate(1.5%, 1%); }
+  100% { transform: translate(0, 0); }
+}
+/* 确保登录框在粒子之上 */
+#pw-box {
+  position: relative;
+  z-index: 1;
+}

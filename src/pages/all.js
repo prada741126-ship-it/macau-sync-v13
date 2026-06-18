@@ -42,18 +42,26 @@ function _renderAllKPI(txs) {
   mini.innerHTML = '';
 
   var items = [
-    { label: TERMS.volume, value: fmt(_totalVol) + '萬', accent: 'cyan',  color: UI_COLORS.techCyan },
-    { label: TERMS.comm,   value: fmtMoney(_totalComm),  accent: 'blue',  color: UI_COLORS.skyBlue },
-    { label: TERMS.bonus,  value: fmtMoney(_totalBonus), accent: 'violet',color: UI_COLORS.electricViolet },
-    { label: TERMS.fund,   value: fmtMoney(_totalFund),  accent: 'gold',  color: UI_COLORS.goldSoft },
+    { label: '📊 ' + TERMS.volume, raw: _totalVol, cuOpts: { suffix: '萬' },       accent: 'cyan',  color: UI_COLORS.techCyan },
+    { label: '💰 ' + TERMS.comm,   raw: _totalComm,cuOpts: { prefix: '¥' },         accent: 'blue',  color: UI_COLORS.skyBlue },
+    { label: '🎁 ' + TERMS.bonus,  raw: _totalBonus,cuOpts: { prefix: '¥' },        accent: 'violet',color: UI_COLORS.electricViolet },
+    { label: '🏦 ' + TERMS.fund,   raw: _totalFund, cuOpts: { prefix: '¥' },        accent: 'gold',  color: UI_COLORS.goldSoft },
   ];
 
   for (var i = 0; i < items.length; i++) {
     var item = h('div', { className: 'kpi-card' });
     item.style.borderLeft = '3px solid ' + items[i].color;
     item.innerHTML = '<div class="kpi-card-label">' + items[i].label + '</div>' +
-                     '<div class="kpi-card-value ' + items[i].accent + '" style="font-size:18px">' + items[i].value + '</div>';
+                     '<div class="kpi-card-value ' + items[i].accent + '" style="font-size:18px">0</div>';
     mini.appendChild(item);
+  }
+
+  // ★ countUp 动画
+  var vals = mini.querySelectorAll('.kpi-card-value');
+  for (var j = 0; j < vals.length; j++) {
+    if (items[j] && items[j].raw != null && typeof countUp === 'function') {
+      countUp(vals[j], items[j].raw, items[j].cuOpts);
+    }
   }
 }
 
@@ -83,8 +91,11 @@ function _renderAllTable(txs) {
       });
       tr.style.cursor = 'pointer';
 
+      // ★ 类型彩色标签 (#28)
+      var typeClass = tx.type === 'cash' ? 'cash' : 'roll';
+      var typeLabel = tx.type === 'cash' ? '現金' : '轉碼';
       var cells = [
-        tx.type === 'cash' ? '現金' : '轉碼',
+        '<span class="tx-type-tag ' + typeClass + '">' + typeLabel + '</span>',
         tx.date,
         tx.agent,
         tx.client || '-',
@@ -98,7 +109,10 @@ function _renderAllTable(txs) {
       ];
 
       for (var j = 0; j < cells.length; j++) {
-        var td = h('td', {}, cells[j]);
+        var tdAttrs = {};
+        // 數字欄位: 洗碼量/佣金/碼糧/已提領/未提領 → 右對齊 + 等寬數字
+        if (j >= 5 && j <= 9) tdAttrs.class = 'text-right num-mono';
+        var td = h('td', tdAttrs, cells[j]);
         tr.appendChild(td);
       }
 
@@ -106,7 +120,7 @@ function _renderAllTable(txs) {
       var fbKey = tx._fbKey;
       var tdBtn = h('td');
       var delBtn = h('button', {
-        style: 'background:' + UI_COLORS.danger + ';color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px'
+        className: 'btn btn-danger btn-sm'
       }, '刪除');
       delBtn.onclick = (function(key) {
         return function(e) {

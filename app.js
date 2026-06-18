@@ -7063,6 +7063,15 @@ function _renderKPI(kpi) {
     grid.appendChild(card);
   }
 
+  // KPI 数字动画 (countUp)
+  var valueEls = grid.querySelectorAll('.kpi-card-value');
+  for (var j = 0; j < valueEls.length; j++) {
+    var el = valueEls[j];
+    if (el._cuRaw != null) {
+      countUp(el, el._cuRaw, el._cuOpts || {});
+    }
+  }
+
   // 笔数/代理数
   var info = h('div', { className: 'kpi-info' });
   info.style.cssText = 'grid-column:1/-1;text-align:center;padding:10px 0;font-size:12px;color:var(--text-muted)';

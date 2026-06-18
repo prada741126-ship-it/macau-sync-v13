@@ -222,3 +222,21 @@ function log(module, level, args) {
   var method = console[level] || console.log;
   method.apply(console, [prefix].concat(extra));
 }
+
+// ============================================================================
+// 颜色工具
+// ============================================================================
+
+/**
+ * Hex 颜色 → rgba 字符串
+ * @param {string} hex - "#RRGGBB" 格式
+ * @param {number} alpha - 0~1 透明度
+ * @returns {string} "rgba(r,g,b,a)"
+ */
+function hexToRgba(hex, alpha) {
+  if (!hex || hex.length < 7) return 'rgba(0,0,0,' + (alpha || 0) + ')';
+  var r = parseInt(hex.slice(1, 3), 16);
+  var g = parseInt(hex.slice(3, 5), 16);
+  var b = parseInt(hex.slice(5, 7), 16);
+  return 'rgba(' + r + ',' + g + ',' + b + ',' + (alpha || 0) + ')';
+}

@@ -113,11 +113,31 @@
   <!-- 密码保护遮罩 -->
   <div id="pw-overlay">
     <div id="pw-box">
+      <svg class="pw-logo-svg" viewBox="0 0 80 80" width="64" height="64">
+        <defs>
+          <linearGradient id="pw-logo-gold" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#c9a84c"/>
+            <stop offset="50%" style="stop-color:#e0c068"/>
+            <stop offset="100%" style="stop-color:#a08030"/>
+          </linearGradient>
+          <linearGradient id="pw-logo-glow" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:rgba(201,168,76,0.4)"/>
+            <stop offset="100%" style="stop-color:rgba(201,168,76,0)"/>
+          </linearGradient>
+        </defs>
+        <polygon points="40,6 70,40 40,74 10,40" fill="url(#pw-logo-glow)"/>
+        <polygon points="40,8 68,40 40,72 12,40" fill="url(#pw-logo-gold)" stroke="rgba(240,208,96,0.5)" stroke-width="0.5"/>
+        <polygon points="40,18 62,40 40,62 18,40" fill="none" stroke="rgba(10,14,23,0.3)" stroke-width="1"/>
+        <text x="40" y="48" text-anchor="middle" font-size="26" font-weight="bold" fill="#0f1420" style="font-family:serif">♠</text>
+      </svg>
       <div class="pw-emblem-text">博盈</div>
       <div class="pw-subtitle">BOYING INTERNATIONAL CLUB</div>
       <div class="pw-title">博盈國際會</div>
       <div class="pw-divider">授 權 驗 證</div>
-      <input type="password" id="pw-input" placeholder="請輸入密碼" autocomplete="off" onkeydown="if(event.key==='Enter')_v13LoginFallback()">
+      <div class="pw-input-wrap">
+        <svg class="pw-lock-icon" viewBox="0 0 16 16" width="16" height="16"><rect x="3" y="7" width="10" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M5 7V5a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+        <input type="password" id="pw-input" placeholder="請輸入密碼" autocomplete="off" onkeydown="if(event.key==='Enter')_v13LoginFallback()">
+      </div>
       <div id="pw-error"></div>
       <div id="pw-attempts"></div>
       <button class="pw-btn" onclick="_v13LoginFallback()">驗 證 進 入</button>
@@ -134,7 +154,27 @@
     <!-- SIDEBAR -->
     <div id="sidebar">
       <div class="sb-logo">
-        <div class="sb-logo-icon">♠</div>
+        <svg class="sb-logo-svg" viewBox="0 0 80 80" width="48" height="48">
+          <defs>
+            <linearGradient id="logo-gold" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" style="stop-color:#c9a84c"/>
+              <stop offset="50%" style="stop-color:#e0c068"/>
+              <stop offset="100%" style="stop-color:#a08030"/>
+            </linearGradient>
+            <linearGradient id="logo-glow" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" style="stop-color:rgba(201,168,76,0.3)"/>
+              <stop offset="100%" style="stop-color:rgba(201,168,76,0)"/>
+            </linearGradient>
+          </defs>
+          <!-- Outer glow diamond -->
+          <polygon points="40,6 70,40 40,74 10,40" fill="url(#logo-glow)"/>
+          <!-- Main diamond -->
+          <polygon points="40,8 68,40 40,72 12,40" fill="url(#logo-gold)" stroke="rgba(240,208,96,0.5)" stroke-width="0.5"/>
+          <!-- Inner border -->
+          <polygon points="40,18 62,40 40,62 18,40" fill="none" stroke="rgba(10,14,23,0.3)" stroke-width="1"/>
+          <!-- Center spade -->
+          <text x="40" y="48" text-anchor="middle" font-size="26" font-weight="bold" fill="#0f1420" style="font-family:serif">♠</text>
+        </svg>
         <div class="sb-logo-name sb-logo-text">博盈國際會</div>
         <div class="sb-logo-text">洗碼管理系統</div>
       </div>
@@ -190,12 +230,17 @@
 
         <!-- 月份栏 -->
         <div class="month-bar" id="month-bar">
+          <button class="month-nav-btn" id="btn-prev-month" onclick="switchMonth(-1)" title="上个月 (Ctrl+◀)">◀</button>
           <div id="month-badge">2026-06</div>
+          <button class="month-nav-btn" id="btn-next-month" onclick="switchMonth(1)" title="下个月 (Ctrl+▶)">▶</button>
           <div id="month-status">工作中</div>
-          <div id="sync-dot" class="connected"></div>
-          <div id="sync-text">已同步</div>
-          <button class="btn btn-sm" id="btn-close-month" onclick="closeCurrentMonth()">🔒 月末結算</button>
-          <div id="total-wallet-badge" style="margin-left:auto;font-size:13px;color:var(--gold-soft)">💰 總錢包: ¥0</div>
+          <div id="sync-status-capsule" class="sync-capsule connected">
+            <span class="sync-capsule-dot"></span>
+            <span id="sync-status-text">已同步</span>
+          </div>
+          <div id="sync-last-time" class="sync-last-time"></div>
+          <button class="btn btn-sm" id="btn-close-month" onclick="closeCurrentMonth()">⚠️ 月末結算</button>
+          <div id="total-wallet-badge" class="wallet-total-badge">💰 總錢包: ¥0</div>
         </div>
 
         <!-- ===== 总览页 ===== -->
@@ -232,13 +277,23 @@
             <button class="btn btn-sm" onclick="document.getElementById('file-input').click()">📥 匯入CSV</button>
             <button class="btn btn-sm" onclick="openModal('agent-mgr-modal')">👥 代理管理</button>
           </div>
-          <div id="all-msg" style="display:none;text-align:center;padding:40px;color:var(--text-muted)">暫無交易記錄</div>
+          <div id="all-msg" class="empty-state" style="display:none">
+            <svg class="empty-svg" viewBox="0 0 120 100" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted);opacity:0.4">
+              <rect x="20" y="15" width="80" height="70" rx="8" stroke="currentColor"/>
+              <line x1="35" y1="40" x2="85" y2="40" stroke="currentColor" opacity="0.5"/>
+              <line x1="35" y1="55" x2="70" y2="55" stroke="currentColor" opacity="0.4"/>
+              <line x1="35" y1="70" x2="80" y2="70" stroke="currentColor" opacity="0.3"/>
+              <circle cx="90" cy="25" r="8" stroke="currentColor" opacity="0.3"/>
+            </svg>
+            <div class="empty-text">暫無交易記錄</div>
+            <div class="empty-hint">點擊上方「新增交易」按鈕開始</div>
+          </div>
           <div class="table-scroll">
             <table id="all-table">
               <thead>
                 <tr>
                   <th>類型</th><th>日期</th><th>代理</th><th>客戶</th><th>地點</th>
-                  <th>洗碼量</th><th>佣金</th><th>碼糧</th><th>已提領</th><th>未提領</th>
+                  <th class="text-right">洗碼量</th><th class="text-right">佣金</th><th class="text-right">碼糧</th><th class="text-right">已提領</th><th class="text-right">未提領</th>
                   <th>備註</th><th>操作</th>
                 </tr>
               </thead>
@@ -274,14 +329,14 @@
           <div id="query-kpi" class="kpi-grid"></div>
           <div class="table-scroll">
             <table id="query-table">
-              <thead id="query-thead"><tr><th>日期</th><th>代理</th><th>地點</th><th>洗碼量</th><th>碼糧</th><th>已提領</th><th>未提領</th><th>備註</th></tr></thead>
+              <thead id="query-thead"><tr><th>日期</th><th>代理</th><th>地點</th><th class="text-right">洗碼量</th><th class="text-right">碼糧</th><th class="text-right">已提領</th><th class="text-right">未提領</th><th>備註</th></tr></thead>
               <tbody id="query-tbody"></tbody>
             </table>
           </div>
           <div id="query-agent-summary-section" style="margin-top:20px"><strong>代理帳務匯總</strong>
           <div class="table-scroll" style="margin-top:8px">
             <table class="agent-summary-table">
-              <thead><tr><th>代理</th><th>洗碼量</th><th>碼糧</th><th>已提領</th><th>未提領</th><th>💰 錢包餘額</th></tr></thead>
+              <thead><tr><th>代理</th><th class="text-right">洗碼量</th><th class="text-right">碼糧</th><th class="text-right">已提領</th><th class="text-right">未提領</th><th class="text-right">💰 錢包餘額</th></tr></thead>
               <tbody></tbody>
             </table>
           </div></div>
@@ -292,7 +347,7 @@
           <div id="summary-kpi" class="kpi-grid"></div>
           <div class="table-scroll">
             <table id="summary-table">
-              <thead><tr><th>代理</th><th>場地</th><th>洗碼量</th><th>碼糧</th><th>已提領</th><th>未提領</th></tr></thead>
+              <thead><tr><th>代理</th><th>場地</th><th class="text-right">洗碼量</th><th class="text-right">碼糧</th><th class="text-right">已提領</th><th class="text-right">未提領</th></tr></thead>
               <tbody></tbody>
             </table>
           </div>
@@ -306,8 +361,8 @@
           </div>
 
           <div class="room-tab-content active" id="room-tab-booking">
-            <div class="rm-dashboard dash-grid">
-              <div class="rm-stat-card">
+            <div class="rm-dashboard">
+              <div class="rm-stat-card rm-stat-featured">
                 <div class="rm-stat-label">本月總洗碼量</div>
                 <div class="rm-stat-value rm-quota-volume">0萬</div>
               </div>
@@ -323,7 +378,7 @@
                 <div class="rm-stat-label">剩餘轉碼數</div>
                 <div class="rm-stat-value rm-quota-rem">0萬</div>
               </div>
-              <div class="rm-stat-card">
+              <div class="rm-stat-card rm-stat-wide">
                 <div class="rm-stat-label">額度使用率</div>
                 <div class="rm-stat-value rm-quota-rate">0%</div>
                 <div class="rm-quota-bar-wrap"><div class="rm-quota-bar"></div></div>
@@ -340,7 +395,7 @@
               <table class="room-table">
                 <thead>
                   <tr><th>日期</th><th>代理</th><th>客戶</th><th>體系</th><th>酒店</th><th>房型</th>
-                      <th>入住</th><th>退房</th><th>天數</th><th>單價</th><th>總費用</th><th>狀態</th><th>操作</th></tr>
+                      <th>入住</th><th>退房</th><th class="text-right">天數</th><th class="text-right">單價</th><th class="text-right">總費用</th><th>狀態</th><th>操作</th></tr>
                 </thead>
                 <tbody></tbody>
               </table>
@@ -362,7 +417,7 @@
             </div>
             <div class="table-scroll">
               <table class="hc-table">
-                <thead><tr><th style="width:36px"><input type="checkbox" id="hc-select-all" onchange="hcToggleSelectAll(this.checked)" title="全選/取消全選"></th><th>體系</th><th>酒店</th><th>CODE</th><th>房型</th><th>平日價</th><th>週末價</th><th>特殊日</th><th>門檻(萬)</th><th>操作</th></tr></thead>
+                <thead><tr><th style="width:36px"><input type="checkbox" id="hc-select-all" onchange="hcToggleSelectAll(this.checked)"> <label for="hc-select-all" style="cursor:pointer;font-size:12px;color:var(--text-muted);user-select:none">全選</label></th><th>體系</th><th>酒店</th><th>CODE</th><th>房型</th><th>平日價</th><th>週末價</th><th>特殊日</th><th>門檻(萬)</th><th>操作</th></tr></thead>
                 <tbody></tbody>
               </table>
             </div>
@@ -402,7 +457,16 @@
                   <tbody></tbody>
                 </table>
               </div>
-              <div id="wallet-flow-empty" style="display:none;text-align:center;padding:20px;color:var(--text-muted)">暫無流水記錄</div>
+              <div id="wallet-flow-empty" class="empty-state" style="display:none">
+            <svg class="empty-svg" viewBox="0 0 120 100" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted);opacity:0.4">
+              <path d="M25 20 L95 20 L95 80 L25 80 Z" stroke="currentColor"/>
+              <polyline points="35,50 50,35 65,55 80,40" stroke="currentColor" opacity="0.6"/>
+              <circle cx="35" cy="50" r="3" fill="currentColor" opacity="0.4"/>
+              <circle cx="80" cy="40" r="3" fill="currentColor" opacity="0.4"/>
+            </svg>
+            <div class="empty-text">暫無流水記錄</div>
+            <div class="empty-hint">交易或資金變動後會在此顯示</div>
+          </div>
             </div>
 
             <!-- 公基金卡片 -->
@@ -415,7 +479,15 @@
             <div class="wallet-section">
               <h3 class="wallet-section-title">💰 代理錢包明細</h3>
               <div id="wallet-agent-cards"></div>
-              <div id="wallet-agent-empty" style="display:none;text-align:center;padding:20px;color:var(--text-muted)">暫無代理錢包記錄</div>
+              <div id="wallet-agent-empty" class="empty-state" style="display:none">
+            <svg class="empty-svg" viewBox="0 0 120 100" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted);opacity:0.4">
+              <circle cx="60" cy="35" r="18" stroke="currentColor" opacity="0.5"/>
+              <path d="M30 85 Q30 65 60 85 Q90 65 90 85" stroke="currentColor" opacity="0.4"/>
+              <rect x="40" y="75" width="40" height="15" rx="4" stroke="currentColor" opacity="0.3"/>
+            </svg>
+            <div class="empty-text">暫無代理錢包記錄</div>
+            <div class="empty-hint">新增代理後，其錢包會在此顯示</div>
+          </div>
             </div>
           </div>
         </div>
@@ -431,7 +503,7 @@
   <!-- 交易 Modal -->
   <div class="modal-bg" id="modal">
     <div class="modal-scroll">
-      <div class="modal">
+      <div class="modal tx-modal">
         <h3 id="modal-title">新增交易</h3>
         <div id="draft-indicator" style="display:none;font-size:11px;color:var(--warning);margin-bottom:8px">📝 有未儲存的草稿</div>
         <div class="form-row"><label>類型</label><select name="type" id="tx-type" onchange="toggleTypeFields()"><option value="rolling">轉碼</option><option value="cash">現金寄放</option></select></div>
@@ -533,6 +605,7 @@
           <select id="rm-checkin-m" onchange="rmCalcNights()" style="width:68px"></select>
           <select id="rm-checkin-d" onchange="rmCalcNights()" style="width:68px"></select>
         </span>
+        <input type="date" id="rm-checkin-dt" onchange="rmSyncDateInput('checkin')" class="rm-date-input" style="display:none">
         <input type="hidden" id="rm-checkin">
       </div>
       <div class="form-row"><label>退房</label>
@@ -541,6 +614,7 @@
           <select id="rm-checkout-m" onchange="rmCalcNights()" style="width:68px"></select>
           <select id="rm-checkout-d" onchange="rmCalcNights()" style="width:68px"></select>
         </span>
+        <input type="date" id="rm-checkout-dt" onchange="rmSyncDateInput('checkout')" class="rm-date-input" style="display:none">
         <input type="hidden" id="rm-checkout">
       </div>
       <div class="form-row"><label>天數</label><input type="number" id="rm-nights" readonly></div>

@@ -257,18 +257,26 @@ function _renderQueryKPI(txs) {
   el.innerHTML = '';
 
   var items = [
-    { label: TERMS.volume,  value: fmt(vol) + '萬', accent: 'cyan',   color: UI_COLORS.techCyan },
-    { label: TERMS.comm,    value: fmtMoney(comm), accent: 'blue',    color: UI_COLORS.skyBlue },
-    { label: TERMS.undrawn, value: fmtMoney(undrawn), accent: 'orange', color: UI_COLORS.warning },
-    { label: '💰 總錢包',   value: fmtMoney(totalWallet), accent: 'gold',   color: UI_COLORS.goldSoft },
+    { label: TERMS.volume,  raw: vol,        cuOpts: { suffix: '萬' }, accent: 'cyan',   color: UI_COLORS.techCyan },
+    { label: TERMS.comm,    raw: comm,       cuOpts: { prefix: '¥' },  accent: 'blue',    color: UI_COLORS.skyBlue },
+    { label: TERMS.undrawn, raw: undrawn,    cuOpts: { prefix: '¥' },  accent: 'orange', color: UI_COLORS.warning },
+    { label: '💰 總錢包',   raw: totalWallet, cuOpts: { prefix: '¥' },  accent: 'gold',   color: UI_COLORS.goldSoft },
   ];
 
   for (var i = 0; i < items.length; i++) {
     var card = h('div', { className: 'kpi-card' });
     card.style.borderLeft = '3px solid ' + items[i].color;
     card.innerHTML = '<div class="kpi-card-label">' + items[i].label + '</div>' +
-                     '<div class="kpi-card-value ' + items[i].accent + '" style="font-size:20px">' + items[i].value + '</div>';
+                     '<div class="kpi-card-value ' + items[i].accent + '" style="font-size:20px">0</div>';
     el.appendChild(card);
+  }
+
+  // ★ countUp 动画
+  var vals = el.querySelectorAll('.kpi-card-value');
+  for (var j = 0; j < vals.length; j++) {
+    if (items[j] && items[j].raw != null && typeof countUp === 'function') {
+      countUp(vals[j], items[j].raw, items[j].cuOpts);
+    }
   }
 
   // 隐藏代理帐务汇总
@@ -283,7 +291,7 @@ function _renderQueryTable(txs) {
 
   // 恢复默认表头
   if (thead) {
-    thead.innerHTML = '<tr><th>日期</th><th>代理</th><th>地點</th><th>洗碼量</th><th>碼糧</th><th>已提領</th><th>未提領</th><th>備註</th></tr>';
+    thead.innerHTML = '<tr><th>日期</th><th>代理</th><th>地點</th><th class="text-right">洗碼量</th><th class="text-right">碼糧</th><th class="text-right">已提領</th><th class="text-right">未提領</th><th>備註</th></tr>';
   }
 
   tbody.innerHTML = '';
@@ -292,7 +300,9 @@ function _renderQueryTable(txs) {
     var tr = h('tr');
     var cells = [tx.date, tx.agent, tx.venue, fmt(tx.volume) + '萬', fmtMoney(tx.bonus), fmtMoney(tx.drawn), fmtMoney(tx.undrawn), tx.note || ''];
     for (var j = 0; j < cells.length; j++) {
-      tr.appendChild(h('td', {}, cells[j]));
+      var tdAttrs = {};
+      if (j >= 3 && j <= 6) tdAttrs.class = 'text-right num-mono';
+      tr.appendChild(h('td', tdAttrs, cells[j]));
     }
     tbody.appendChild(tr);
   }
@@ -310,7 +320,9 @@ function _renderQueryAgentSummary(txs) {
     var tr = h('tr');
     var cells = [a.agent, fmt(a.volume) + '萬', fmtMoney(a.bonus), fmtMoney(a.drawn), fmtMoney(a.undrawn), fmtMoney(balance)];
     for (var j = 0; j < cells.length; j++) {
-      tr.appendChild(h('td', {}, cells[j]));
+      var tdAttrs = {};
+      if (j >= 1) tdAttrs.class = 'text-right num-mono';
+      tr.appendChild(h('td', tdAttrs, cells[j]));
     }
     agentTable.appendChild(tr);
   }
@@ -407,20 +419,28 @@ function _renderFundLedger() {
     kpiEl.innerHTML = '';
 
     var kpiItems = [
-      { label: '公基金總額', value: fmtMoney(totalFundIncome), color: UI_COLORS.goldSoft },
-      { label: '已提領',      value: fmtMoney(totalW),          color: UI_COLORS.danger },
-      { label: '可提餘額',    value: fmtMoney(balance),         color: UI_COLORS.warning },
+      { label: '公基金總額', raw: totalFundIncome, color: UI_COLORS.goldSoft },
+      { label: '已提領',      raw: totalW,          color: UI_COLORS.danger },
+      { label: '可提餘額',    raw: balance,         color: UI_COLORS.warning },
     ];
     if (totalCDep > 0) {
-      kpiItems.splice(1, 0, { label: '自存現金', value: fmtMoney(totalCDep), color: UI_COLORS.cashOrange });
+      kpiItems.splice(1, 0, { label: '自存現金', raw: totalCDep, color: UI_COLORS.cashOrange });
     }
 
     for (var i = 0; i < kpiItems.length; i++) {
       var card = h('div', { className: 'kpi-card' });
       card.style.borderLeft = '3px solid ' + kpiItems[i].color;
       card.innerHTML = '<div class="kpi-card-label">' + kpiItems[i].label + '</div>' +
-                       '<div class="kpi-card-value" style="font-size:20px;color:' + kpiItems[i].color + '">' + kpiItems[i].value + '</div>';
+                       '<div class="kpi-card-value" style="font-size:20px;color:' + kpiItems[i].color + '">0</div>';
       kpiEl.appendChild(card);
+    }
+
+    // ★ countUp 动画
+    var vals = kpiEl.querySelectorAll('.kpi-card-value');
+    for (var j = 0; j < vals.length; j++) {
+      if (kpiItems[j] && kpiItems[j].raw != null && typeof countUp === 'function') {
+        countUp(vals[j], kpiItems[j].raw, { prefix: '¥' });
+      }
     }
 
     // ＋ 提领 按钮
@@ -435,7 +455,7 @@ function _renderFundLedger() {
   if (!tbody) return;
 
   if (thead) {
-    thead.innerHTML = '<tr><th>日期</th><th>說明</th><th class="num">入帳</th><th class="num">提領</th><th>操作</th><th class="num">基金餘額</th></tr>';
+    thead.innerHTML = '<tr><th>日期</th><th>說明</th><th class="text-right num-mono">入帳</th><th class="text-right num-mono">提領</th><th>操作</th><th class="text-right num-mono">基金餘額</th></tr>';
   }
 
   tbody.innerHTML = '';
@@ -443,8 +463,8 @@ function _renderFundLedger() {
   // 上月累计行
   if (!skipMonthFilter && preBalance > 0) {
     var pr = h('tr');
-    pr.style.cssText = 'background:rgba(201,168,76,0.08);'; // derived from UI_COLORS.goldSoft
-    pr.innerHTML = '<td>' + (queryMonth || dateFrom).substring(0, 7) + '-01</td><td style="color:' + UI_COLORS.goldSoft + ';font-weight:600;">上月累計</td><td class="num"></td><td class="num"></td><td></td><td class="num" style="font-weight:700;color:' + UI_COLORS.goldSoft + ';">' + fmtMoney(preBalance) + '</td>';
+    pr.style.cssText = 'background:' + hexToRgba(UI_COLORS.goldSoft, 0.08) + ';';
+    pr.innerHTML = '<td>' + (queryMonth || dateFrom).substring(0, 7) + '-01</td><td style="color:' + UI_COLORS.goldSoft + ';font-weight:600;">上月累計</td><td class="text-right num-mono"></td><td class="text-right num-mono"></td><td></td><td class="text-right num-mono" style="font-weight:700;color:' + UI_COLORS.goldSoft + ';">' + fmtMoney(preBalance) + '</td>';
     tbody.appendChild(pr);
   }
 
@@ -469,21 +489,21 @@ function _renderFundLedger() {
     }
 
     var tr = h('tr');
-    var typeClr = e.type === '提領' ? 'color:#f85149;font-weight:600;' : (e.type === '存入' ? 'color:#58a6ff;' : (e.type === '自存現金' ? 'color:#e67e22;font-weight:600;' : 'color:' + UI_COLORS.goldSoft + ';'));
+    var typeClr = e.type === '提領' ? 'color:' + UI_COLORS.danger + ';font-weight:600;' : (e.type === '存入' ? 'color:' + UI_COLORS.info + ';' : (e.type === '自存現金' ? 'color:' + UI_COLORS.cashOrange + ';font-weight:600;' : 'color:' + UI_COLORS.goldSoft + ';'));
 
     var delBtn = e.source === 'fund'
       ? '<button class="btn-red" onclick="deleteFundRecord(\'' + (e._fbKey || e.id) + '\')">刪除</button>'
-      : '<span style="color:#6e7681;font-size:11px;">自動</span>';
+      : '<span style="color:' + UI_COLORS.textMuted + ';font-size:11px;">自動</span>';
 
     var inVal = (e.type === '入帳' || e.type === '存入' || e.type === '自存現金') ? fmtMoney(e.amount) : '';
     var outVal = (e.type === '提領') ? fmtMoney(e.amount) : '';
 
     tr.innerHTML = '<td>' + e.date + '</td>' +
       '<td style="' + typeClr + '">' + e.desc + '</td>' +
-      '<td class="num" style="color:' + UI_COLORS.goldSoft + ';">' + inVal + '</td>' +
-      '<td class="num" style="color:#f85149;">' + outVal + '</td>' +
+      '<td class="text-right num-mono" style="color:' + UI_COLORS.goldSoft + ';">' + inVal + '</td>' +
+      '<td class="text-right num-mono" style="color:' + UI_COLORS.danger + ';">' + outVal + '</td>' +
       '<td>' + delBtn + '</td>' +
-      '<td class="num" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
+      '<td class="text-right num-mono" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
     tbody.appendChild(tr);
   }
 
@@ -651,26 +671,34 @@ function _renderAgentLedger(agent, filteredTxs, queryMonth) {
     kpiEl.innerHTML = '';
 
     var kpiItems = [
-      { label: '碼糧總額', value: fmtMoney(allBonus), color: UI_COLORS.goldSoft },
+      { label: '碼糧總額', raw: allBonus,  color: UI_COLORS.goldSoft },
     ];
     if (allCash > 0) {
-      kpiItems.push({ label: '現金寄放', value: fmtMoney(allCash), color: UI_COLORS.cashOrange });
+      kpiItems.push({ label: '現金寄放', raw: allCash,  color: UI_COLORS.cashOrange });
     }
     if (awDep > 0) {
-      kpiItems.push({ label: '錢包存入', value: fmtMoney(awDep), color: UI_COLORS.skyBlue });
+      kpiItems.push({ label: '錢包存入', raw: awDep,    color: UI_COLORS.skyBlue });
     }
     if (awCDep > 0) {
-      kpiItems.push({ label: '自存現金', value: fmtMoney(awCDep), color: UI_COLORS.cashOrange });
+      kpiItems.push({ label: '自存現金', raw: awCDep,   color: UI_COLORS.cashOrange });
     }
-    kpiItems.push({ label: '已提領', value: fmtMoney(allDrawn), color: UI_COLORS.danger });
-    kpiItems.push({ label: '未提領', value: fmtMoney(awBalance), color: UI_COLORS.warning });
+    kpiItems.push({ label: '已提領', raw: allDrawn,    color: UI_COLORS.danger });
+    kpiItems.push({ label: '未提領', raw: awBalance,    color: UI_COLORS.warning });
 
     for (var i = 0; i < kpiItems.length; i++) {
       var card = h('div', { className: 'kpi-card' });
       card.style.borderLeft = '3px solid ' + kpiItems[i].color;
       card.innerHTML = '<div class="kpi-card-label">' + kpiItems[i].label + '</div>' +
-                       '<div class="kpi-card-value" style="font-size:20px;color:' + kpiItems[i].color + '">' + kpiItems[i].value + '</div>';
+                       '<div class="kpi-card-value" style="font-size:20px;color:' + kpiItems[i].color + '">0</div>';
       kpiEl.appendChild(card);
+    }
+
+    // ★ countUp 动画
+    var vals = kpiEl.querySelectorAll('.kpi-card-value');
+    for (var j = 0; j < vals.length; j++) {
+      if (kpiItems[j] && kpiItems[j].raw != null && typeof countUp === 'function') {
+        countUp(vals[j], kpiItems[j].raw, { prefix: '¥' });
+      }
     }
 
     // ＋ 異动 按钮
@@ -685,7 +713,7 @@ function _renderAgentLedger(agent, filteredTxs, queryMonth) {
   if (!tbody) return;
 
   if (thead) {
-    thead.innerHTML = '<tr><th>日期</th><th>地點/說明</th><th class="num">轉碼數</th><th class="num">碼糧</th><th>操作</th><th class="num">未領餘額</th></tr>';
+    thead.innerHTML = '<tr><th>日期</th><th>地點/說明</th><th class="text-right num-mono">轉碼數</th><th class="text-right num-mono">碼糧</th><th>操作</th><th class="text-right num-mono">未領餘額</th></tr>';
   }
 
   tbody.innerHTML = '';
@@ -698,8 +726,8 @@ function _renderAgentLedger(agent, filteredTxs, queryMonth) {
   // 上月累计行
   if (!skipMonthFilter && preRunning > 0) {
     var pr = h('tr');
-    pr.style.cssText = 'background:rgba(201,168,76,0.08);'; // derived from UI_COLORS.goldSoft
-    pr.innerHTML = '<td>' + filterStart.substring(0, 7) + '-01</td><td style="color:' + UI_COLORS.goldSoft + ';font-weight:600;">上月累計</td><td class="num"></td><td class="num"></td><td></td><td class="num" style="font-weight:700;color:' + UI_COLORS.goldSoft + ';">' + fmtMoney(preRunning) + '</td>';
+    pr.style.cssText = 'background:' + hexToRgba(UI_COLORS.goldSoft, 0.08) + ';';
+    pr.innerHTML = '<td>' + filterStart.substring(0, 7) + '-01</td><td style="color:' + UI_COLORS.goldSoft + ';font-weight:600;">上月累計</td><td class="text-right num-mono"></td><td class="text-right num-mono"></td><td></td><td class="text-right num-mono" style="font-weight:700;color:' + UI_COLORS.goldSoft + ';">' + fmtMoney(preRunning) + '</td>';
     tbody.appendChild(pr);
   }
 
@@ -721,46 +749,46 @@ function _renderAgentLedger(agent, filteredTxs, queryMonth) {
     if (e.rowType === 'withdraw') {
       var val = (e._fbKey || e.id).toString();
       tr.innerHTML = '<td>' + e.date + '</td>' +
-        '<td style="color:#f85149;font-weight:700;">提領' + (e.note ? '：' + e.note : '') + '</td>' +
-        '<td class="num"></td>' +
-        '<td class="num" style="color:#f85149;font-weight:700;">-' + fmtMoney(e.amount) + '</td>' +
+        '<td style="color:' + UI_COLORS.danger + ';font-weight:700;">提領' + (e.note ? '：' + e.note : '') + '</td>' +
+        '<td class="text-right num-mono"></td>' +
+        '<td class="text-right num-mono" style="color:' + UI_COLORS.danger + ';font-weight:700;">-' + fmtMoney(e.amount) + '</td>' +
         '<td><button class="btn-red" onclick="deleteAgentWallet(\'' + agent.replace(/'/g, "\\'") + '\',\'' + val + '\')">刪除</button></td>' +
-        '<td class="num" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
+        '<td class="text-right num-mono" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
 
     } else if (e.rowType === 'aw_deposit') {
       var val = (e._fbKey || e.id).toString();
       tr.innerHTML = '<td>' + e.date + '</td>' +
-        '<td style="color:#58a6ff;font-weight:700;">存入' + (e.note ? '：' + e.note : '') + '</td>' +
-        '<td class="num"></td>' +
-        '<td class="num" style="color:#58a6ff;font-weight:700;">+' + fmtMoney(e.amount) + '</td>' +
+        '<td style="color:' + UI_COLORS.info + ';font-weight:700;">存入' + (e.note ? '：' + e.note : '') + '</td>' +
+        '<td class="text-right num-mono"></td>' +
+        '<td class="text-right num-mono" style="color:' + UI_COLORS.info + ';font-weight:700;">+' + fmtMoney(e.amount) + '</td>' +
         '<td><button class="btn-red" onclick="deleteAgentWallet(\'' + agent.replace(/'/g, "\\'") + '\',\'' + val + '\')">刪除</button></td>' +
-        '<td class="num" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
+        '<td class="text-right num-mono" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
 
     } else if (e.rowType === 'aw_cash_dep') {
       var val = (e._fbKey || e.id).toString();
       tr.innerHTML = '<td>' + e.date + '</td>' +
-        '<td style="color:#e67e22;font-weight:700;">自存現金' + (e.note ? '：' + e.note : '') + '</td>' +
-        '<td class="num"></td>' +
-        '<td class="num" style="color:#e67e22;font-weight:700;">+' + fmtMoney(e.amount) + '</td>' +
+        '<td style="color:' + UI_COLORS.cashOrange + ';font-weight:700;">自存現金' + (e.note ? '：' + e.note : '') + '</td>' +
+        '<td class="text-right num-mono"></td>' +
+        '<td class="text-right num-mono" style="color:' + UI_COLORS.cashOrange + ';font-weight:700;">+' + fmtMoney(e.amount) + '</td>' +
         '<td><button class="btn-red" onclick="deleteAgentWallet(\'' + agent.replace(/'/g, "\\'") + '\',\'' + val + '\')">刪除</button></td>' +
-        '<td class="num" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
+        '<td class="text-right num-mono" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
 
     } else if (e.rowType === 'cash') {
       tr.innerHTML = '<td>' + e.date + '</td>' +
-        '<td style="color:#e67e22;font-weight:700;">現金寄放' + (e.client ? '：' + e.client : '') + '</td>' +
-        '<td class="num"></td>' +
-        '<td class="num" style="color:#e67e22;font-weight:700;">+' + fmtMoney(e.bonus) + '</td>' +
-        '<td><span style="color:#6e7681;font-size:11px;">自動</span></td>' +
-        '<td class="num" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
+        '<td style="color:' + UI_COLORS.cashOrange + ';font-weight:700;">現金寄放' + (e.client ? '：' + e.client : '') + '</td>' +
+        '<td class="text-right num-mono"></td>' +
+        '<td class="text-right num-mono" style="color:' + UI_COLORS.cashOrange + ';font-weight:700;">+' + fmtMoney(e.bonus) + '</td>' +
+        '<td><span style="color:' + UI_COLORS.textMuted + ';font-size:11px;">自動</span></td>' +
+        '<td class="text-right num-mono" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
 
     } else {
       var volStr = e.volume > 0 ? fmt(e.volume) + '萬' : '';
       tr.innerHTML = '<td>' + e.date + '</td>' +
         '<td>' + (e.venue || '') + '(' + (e.client || '') + ')</td>' +
-        '<td class="num">' + volStr + '</td>' +
-        '<td class="num" style="color:' + UI_COLORS.goldSoft + ';">' + fmtMoney(e.bonus) + '</td>' +
-        '<td><span style="color:#6e7681;font-size:11px;">自動</span></td>' +
-        '<td class="num" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
+        '<td class="text-right num-mono">' + volStr + '</td>' +
+        '<td class="text-right num-mono" style="color:' + UI_COLORS.goldSoft + ';">' + fmtMoney(e.bonus) + '</td>' +
+        '<td><span style="color:' + UI_COLORS.textMuted + ';font-size:11px;">自動</span></td>' +
+        '<td class="text-right num-mono" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
     }
     tbody.appendChild(tr);
   }
@@ -779,8 +807,8 @@ function _renderAgentLedger(agent, filteredTxs, queryMonth) {
 
 function _appendTotalRow(tbody, running) {
   var tr = h('tr');
-  tr.style.cssText = 'background:rgba(22,27,34,0.8);font-weight:700;color:' + UI_COLORS.goldSoft + ';'; // bgElevated at 80% opacity
-  tr.innerHTML = '<td></td><td style="color:' + UI_COLORS.textPrimary + ';">合計</td><td class="num"></td><td class="num"></td><td></td><td class="num" style="font-size:15px;">' + fmtMoney(Math.max(0, running)) + '</td>';
+  tr.style.cssText = 'background:' + hexToRgba(UI_COLORS.bgElevated, 0.8) + ';font-weight:700;color:' + UI_COLORS.goldSoft + ';';
+  tr.innerHTML = '<td></td><td style="color:' + UI_COLORS.textPrimary + ';">合計</td><td class="text-right num-mono"></td><td class="text-right num-mono"></td><td></td><td class="text-right num-mono" style="font-size:15px;">' + fmtMoney(Math.max(0, running)) + '</td>';
   tbody.appendChild(tr);
 }
 

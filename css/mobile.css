@@ -165,10 +165,21 @@
     flex-direction: column;
     align-items: center;
     gap: 3px;
-    transition: color var(--trans-base);
+    transition: color var(--trans-base), transform 0.1s ease;
+    position: relative;
   }
   .nav-item .icon { font-size: 18px; }
   .nav-item.active { color: var(--tech-cyan); }
+  .nav-item.active::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 20px;
+    height: 2px;
+    background: var(--tech-cyan);
+    border-radius: 0 0 2px 2px;
+  }
   .nav-item:active { transform: scale(0.95); }
 
   /* ── Page Content ── */
@@ -196,7 +207,8 @@
   .kpi-card-value { font-size: 20px; }
 
   /* ── 仪表板 Grid → 2列 ── */
-  .dash-grid {
+  .dash-grid,
+  .rm-dashboard {
     grid-template-columns: repeat(2, 1fr);
     gap: 8px;
   }
@@ -253,18 +265,26 @@
     max-height: 88vh;
     border-radius: var(--radius-md);
   }
-  .modal .form-row {
+  .modal .form-row,
+  .rm-modal .form-row,
+  .hc-modal .form-row {
     flex-direction: column;
     align-items: flex-start;
     gap: 4px;
   }
-  .modal .form-row label {
+  .modal .form-row label,
+  .rm-modal .form-row label,
+  .hc-modal .form-row label {
     width: auto;
     text-align: left;
     font-size: 12px;
   }
   .modal .form-row input,
-  .modal .form-row select {
+  .modal .form-row select,
+  .rm-modal .form-row input,
+  .rm-modal .form-row select,
+  .hc-modal .form-row input,
+  .hc-modal .form-row select {
     width: 100%;
   }
   .rm-modal {
@@ -318,6 +338,12 @@
     grid-template-columns: 1fr;
     gap: 10px;
   }
+  .wallet-fund-card-header { padding: 10px 14px; }
+  .wfc-name { font-size: 13px; }
+  .wfc-balance { font-size: 18px; }
+  .wallet-fund-card-body { padding: 10px 14px; }
+  .wallet-fund-card-body td { font-size: 12px; }
+  .wallet-fund-card .wallet-card-detail { padding: 0 14px 10px; }
 
   /* ── 快捷操作 ── */
   .quick-actions {
@@ -373,6 +399,17 @@
   .date-sel-group select {
     width: 72px !important;
   }
+  /* 手机端隐藏桌面日期输入 */
+  .rm-date-input { display: none !important; }
+}
+
+/* ═══════════════════════════════════════════════════════
+ * 桌面端 (≥1024px) — 房务日期选择器改用原生 date input
+ * ═══════════════════════════════════════════════════════ */
+
+@media (min-width: 1024px) {
+  .rm-modal .date-sel-group { display: none; }
+  .rm-modal .rm-date-input { display: inline-block !important; flex: 1; max-width: 220px; }
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -397,7 +434,8 @@
   .kpi-grid {
     grid-template-columns: repeat(3, 1fr);
   }
-  .dash-grid {
+  .dash-grid,
+  .rm-dashboard {
     grid-template-columns: repeat(3, 1fr);
   }
 
@@ -430,7 +468,8 @@
   .kpi-grid {
     grid-template-columns: repeat(6, 1fr);
   }
-  .dash-grid {
+  .dash-grid,
+  .rm-dashboard {
     grid-template-columns: repeat(6, 1fr);
   }
   .two-col { gap: 24px; }
@@ -458,6 +497,15 @@
     grid-template-columns: repeat(2, 1fr);
     gap: 6px;
   }
+  .rm-dashboard {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+  /* 超小屏取消不对称特殊定位 */
+  .rm-stat-featured,
+  .rm-stat-wide { grid-column: auto; }
+  .rm-stat-wide { display: block; }
+  .rm-stat-wide .rm-stat-value { text-align: left; }
 
   .wallet-overview {
     grid-template-columns: repeat(2, 1fr);
@@ -485,6 +533,9 @@
   /* 移除 hover 依赖的动画 */
   .kpi-card:hover::before { opacity: 0; }
   .sb-item::after { display: none; }
+
+  /* 触摸设备隐藏焦点环 */
+  :focus-visible { outline: none; }
 
   /* 脉冲反馈替代 */
   .btn:active,

@@ -42,7 +42,7 @@ var CONFIG = {
 };
 
 // ============================================================================
-// localStorage 键 (对照档第四节 - 16 个 key)
+// localStorage 键 (对照档第四节 - 20 个 key)
 // ============================================================================
 var STORAGE_KEYS = {
   DATA:              'macau_data',            // 交易数组 (AES加密)
@@ -64,6 +64,7 @@ var STORAGE_KEYS = {
   HC_PRESET_VERSION: 'hc_preset_version',      // 酒店预设版本号
   APP_VERSION:       'macau_app_version',      // 版本快取清除
   RECENTLY_DELETED:  'macau_recently_deleted', // 最近删除追踪
+  LAST_SYNC_TIME:    'macau_last_sync_time',   // 最后同步时间 ISO
 };
 
 // ============================================================================

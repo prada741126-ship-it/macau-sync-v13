@@ -403,12 +403,13 @@ function _renderFlowTable() {
     var flow = flows[f];
     var isOut = flow.sign < 0;
     var tc = isOut ? 'wf-withdraw' : 'wf-deposit';
-    var prefix = isOut ? '-' : '+';
-    html += '<tr>' +
+    var rowClass = isOut ? 'row-withdraw' : 'row-deposit';
+    var prefix = isOut ? '↓ -' : '↑ +';
+    html += '<tr class="' + rowClass + '">' +
       '<td>' + flow.date + '</td>' +
       '<td class="wf-source">' + flow.source + '</td>' +
       '<td class="' + tc + '">' + flow.type + '</td>' +
-      '<td class="' + tc + '" style="text-align:right">' + prefix + fmtMoney(flow.amount) + '</td>' +
+      '<td class="' + tc + ' num-mono" style="text-align:right">' + prefix + fmtMoney(flow.amount) + '</td>' +
       '<td>' + flow.note + '</td>' +
       '</tr>';
   }
@@ -488,13 +489,13 @@ function _renderFundCard() {
     return (b.date || '').replace(/\//g, '-').localeCompare((a.date || '').replace(/\//g, '-'));
   });
 
-  // 渲染卡片 — 复用代理钱包卡片样式 (.wallet-agent-card 系列)，视觉统一
-  var html = '<div class="wallet-agent-grid"><div class="wallet-agent-card">' +
-    '<div class="wallet-agent-card-header">' +
-      '<span class="wa-name">🏦 公基金</span>' +
-      '<span class="wa-balance">' + fmtMoney(balance) + '</span>' +
+  // 渲染卡片 — 独立金边主题，与代理钱包卡片视觉区分
+  var html = '<div class="wallet-fund-card">' +
+    '<div class="wallet-fund-card-header">' +
+      '<span class="wfc-name">🏦 公基金</span>' +
+      '<span class="wfc-balance">' + fmtMoney(balance) + '</span>' +
     '</div>' +
-    '<div class="wallet-agent-card-body">' +
+    '<div class="wallet-fund-card-body">' +
       '<table>' +
         '<thead><tr><th>佣金公基金</th><th>存入</th><th>自存現金</th><th>提領</th></tr></thead>' +
         '<tbody><tr>' +
@@ -529,7 +530,7 @@ function _renderFundCard() {
     html += '</tbody></table></div>';
   }
 
-  html += '</div></div>';  // 关闭 .wallet-agent-card 和 .wallet-agent-grid
+  html += '</div>';  // 关闭 .wallet-fund-card
 
   container.innerHTML = html;
 }
