@@ -5216,7 +5216,9 @@ function removeBookingFromFirebase(fbKey) {
 function syncAgentListToFirebase(agentList) {
   if (!_db) {
     console.warn('[v13:firebase] syncAgentList deferred (_db null) → auto-enqueue');
-    enqueueUpload(function() { syncAgentListToFirebase(agentList); });
+    // ★ FIX: 不捕获入队时的 agentList，执行时从 State 实时读取
+    //    避免竞态：入队后 agentList 变化（删除/新增）时推送旧数据覆盖新数据
+    enqueueUpload(function() { syncAgentListToFirebase(State.get('agentList')); });
     return;
   }
   try {
@@ -5224,9 +5226,10 @@ function syncAgentListToFirebase(agentList) {
     _db.ref(FB_PATH.AGENT_LIST).set(sorted, function(err) {
       if (err) {
         console.error('[v13:firebase] syncAgentList set FAILED:', err.message || err);
-        enqueueUpload(function() { syncAgentListToFirebase(agentList); });
+        // ★ 重试时也实时读取 State
+        enqueueUpload(function() { syncAgentListToFirebase(State.get('agentList')); });
       } else {
-        console.log('[v13:firebase] ✅ syncAgentList OK:', sorted.length + ' agents');
+        console.log('[v13:firebase] ✅ syncAgentList OK:', sorted.length + ' agents', JSON.stringify(sorted));
       }
     });
   } catch (e) {
@@ -5466,7 +5469,7 @@ function syncUploadAll() {
     if (err) {
       console.error('[v13:uploader] AGENT_LIST set FAILED:', err.message || err);
     } else {
-      console.log('[v13:uploader] ✅ AGENT_LIST pushed: ' + agentList.length + ' agents');
+      console.log('[v13:uploader] ✅ AGENT_LIST pushed: ' + agentList.length + ' agents', JSON.stringify(agentList));
     }
   });
 
