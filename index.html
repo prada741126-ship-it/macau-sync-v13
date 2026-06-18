@@ -11,7 +11,7 @@
   <!-- 版本快取清除 -->
   <script>
     (function() {
-      var APP_VERSION = '13.0.0.1781786476564';
+      var APP_VERSION = '13.0.0.1781786562133';
       var stored = localStorage.getItem('macau_app_version');
       var qs = location.search || '';
       if (stored && stored !== APP_VERSION && !sessionStorage.getItem('_v13_reloaded')) {
@@ -270,19 +270,37 @@ tr:hover td {
   padding: 10px 16px;
   cursor: pointer;
   color: var(--text-secondary);
-  transition: all var(--trans-base);
+  transition: color 0.25s ease, background 0.25s ease, border-color 0.25s ease, padding-left 0.25s ease;
   font-size: 13px;
-  border-left: 2px solid transparent;
+  border-left: 3px solid transparent;
   position: relative;
+  margin: 1px 0;
+  border-radius: 0 6px 6px 0;
 }
 .sb-item:hover {
   background: rgba(0,212,255,0.06);
   color: var(--text-primary);
+  padding-left: 20px;
 }
 .sb-item.active {
-  background: rgba(0,212,255,0.1);
+  background: linear-gradient(90deg, rgba(0,180,216,0.12) 0%, rgba(123,47,247,0.05) 100%);
   color: var(--tech-cyan);
   border-left-color: var(--tech-cyan);
+  font-weight: var(--fw-semibold);
+  box-shadow: inset 0 0 12px rgba(0,180,216,0.05);
+  padding-left: 20px;
+}
+/* 选中态右侧金点 */
+.sb-item.active::after {
+  content: '';
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: var(--gold-soft);
+  opacity: 0.6;
 }
 .sb-item .icon { font-size: 16px; width: 20px; text-align: center; }
 .sb-divider {
@@ -2251,7 +2269,7 @@ tr.rank-1 td {
   <!-- Firebase 初始化已统一由 src/sync/firebase.js 的 initFirebase() 处理（带重试） -->
 
   <!-- JS: 合并后由 build.js 输出为 app.js -->
-  <script src="app.js?v=13.0.0.1781786476564"></script>
+  <script src="app.js?v=13.0.0.1781786562133"></script>
 </head>
 <body>
 
@@ -2764,6 +2782,6 @@ tr.rank-1 td {
     <div id="v13-debug-log"></div>
   </div>
 
-  <!-- BUILD: v13.0.0 | 2026-06-11 | 2026-06-18T12:41:16.564Z -->
+  <!-- BUILD: v13.0.0 | 2026-06-11 | 2026-06-18T12:42:42.133Z -->
 </body>
 </html>
