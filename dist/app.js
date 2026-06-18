@@ -6732,12 +6732,45 @@ function initKeyboard() {
  * 对照档: 第七节模块6 (showPage)
  */
 
+/** 页面切换进度条控制器 */
+var _progressTimer = null;
+
+function _startProgress() {
+  var bar = document.getElementById('page-progress-bar');
+  if (!bar) return;
+  bar.classList.remove('done');
+  bar.classList.add('active');
+  bar.style.width = '0%';
+  // 强制回流后动画到 ~80%
+  requestAnimationFrame(function() {
+    requestAnimationFrame(function() {
+      bar.style.width = '75%';
+    });
+  });
+}
+
+function _finishProgress() {
+  var bar = document.getElementById('page-progress-bar');
+  if (!bar) return;
+  bar.style.width = '100%';
+  bar.classList.add('done');
+  bar.classList.remove('active');
+  // 动画完成后重置
+  setTimeout(function() {
+    bar.style.width = '0%';
+    bar.classList.remove('done');
+  }, 600);
+}
+
 /**
  * 切换到指定页面
  * @param {string} pageName - 'overview'|'all'|'query'|'summary'|'room'|'wallet'
  * @param {Element} [sidebarEl] - 侧边栏点击的元素
  */
 function showPage(pageName, sidebarEl) {
+  // 启动进度条
+  _startProgress();
+
   // 隐藏所有页面
   var pages = document.querySelectorAll('.page');
   for (var i = 0; i < pages.length; i++) {
@@ -6779,6 +6812,9 @@ function showPage(pageName, sidebarEl) {
 
   // 刷新对应页面数据
   _refreshPage(pageName);
+
+  // 完成进度条
+  _finishProgress();
 }
 
 /**
@@ -7131,15 +7167,82 @@ function _renderRecentActivity(txs) {
  * 对照档: 第七节模块14
  */
 
+// 表格排序状态
+var _allSortCol = null;
+var _allSortDir = 'asc';  // 'asc' | 'desc'
+var _allTableSortInited = false;
+
+/** 初始化全部交易表排序表头点击 */
+function _initAllTableSort() {
+  var ths = document.querySelectorAll('#all-table th.th-sortable');
+  for (var i = 0; i < ths.length; i++) {
+    (function(th) {
+      th.style.cursor = 'pointer';
+      th.addEventListener('click', function() {
+        var col = th.getAttribute('data-sort');
+        if (!col) return;
+        if (_allSortCol === col) {
+          _allSortDir = _allSortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+          _allSortCol = col;
+          _allSortDir = 'asc';
+        }
+        // 更新 UI 指示器
+        var allThs = document.querySelectorAll('#all-table th.th-sortable');
+        for (var j = 0; j < allThs.length; j++) {
+          allThs[j].classList.remove('th-sort-asc', 'th-sort-desc');
+        }
+        th.classList.add(_allSortDir === 'asc' ? 'th-sort-asc' : 'th-sort-desc');
+        renderAll();
+      });
+    })(ths[i]);
+  }
+}
+
+/** 对交易数组按指定列排序 */
+function _sortTxs(txs, col, dir) {
+  var fn = function(a, b) {
+    var va, vb;
+    switch (col) {
+      case 'type':    va = (a.type === 'cash') ? 1 : 0; vb = (b.type === 'cash') ? 1 : 0; break;
+      case 'date':    va = a.date || ''; vb = b.date || ''; break;
+      case 'agent':   va = a.agent || ''; vb = b.agent || ''; break;
+      case 'client':  va = a.client || ''; vb = b.client || ''; break;
+      case 'venue':   va = a.venue || ''; vb = b.venue || ''; break;
+      case 'volume':  va = toNum(a.volume); vb = toNum(b.volume); break;
+      case 'comm':    va = toNum(a.comm); vb = toNum(b.comm); break;
+      case 'bonus':   va = toNum(a.bonus); vb = toNum(b.bonus); break;
+      case 'drawn':   va = toNum(a.drawn); vb = toNum(b.drawn); break;
+      case 'undrawn': va = toNum(a.undrawn); vb = toNum(b.undrawn); break;
+      default: return 0;
+    }
+    if (va < vb) return -1;
+    if (va > vb) return 1;
+    return 0;
+  };
+  var sorted = txs.slice();
+  sorted.sort(fn);
+  if (dir === 'desc') sorted.reverse();
+  return sorted;
+}
+
 function renderAll() {
   var txs = State.get('txs');
   var month = State.get('workingMonth');
+
+  // ★ 首次初始化排序表头
+  if (!_allTableSortInited) { _initAllTableSort(); _allTableSortInited = true; }
 
   // ★ try-catch 包裹，防止单个渲染阶段崩溃导致页面卡死
   try {
     if (month) txs = filterByMonth(txs, month);
   } catch (e) {
     console.error('[v13:all] filterByMonth 崩溃:', e);
+  }
+
+  // ★ 应用排序
+  if (_allSortCol) {
+    try { txs = _sortTxs(txs, _allSortCol, _allSortDir); } catch (e) { console.error('[v13:all] sort 崩溃:', e); }
   }
 
   try {
@@ -7283,11 +7386,68 @@ function _renderAllTable(txs) {
  * 对照档: 第七节模块13 + v12 query.js
  */
 
+// 查询表排序状态
+var _querySortCol = null;
+var _querySortDir = 'asc';
+var _queryTableSortInited = false;
+
+/** 初始化查询表排序表头点击 */
+function _initQueryTableSort() {
+  var ths = document.querySelectorAll('#query-table th.th-sortable');
+  for (var i = 0; i < ths.length; i++) {
+    (function(th) {
+      th.style.cursor = 'pointer';
+      th.addEventListener('click', function() {
+        var col = th.getAttribute('data-sort');
+        if (!col) return;
+        if (_querySortCol === col) {
+          _querySortDir = _querySortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+          _querySortCol = col;
+          _querySortDir = 'asc';
+        }
+        var allThs = document.querySelectorAll('#query-table th.th-sortable');
+        for (var j = 0; j < allThs.length; j++) {
+          allThs[j].classList.remove('th-sort-asc', 'th-sort-desc');
+        }
+        th.classList.add(_querySortDir === 'asc' ? 'th-sort-asc' : 'th-sort-desc');
+        doQuery();
+      });
+    })(ths[i]);
+  }
+}
+
+/** 对查询结果按指定列排序 */
+function _sortQueryResults(txs, col, dir) {
+  var fn = function(a, b) {
+    var va, vb;
+    switch (col) {
+      case 'date':    va = a.date || ''; vb = b.date || ''; break;
+      case 'agent':   va = a.agent || ''; vb = b.agent || ''; break;
+      case 'venue':   va = a.venue || ''; vb = b.venue || ''; break;
+      case 'volume':  va = toNum(a.volume); vb = toNum(b.volume); break;
+      case 'bonus':   va = toNum(a.bonus); vb = toNum(b.bonus); break;
+      case 'drawn':   va = toNum(a.drawn); vb = toNum(b.drawn); break;
+      case 'undrawn': va = toNum(a.undrawn); vb = toNum(b.undrawn); break;
+      default: return 0;
+    }
+    if (va < vb) return -1;
+    if (va > vb) return 1;
+    return 0;
+  };
+  var sorted = txs.slice();
+  sorted.sort(fn);
+  if (dir === 'desc') sorted.reverse();
+  return sorted;
+}
+
 /** 入口：弹出所有下拉并执行默认查询（本月） */
 function renderQuery() {
   _populateQueryFilters();
   _setDefaultMonth();
   _highlightQuickBtn('thisMonth');
+  // ★ 初始化查询表排序
+  if (!_queryTableSortInited) { _initQueryTableSort(); _queryTableSortInited = true; }
   doQuery();
 }
 
@@ -7490,6 +7650,11 @@ function doQuery() {
     if (searchEl && searchEl.value) criteria.keyword = searchEl.value;
 
     var filtered = filterTxs(txs, criteria);
+
+    // ★ 应用表格排序
+    if (_querySortCol) {
+      try { filtered = _sortQueryResults(filtered, _querySortCol, _querySortDir); } catch(e) { console.error('[doQuery] sort 崩溃:', e); }
+    }
 
     // 获取选定的月份（用于 pre-balance 和月份过滤）
     var queryMonth = criteria.month || '';
@@ -9475,17 +9640,35 @@ function renderTrendChart(txs, month) {
   if (!canvas) return;
 
   var data = aggregateByDay(txs, month || State.get('workingMonth'));
+  var chartContainer = canvas.parentElement;
+  if (!chartContainer) return;
+
+  // ★ 无数据 → 显示空状态
+  if (data.length === 0) {
+    canvas.style.display = 'none';
+    var emptyEl = chartContainer.querySelector('.chart-empty');
+    if (!emptyEl) {
+      chartContainer.insertAdjacentHTML('beforeend', '<div class="chart-empty"><svg class="empty-svg" viewBox="0 0 120 90" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted);opacity:0.35"><line x1="10" y1="80" x2="110" y2="80" stroke="currentColor" opacity="0.3"/><polyline points="20,80 35,50 50,65 65,30 80,45 95,20" stroke="currentColor" stroke-width="2" fill="none" opacity="0.4"/><circle cx="35" cy="50" r="3" fill="currentColor" opacity="0.4"/><circle cx="65" cy="30" r="3" fill="currentColor" opacity="0.4"/><circle cx="95" cy="20" r="3" fill="currentColor" opacity="0.4"/></svg><div class="empty-text">暫無趨勢數據</div><div class="empty-hint">新增交易後此處顯示每日洗碼量趨勢</div></div>');
+    } else { emptyEl.style.display = ''; }
+    if (window._trendChart) { window._trendChart.destroy(); window._trendChart = null; }
+    return;
+  }
+
+  // 有数据 → 显示图表
+  canvas.style.display = '';
+  var existingEmpty = chartContainer.querySelector('.chart-empty');
+  if (existingEmpty) existingEmpty.style.display = 'none';
 
   var labels = [];
   var volumes = [];
   for (var i = 0; i < data.length; i++) {
-    labels.push(data[i].date.substring(5)); // MM-DD
+    labels.push(data[i].date.substring(5));
     volumes.push(data[i].volume);
   }
 
-  if (_trendChart) _trendChart.destroy();
+  if (window._trendChart) window._trendChart.destroy();
 
-  _trendChart = new Chart(canvas, {
+  window._trendChart = new Chart(canvas, {
     type: 'line',
     data: {
       labels: labels,
@@ -9540,6 +9723,24 @@ function renderRankChart(txs) {
   if (!canvas) return;
 
   var ranks = rankByVolume(txs, 10);
+  var chartContainer = canvas.parentElement;
+  if (!chartContainer) return;
+
+  // ★ 无数据 → 显示空状态
+  if (ranks.length === 0) {
+    canvas.style.display = 'none';
+    var emptyEl = chartContainer.querySelector('.chart-empty');
+    if (!emptyEl) {
+      chartContainer.insertAdjacentHTML('beforeend', '<div class="chart-empty"><svg class="empty-svg" viewBox="0 0 120 90" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted);opacity:0.35"><rect x="25" y="15" width="70" height="60" rx="6" stroke="currentColor" opacity="0.3"/><rect x="35" y="25" width="50" height="8" rx="2" fill="currentColor" opacity="0.2"/><rect x="35" y="38" width="40" height="8" rx="2" fill="currentColor" opacity="0.15"/><rect x="35" y="51" width="45" height="8" rx="2" fill="currentColor" opacity="0.1"/><circle cx="85" cy="29" r="3" fill="currentColor" opacity="0.3"/><circle cx="80" cy="42" r="3" fill="currentColor" opacity="0.25"/><circle cx="82" cy="55" r="3" fill="currentColor" opacity="0.2"/></svg><div class="empty-text">暫無排行數據</div><div class="empty-hint">新增交易後此處顯示代理洗碼量排行</div></div>');
+    } else { emptyEl.style.display = ''; }
+    if (window._rankChart) { window._rankChart.destroy(); window._rankChart = null; }
+    return;
+  }
+
+  // 有数据 → 显示图表
+  canvas.style.display = '';
+  var existingEmpty = chartContainer.querySelector('.chart-empty');
+  if (existingEmpty) existingEmpty.style.display = 'none';
 
   var labels = [];
   var volumes = [];

@@ -634,8 +634,35 @@
 }
 
 /* ══════════════════════════════════════════════════════
- * 侧栏折叠 — 按钮旋转动画
+ * 页面切换进度条 (NProgress 风格)
  * ══════════════════════════════════════════════════════ */
+#page-progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 0%;
+  height: 2px;
+  background: linear-gradient(90deg, var(--techCyan), var(--electricViolet), var(--goldSoft));
+  background-size: 200% 100%;
+  animation: progress-bar-shimmer 2s linear infinite;
+  z-index: 99999;
+  transition: width 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: 0 0 8px rgba(0,212,255,0.4);
+}
+#page-progress-bar.active {
+  opacity: 1;
+}
+#page-progress-bar.done {
+  width: 100%;
+  opacity: 0;
+  transition: width 0.2s ease, opacity 0.4s ease 0.2s;
+}
+@keyframes progress-bar-shimmer {
+  0%   { background-position: 200% 0; }
+  100%  { background-position: -200% 0; }
+}
 
 #sidebar-toggle {
   transition: transform var(--trans-slow) cubic-bezier(0.4,0,0.2,1);

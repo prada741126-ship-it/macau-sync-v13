@@ -110,6 +110,9 @@
     <div class="loading-text">處理中...</div>
   </div>
 
+  <!-- 页面切换进度条 -->
+  <div id="page-progress-bar"></div>
+
   <!-- 密码保护遮罩 -->
   <div id="pw-overlay">
     <div id="pw-box">
@@ -292,8 +295,16 @@
             <table id="all-table">
               <thead>
                 <tr>
-                  <th>類型</th><th>日期</th><th>代理</th><th>客戶</th><th>地點</th>
-                  <th class="text-right">洗碼量</th><th class="text-right">佣金</th><th class="text-right">碼糧</th><th class="text-right">已提領</th><th class="text-right">未提領</th>
+                  <th class="th-sortable" data-sort="type">類型</th>
+                  <th class="th-sortable" data-sort="date">日期</th>
+                  <th class="th-sortable" data-sort="agent">代理</th>
+                  <th class="th-sortable" data-sort="client">客戶</th>
+                  <th class="th-sortable" data-sort="venue">地點</th>
+                  <th class="th-sortable text-right" data-sort="volume">洗碼量</th>
+                  <th class="th-sortable text-right" data-sort="comm">佣金</th>
+                  <th class="th-sortable text-right" data-sort="bonus">碼糧</th>
+                  <th class="th-sortable text-right" data-sort="drawn">已提領</th>
+                  <th class="th-sortable text-right" data-sort="undrawn">未提領</th>
                   <th>備註</th><th>操作</th>
                 </tr>
               </thead>
@@ -329,7 +340,16 @@
           <div id="query-kpi" class="kpi-grid"></div>
           <div class="table-scroll">
             <table id="query-table">
-              <thead id="query-thead"><tr><th>日期</th><th>代理</th><th>地點</th><th class="text-right">洗碼量</th><th class="text-right">碼糧</th><th class="text-right">已提領</th><th class="text-right">未提領</th><th>備註</th></tr></thead>
+              <thead id="query-thead"><tr>
+                <th class="th-sortable" data-sort="date">日期</th>
+                <th class="th-sortable" data-sort="agent">代理</th>
+                <th class="th-sortable" data-sort="venue">地點</th>
+                <th class="th-sortable text-right" data-sort="volume">洗碼量</th>
+                <th class="th-sortable text-right" data-sort="bonus">碼糧</th>
+                <th class="th-sortable text-right" data-sort="drawn">已提領</th>
+                <th class="th-sortable text-right" data-sort="undrawn">未提領</th>
+                <th>備註</th>
+              </tr></thead>
               <tbody id="query-tbody"></tbody>
             </table>
           </div>

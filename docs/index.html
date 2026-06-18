@@ -11,7 +11,7 @@
   <!-- 版本快取清除 -->
   <script>
     (function() {
-      var APP_VERSION = '13.0.0.1781809587545';
+      var APP_VERSION = '13.0.0.1781810639700';
       var stored = localStorage.getItem('macau_app_version');
       var qs = location.search || '';
       if (stored && stored !== APP_VERSION && !sessionStorage.getItem('_v13_reloaded')) {
@@ -876,8 +876,35 @@ a:focus-visible,
 }
 
 /* ══════════════════════════════════════════════════════
- * 侧栏折叠 — 按钮旋转动画
+ * 页面切换进度条 (NProgress 风格)
  * ══════════════════════════════════════════════════════ */
+#page-progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 0%;
+  height: 2px;
+  background: linear-gradient(90deg, var(--techCyan), var(--electricViolet), var(--goldSoft));
+  background-size: 200% 100%;
+  animation: progress-bar-shimmer 2s linear infinite;
+  z-index: 99999;
+  transition: width 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: 0 0 8px rgba(0,212,255,0.4);
+}
+#page-progress-bar.active {
+  opacity: 1;
+}
+#page-progress-bar.done {
+  width: 100%;
+  opacity: 0;
+  transition: width 0.2s ease, opacity 0.4s ease 0.2s;
+}
+@keyframes progress-bar-shimmer {
+  0%   { background-position: 200% 0; }
+  100%  { background-position: -200% 0; }
+}
 
 #sidebar-toggle {
   transition: transform var(--trans-slow) cubic-bezier(0.4,0,0.2,1);
@@ -3179,7 +3206,7 @@ tr.rank-1 td {
   <!-- Firebase 初始化已统一由 src/sync/firebase.js 的 initFirebase() 处理（带重试） -->
 
   <!-- JS: 合并后由 build.js 输出为 app.js -->
-  <script src="app.js?v=13.0.0.1781809587545"></script>
+  <script src="app.js?v=13.0.0.1781810639700"></script>
 </head>
 <body>
 
@@ -3191,6 +3218,9 @@ tr.rank-1 td {
     <div class="loading-spinner"></div>
     <div class="loading-text">處理中...</div>
   </div>
+
+  <!-- 页面切换进度条 -->
+  <div id="page-progress-bar"></div>
 
   <!-- 密码保护遮罩 -->
   <div id="pw-overlay">
@@ -3374,8 +3404,16 @@ tr.rank-1 td {
             <table id="all-table">
               <thead>
                 <tr>
-                  <th>類型</th><th>日期</th><th>代理</th><th>客戶</th><th>地點</th>
-                  <th class="text-right">洗碼量</th><th class="text-right">佣金</th><th class="text-right">碼糧</th><th class="text-right">已提領</th><th class="text-right">未提領</th>
+                  <th class="th-sortable" data-sort="type">類型</th>
+                  <th class="th-sortable" data-sort="date">日期</th>
+                  <th class="th-sortable" data-sort="agent">代理</th>
+                  <th class="th-sortable" data-sort="client">客戶</th>
+                  <th class="th-sortable" data-sort="venue">地點</th>
+                  <th class="th-sortable text-right" data-sort="volume">洗碼量</th>
+                  <th class="th-sortable text-right" data-sort="comm">佣金</th>
+                  <th class="th-sortable text-right" data-sort="bonus">碼糧</th>
+                  <th class="th-sortable text-right" data-sort="drawn">已提領</th>
+                  <th class="th-sortable text-right" data-sort="undrawn">未提領</th>
                   <th>備註</th><th>操作</th>
                 </tr>
               </thead>
@@ -3411,7 +3449,16 @@ tr.rank-1 td {
           <div id="query-kpi" class="kpi-grid"></div>
           <div class="table-scroll">
             <table id="query-table">
-              <thead id="query-thead"><tr><th>日期</th><th>代理</th><th>地點</th><th class="text-right">洗碼量</th><th class="text-right">碼糧</th><th class="text-right">已提領</th><th class="text-right">未提領</th><th>備註</th></tr></thead>
+              <thead id="query-thead"><tr>
+                <th class="th-sortable" data-sort="date">日期</th>
+                <th class="th-sortable" data-sort="agent">代理</th>
+                <th class="th-sortable" data-sort="venue">地點</th>
+                <th class="th-sortable text-right" data-sort="volume">洗碼量</th>
+                <th class="th-sortable text-right" data-sort="bonus">碼糧</th>
+                <th class="th-sortable text-right" data-sort="drawn">已提領</th>
+                <th class="th-sortable text-right" data-sort="undrawn">未提領</th>
+                <th>備註</th>
+              </tr></thead>
               <tbody id="query-tbody"></tbody>
             </table>
           </div>
@@ -3764,6 +3811,6 @@ tr.rank-1 td {
     <div id="v13-debug-log"></div>
   </div>
 
-  <!-- BUILD: v13.0.0 | 2026-06-11 | 2026-06-18T19:06:27.545Z -->
+  <!-- BUILD: v13.0.0 | 2026-06-11 | 2026-06-18T19:23:59.700Z -->
 </body>
 </html>

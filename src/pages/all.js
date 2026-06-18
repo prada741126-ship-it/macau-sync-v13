@@ -6,15 +6,82 @@
  * 对照档: 第七节模块14
  */
 
+// 表格排序状态
+var _allSortCol = null;
+var _allSortDir = 'asc';  // 'asc' | 'desc'
+var _allTableSortInited = false;
+
+/** 初始化全部交易表排序表头点击 */
+function _initAllTableSort() {
+  var ths = document.querySelectorAll('#all-table th.th-sortable');
+  for (var i = 0; i < ths.length; i++) {
+    (function(th) {
+      th.style.cursor = 'pointer';
+      th.addEventListener('click', function() {
+        var col = th.getAttribute('data-sort');
+        if (!col) return;
+        if (_allSortCol === col) {
+          _allSortDir = _allSortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+          _allSortCol = col;
+          _allSortDir = 'asc';
+        }
+        // 更新 UI 指示器
+        var allThs = document.querySelectorAll('#all-table th.th-sortable');
+        for (var j = 0; j < allThs.length; j++) {
+          allThs[j].classList.remove('th-sort-asc', 'th-sort-desc');
+        }
+        th.classList.add(_allSortDir === 'asc' ? 'th-sort-asc' : 'th-sort-desc');
+        renderAll();
+      });
+    })(ths[i]);
+  }
+}
+
+/** 对交易数组按指定列排序 */
+function _sortTxs(txs, col, dir) {
+  var fn = function(a, b) {
+    var va, vb;
+    switch (col) {
+      case 'type':    va = (a.type === 'cash') ? 1 : 0; vb = (b.type === 'cash') ? 1 : 0; break;
+      case 'date':    va = a.date || ''; vb = b.date || ''; break;
+      case 'agent':   va = a.agent || ''; vb = b.agent || ''; break;
+      case 'client':  va = a.client || ''; vb = b.client || ''; break;
+      case 'venue':   va = a.venue || ''; vb = b.venue || ''; break;
+      case 'volume':  va = toNum(a.volume); vb = toNum(b.volume); break;
+      case 'comm':    va = toNum(a.comm); vb = toNum(b.comm); break;
+      case 'bonus':   va = toNum(a.bonus); vb = toNum(b.bonus); break;
+      case 'drawn':   va = toNum(a.drawn); vb = toNum(b.drawn); break;
+      case 'undrawn': va = toNum(a.undrawn); vb = toNum(b.undrawn); break;
+      default: return 0;
+    }
+    if (va < vb) return -1;
+    if (va > vb) return 1;
+    return 0;
+  };
+  var sorted = txs.slice();
+  sorted.sort(fn);
+  if (dir === 'desc') sorted.reverse();
+  return sorted;
+}
+
 function renderAll() {
   var txs = State.get('txs');
   var month = State.get('workingMonth');
+
+  // ★ 首次初始化排序表头
+  if (!_allTableSortInited) { _initAllTableSort(); _allTableSortInited = true; }
 
   // ★ try-catch 包裹，防止单个渲染阶段崩溃导致页面卡死
   try {
     if (month) txs = filterByMonth(txs, month);
   } catch (e) {
     console.error('[v13:all] filterByMonth 崩溃:', e);
+  }
+
+  // ★ 应用排序
+  if (_allSortCol) {
+    try { txs = _sortTxs(txs, _allSortCol, _allSortDir); } catch (e) { console.error('[v13:all] sort 崩溃:', e); }
   }
 
   try {

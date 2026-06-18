@@ -5,12 +5,45 @@
  * 对照档: 第七节模块6 (showPage)
  */
 
+/** 页面切换进度条控制器 */
+var _progressTimer = null;
+
+function _startProgress() {
+  var bar = document.getElementById('page-progress-bar');
+  if (!bar) return;
+  bar.classList.remove('done');
+  bar.classList.add('active');
+  bar.style.width = '0%';
+  // 强制回流后动画到 ~80%
+  requestAnimationFrame(function() {
+    requestAnimationFrame(function() {
+      bar.style.width = '75%';
+    });
+  });
+}
+
+function _finishProgress() {
+  var bar = document.getElementById('page-progress-bar');
+  if (!bar) return;
+  bar.style.width = '100%';
+  bar.classList.add('done');
+  bar.classList.remove('active');
+  // 动画完成后重置
+  setTimeout(function() {
+    bar.style.width = '0%';
+    bar.classList.remove('done');
+  }, 600);
+}
+
 /**
  * 切换到指定页面
  * @param {string} pageName - 'overview'|'all'|'query'|'summary'|'room'|'wallet'
  * @param {Element} [sidebarEl] - 侧边栏点击的元素
  */
 function showPage(pageName, sidebarEl) {
+  // 启动进度条
+  _startProgress();
+
   // 隐藏所有页面
   var pages = document.querySelectorAll('.page');
   for (var i = 0; i < pages.length; i++) {
@@ -52,6 +85,9 @@ function showPage(pageName, sidebarEl) {
 
   // 刷新对应页面数据
   _refreshPage(pageName);
+
+  // 完成进度条
+  _finishProgress();
 }
 
 /**

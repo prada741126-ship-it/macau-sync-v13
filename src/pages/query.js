@@ -4,11 +4,68 @@
  * 对照档: 第七节模块13 + v12 query.js
  */
 
+// 查询表排序状态
+var _querySortCol = null;
+var _querySortDir = 'asc';
+var _queryTableSortInited = false;
+
+/** 初始化查询表排序表头点击 */
+function _initQueryTableSort() {
+  var ths = document.querySelectorAll('#query-table th.th-sortable');
+  for (var i = 0; i < ths.length; i++) {
+    (function(th) {
+      th.style.cursor = 'pointer';
+      th.addEventListener('click', function() {
+        var col = th.getAttribute('data-sort');
+        if (!col) return;
+        if (_querySortCol === col) {
+          _querySortDir = _querySortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+          _querySortCol = col;
+          _querySortDir = 'asc';
+        }
+        var allThs = document.querySelectorAll('#query-table th.th-sortable');
+        for (var j = 0; j < allThs.length; j++) {
+          allThs[j].classList.remove('th-sort-asc', 'th-sort-desc');
+        }
+        th.classList.add(_querySortDir === 'asc' ? 'th-sort-asc' : 'th-sort-desc');
+        doQuery();
+      });
+    })(ths[i]);
+  }
+}
+
+/** 对查询结果按指定列排序 */
+function _sortQueryResults(txs, col, dir) {
+  var fn = function(a, b) {
+    var va, vb;
+    switch (col) {
+      case 'date':    va = a.date || ''; vb = b.date || ''; break;
+      case 'agent':   va = a.agent || ''; vb = b.agent || ''; break;
+      case 'venue':   va = a.venue || ''; vb = b.venue || ''; break;
+      case 'volume':  va = toNum(a.volume); vb = toNum(b.volume); break;
+      case 'bonus':   va = toNum(a.bonus); vb = toNum(b.bonus); break;
+      case 'drawn':   va = toNum(a.drawn); vb = toNum(b.drawn); break;
+      case 'undrawn': va = toNum(a.undrawn); vb = toNum(b.undrawn); break;
+      default: return 0;
+    }
+    if (va < vb) return -1;
+    if (va > vb) return 1;
+    return 0;
+  };
+  var sorted = txs.slice();
+  sorted.sort(fn);
+  if (dir === 'desc') sorted.reverse();
+  return sorted;
+}
+
 /** 入口：弹出所有下拉并执行默认查询（本月） */
 function renderQuery() {
   _populateQueryFilters();
   _setDefaultMonth();
   _highlightQuickBtn('thisMonth');
+  // ★ 初始化查询表排序
+  if (!_queryTableSortInited) { _initQueryTableSort(); _queryTableSortInited = true; }
   doQuery();
 }
 
@@ -211,6 +268,11 @@ function doQuery() {
     if (searchEl && searchEl.value) criteria.keyword = searchEl.value;
 
     var filtered = filterTxs(txs, criteria);
+
+    // ★ 应用表格排序
+    if (_querySortCol) {
+      try { filtered = _sortQueryResults(filtered, _querySortCol, _querySortDir); } catch(e) { console.error('[doQuery] sort 崩溃:', e); }
+    }
 
     // 获取选定的月份（用于 pre-balance 和月份过滤）
     var queryMonth = criteria.month || '';
