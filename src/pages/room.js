@@ -245,8 +245,17 @@ var RM = {
     if (!tbody) return;
     tbody.innerHTML = '';
 
-    for (var i = 0; i < bookings.length; i++) {
-      var b = bookings[i];
+    // ★ 按日期降序排列 (最新在前)
+    var sorted = bookings.slice().sort(function(a, b) {
+      var da = a.date || '';
+      var db = b.date || '';
+      if (da < db) return 1;
+      if (da > db) return -1;
+      return 0;
+    });
+
+    for (var i = 0; i < sorted.length; i++) {
+      var b = sorted[i];
       var tr = h('tr', { onclick: function() { RM.openModal(this._bId); } });
       tr._bId = b.id;
       tr.style.cursor = 'pointer';

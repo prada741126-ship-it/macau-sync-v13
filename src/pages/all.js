@@ -7,8 +7,8 @@
  */
 
 // 表格排序状态
-var _allSortCol = null;
-var _allSortDir = 'asc';  // 'asc' | 'desc'
+var _allSortCol = 'date';   // 默认按日期排序
+var _allSortDir = 'desc';   // 默认最新在前
 var _allTableSortInited = false;
 
 /** 初始化全部交易表排序表头点击 */

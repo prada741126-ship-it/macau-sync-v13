@@ -7183,8 +7183,8 @@ function _renderRecentActivity(txs) {
  */
 
 // 表格排序状态
-var _allSortCol = null;
-var _allSortDir = 'asc';  // 'asc' | 'desc'
+var _allSortCol = 'date';   // 默认按日期排序
+var _allSortDir = 'desc';   // 默认最新在前
 var _allTableSortInited = false;
 
 /** 初始化全部交易表排序表头点击 */
@@ -7405,8 +7405,8 @@ function _renderAllTable(txs) {
  */
 
 // 查询表排序状态
-var _querySortCol = null;
-var _querySortDir = 'asc';
+var _querySortCol = 'date';   // 默认按日期排序
+var _querySortDir = 'desc';   // 默认最新在前
 var _queryTableSortInited = false;
 
 /** 初始化查询表排序表头点击 */
@@ -8680,8 +8680,17 @@ var RM = {
     if (!tbody) return;
     tbody.innerHTML = '';
 
-    for (var i = 0; i < bookings.length; i++) {
-      var b = bookings[i];
+    // ★ 按日期降序排列 (最新在前)
+    var sorted = bookings.slice().sort(function(a, b) {
+      var da = a.date || '';
+      var db = b.date || '';
+      if (da < db) return 1;
+      if (da > db) return -1;
+      return 0;
+    });
+
+    for (var i = 0; i < sorted.length; i++) {
+      var b = sorted[i];
       var tr = h('tr', { onclick: function() { RM.openModal(this._bId); } });
       tr._bId = b.id;
       tr.style.cursor = 'pointer';

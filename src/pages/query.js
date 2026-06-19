@@ -5,8 +5,8 @@
  */
 
 // 查询表排序状态
-var _querySortCol = null;
-var _querySortDir = 'asc';
+var _querySortCol = 'date';   // 默认按日期排序
+var _querySortDir = 'desc';   // 默认最新在前
 var _queryTableSortInited = false;
 
 /** 初始化查询表排序表头点击 */
