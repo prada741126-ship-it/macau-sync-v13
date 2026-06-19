@@ -170,7 +170,7 @@ function _renderAllTable(txs) {
         tx.agent,
         tx.client || '-',
         tx.venue || '-',
-        fmt(tx.volume) + '萬',
+        fmtDec(tx.volume, 1) + '萬',
         fmtMoney(tx.comm),
         fmtMoney(tx.bonus),
         fmtMoney(tx.drawn),

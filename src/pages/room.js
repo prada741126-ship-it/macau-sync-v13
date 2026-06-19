@@ -324,7 +324,7 @@ var RM = {
     if (volEl) {
       volEl.textContent = '0萬';
       if (typeof countUp === 'function') countUp(volEl, quota.totalVolume || 0, { suffix: '萬' });
-      else volEl.textContent = fmt(quota.totalVolume) + '萬';
+      else volEl.textContent = fmtDec(quota.totalVolume, 1) + '萬';
     }
 
     var usedEl = $('.rm-quota-used');

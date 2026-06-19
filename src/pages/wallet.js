@@ -340,7 +340,7 @@ function _renderFlowTable() {
     var tx = filteredTxs[j];
     var fundVal = toNum(tx.fund);
     var bonusVal = toNum(tx.bonus);
-    var volNote = '洗碼' + fmt(tx.volume) + '萬';
+    var volNote = '洗碼' + fmtDec(tx.volume, 1) + '萬';
 
     if (fundVal > 0) {
       flows.push({
@@ -463,7 +463,7 @@ function _renderFundCard() {
         type: '佣金公基金',
         amount: fv,
         sign: 1,
-        note: (tx.agent || '') + ' 洗碼' + fmt(tx.volume) + '萬',
+        note: (tx.agent || '') + ' 洗碼' + fmtDec(tx.volume, 1) + '萬',
       });
     }
   }

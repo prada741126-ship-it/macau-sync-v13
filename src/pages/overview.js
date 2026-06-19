@@ -42,7 +42,7 @@ function _renderKPI(kpi) {
   }
 
   var cards = [
-    { label: '📊 ' + TERMS.volume,  value: fmt(kpi.totalVolume),  raw: kpi.totalVolume,  cuOpts: { suffix: '萬' },       accent: 'cyan', color: UI_COLORS.techCyan },
+    { label: '📊 ' + TERMS.volume,  value: fmtDec(kpi.totalVolume, 1),  raw: kpi.totalVolume,  cuOpts: { suffix: '萬' },       accent: 'cyan', color: UI_COLORS.techCyan },
     { label: '💰 ' + TERMS.comm,    value: fmtMoney(kpi.totalComm),   raw: kpi.totalComm,    cuOpts: { prefix: '¥' },         accent: 'blue',  color: UI_COLORS.skyBlue },
     { label: '🎁 ' + TERMS.bonus,   value: fmtMoney(kpi.totalBonus),  raw: kpi.totalBonus,   cuOpts: { prefix: '¥' },         accent: 'violet',color: UI_COLORS.electricViolet },
     { label: '🏦 ' + TERMS.fund,    value: fmtMoney(kpi.totalFund),   raw: kpi.totalFund,    cuOpts: { prefix: '¥' },         accent: 'gold',  color: UI_COLORS.goldSoft },
@@ -125,7 +125,7 @@ function _renderRecentActivity(txs) {
                      '<span style="color:' + UI_COLORS.techCyan + '">' + (tx.agent || '') + '</span> ' +
                      (tx.client ? '<span style="color:' + UI_COLORS.textSecondary + '">' + tx.client + '</span>' : '');
 
-    var right = h('span', { style: 'color:' + UI_COLORS.skyBlue + ';font-weight:600' }, fmt(tx.volume) + '萬');
+    var right = h('span', { style: 'color:' + UI_COLORS.skyBlue + ';font-weight:600' }, fmtDec(tx.volume, 1) + '萬');
 
     item.appendChild(left);
     item.appendChild(right);

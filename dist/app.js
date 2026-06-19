@@ -7082,7 +7082,7 @@ function _renderKPI(kpi) {
   }
 
   var cards = [
-    { label: '📊 ' + TERMS.volume,  value: fmt(kpi.totalVolume),  raw: kpi.totalVolume,  cuOpts: { suffix: '萬' },       accent: 'cyan', color: UI_COLORS.techCyan },
+    { label: '📊 ' + TERMS.volume,  value: fmtDec(kpi.totalVolume, 1),  raw: kpi.totalVolume,  cuOpts: { suffix: '萬' },       accent: 'cyan', color: UI_COLORS.techCyan },
     { label: '💰 ' + TERMS.comm,    value: fmtMoney(kpi.totalComm),   raw: kpi.totalComm,    cuOpts: { prefix: '¥' },         accent: 'blue',  color: UI_COLORS.skyBlue },
     { label: '🎁 ' + TERMS.bonus,   value: fmtMoney(kpi.totalBonus),  raw: kpi.totalBonus,   cuOpts: { prefix: '¥' },         accent: 'violet',color: UI_COLORS.electricViolet },
     { label: '🏦 ' + TERMS.fund,    value: fmtMoney(kpi.totalFund),   raw: kpi.totalFund,    cuOpts: { prefix: '¥' },         accent: 'gold',  color: UI_COLORS.goldSoft },
@@ -7165,7 +7165,7 @@ function _renderRecentActivity(txs) {
                      '<span style="color:' + UI_COLORS.techCyan + '">' + (tx.agent || '') + '</span> ' +
                      (tx.client ? '<span style="color:' + UI_COLORS.textSecondary + '">' + tx.client + '</span>' : '');
 
-    var right = h('span', { style: 'color:' + UI_COLORS.skyBlue + ';font-weight:600' }, fmt(tx.volume) + '萬');
+    var right = h('span', { style: 'color:' + UI_COLORS.skyBlue + ';font-weight:600' }, fmtDec(tx.volume, 1) + '萬');
 
     item.appendChild(left);
     item.appendChild(right);
@@ -7346,7 +7346,7 @@ function _renderAllTable(txs) {
         tx.agent,
         tx.client || '-',
         tx.venue || '-',
-        fmt(tx.volume) + '萬',
+        fmtDec(tx.volume, 1) + '萬',
         fmtMoney(tx.comm),
         fmtMoney(tx.bonus),
         fmtMoney(tx.drawn),
@@ -7760,7 +7760,7 @@ function _renderQueryTable(txs) {
   for (var i = 0; i < txs.length; i++) {
     var tx = txs[i];
     var tr = h('tr');
-    var cells = [tx.date, tx.agent, tx.venue, fmt(tx.volume) + '萬', fmtMoney(tx.bonus), fmtMoney(tx.drawn), fmtMoney(tx.undrawn), tx.note || ''];
+    var cells = [tx.date, tx.agent, tx.venue, fmtDec(tx.volume, 1) + '萬', fmtMoney(tx.bonus), fmtMoney(tx.drawn), fmtMoney(tx.undrawn), tx.note || ''];
     for (var j = 0; j < cells.length; j++) {
       var tdAttrs = {};
       if (j >= 3 && j <= 6) tdAttrs.class = 'text-right num-mono';
@@ -8759,7 +8759,7 @@ var RM = {
     if (volEl) {
       volEl.textContent = '0萬';
       if (typeof countUp === 'function') countUp(volEl, quota.totalVolume || 0, { suffix: '萬' });
-      else volEl.textContent = fmt(quota.totalVolume) + '萬';
+      else volEl.textContent = fmtDec(quota.totalVolume, 1) + '萬';
     }
 
     var usedEl = $('.rm-quota-used');
@@ -9239,7 +9239,7 @@ function _renderFlowTable() {
     var tx = filteredTxs[j];
     var fundVal = toNum(tx.fund);
     var bonusVal = toNum(tx.bonus);
-    var volNote = '洗碼' + fmt(tx.volume) + '萬';
+    var volNote = '洗碼' + fmtDec(tx.volume, 1) + '萬';
 
     if (fundVal > 0) {
       flows.push({
@@ -9362,7 +9362,7 @@ function _renderFundCard() {
         type: '佣金公基金',
         amount: fv,
         sign: 1,
-        note: (tx.agent || '') + ' 洗碼' + fmt(tx.volume) + '萬',
+        note: (tx.agent || '') + ' 洗碼' + fmtDec(tx.volume, 1) + '萬',
       });
     }
   }

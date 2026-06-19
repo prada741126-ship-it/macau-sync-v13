@@ -360,7 +360,7 @@ function _renderQueryTable(txs) {
   for (var i = 0; i < txs.length; i++) {
     var tx = txs[i];
     var tr = h('tr');
-    var cells = [tx.date, tx.agent, tx.venue, fmt(tx.volume) + '萬', fmtMoney(tx.bonus), fmtMoney(tx.drawn), fmtMoney(tx.undrawn), tx.note || ''];
+    var cells = [tx.date, tx.agent, tx.venue, fmtDec(tx.volume, 1) + '萬', fmtMoney(tx.bonus), fmtMoney(tx.drawn), fmtMoney(tx.undrawn), tx.note || ''];
     for (var j = 0; j < cells.length; j++) {
       var tdAttrs = {};
       if (j >= 3 && j <= 6) tdAttrs.class = 'text-right num-mono';
