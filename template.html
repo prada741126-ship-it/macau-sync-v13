@@ -219,6 +219,7 @@
       <div id="topbar">
         <div id="mobile-sb-btn" style="display:none;cursor:pointer;font-size:20px" onclick="toggleMobileSidebar()">☰</div>
         <div id="topbar-title">總覽</div>
+        <div id="topbar-subtitle"></div>
         <div id="topbar-actions">
           <button class="btn btn-primary btn-sm" onclick="Events.emit('tx:new')"><span>+ 新增</span></button>
           <button class="btn btn-sm" onclick="doBackup()"><span>📦 備份</span></button>
@@ -275,7 +276,8 @@
         <div class="page" id="page-all">
           <div id="all-kpi-mini" class="kpi-grid"></div>
           <div class="toolbar">
-            <input type="text" id="all-search" placeholder="搜索..." style="width:200px" oninput="renderAll()">
+            <span class="search-box"><input type="text" id="all-search" placeholder="搜索..." style="width:200px" oninput="renderAll()">
+            <button class="search-clear" onclick="document.getElementById('all-search').value='';renderAll()" title="清除搜索">✕</button></span>
             <button class="btn btn-sm btn-primary" onclick="Events.emit('tx:new')">+ 新增</button>
             <button class="btn btn-sm" onclick="syncUploadAll()">🔄 同步</button>
             <button class="btn btn-sm" onclick="exportTxsCSV()">📤 匯出CSV</button>
@@ -336,7 +338,8 @@
             <select id="query-agent" onchange="doQuery()"><option value="">全部代理</option></select>
             <select id="query-venue" onchange="doQuery()"><option value="">全部地點</option></select>
             <select id="query-month" onchange="doQuery()"><option value="">全部月份</option></select>
-            <input type="text" id="query-search" placeholder="搜索..." style="width:160px" oninput="doQuery()">
+            <span class="search-box"><input type="text" id="query-search" placeholder="搜索..." style="width:160px" oninput="doQuery()">
+            <button class="search-clear" onclick="document.getElementById('query-search').value='';doQuery()" title="清除搜索">✕</button></span>
             <button class="btn btn-sm btn-primary" onclick="doQuery()">🔍 查詢</button>
           </div>
           <div id="query-kpi" class="kpi-grid"></div>

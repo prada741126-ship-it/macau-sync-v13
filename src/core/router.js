@@ -72,11 +72,24 @@ function showPage(pageName, sidebarEl) {
     sidebarEl.classList.add('active');
   }
 
-  // 更新 topbar 标题
-  var title = document.getElementById('topbar-title');
-  if (title) {
+  // 更新 topbar 标题 + 副标题
+  var titleEl = document.getElementById('topbar-title');
+  var subtitleEl = document.getElementById('topbar-subtitle');
+  if (titleEl) {
     var pageInfo = getPageInfo(pageName);
-    if (pageInfo) title.textContent = pageInfo.label;
+    if (pageInfo) titleEl.textContent = pageInfo.label;
+  }
+  if (subtitleEl) {
+    var workingMonth = State.get('workingMonth') || '';
+    var subtitles = {
+      overview: workingMonth ? '月份: ' + workingMonth : '',
+      all:      '全部交易记录',
+      query:    '自定义查询',
+      summary:  workingMonth ? '月份: ' + workingMonth : '',
+      room:     '房间管理系统',
+      wallet:   '钱包资金流水'
+    };
+    subtitleEl.textContent = subtitles[pageName] || '';
   }
 
   // 更新 State

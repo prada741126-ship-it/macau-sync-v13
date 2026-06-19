@@ -58,10 +58,14 @@
   --spacing-md:     16px;
   --spacing-lg:     24px;
 
-  /* 阴影 */
-  --shadow-sm:      0 1px 4px rgba(0,0,0,0.2);
-  --shadow-md:      0 4px 16px rgba(0,0,0,0.35);
-  --shadow-lg:      0 8px 32px rgba(0,0,0,0.5);
+  /* 阴影 — 三层次 (#5) */
+  --shadow-surface: 0 1px 4px rgba(0,0,0,0.2);
+  --shadow-card:   0 4px 16px rgba(0,0,0,0.35);
+  --shadow-float:  0 8px 32px rgba(0,0,0,0.5);
+  /* 兼容旧名 */
+  --shadow-sm:     var(--shadow-surface);
+  --shadow-md:     var(--shadow-card);
+  --shadow-lg:     var(--shadow-float);
   --shadow-focus:   0 0 0 2px rgba(0,212,255,0.3);
 
   /* 过渡 */

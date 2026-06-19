@@ -193,7 +193,7 @@
   padding: 24px;
   min-width: 420px;
   max-width: 600px;
-  box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  box-shadow: var(--shadow-float);
   animation: modalIn 0.2s ease;
 }
 @keyframes modalIn {
@@ -504,6 +504,11 @@
   box-shadow: 0 0 16px rgba(201,168,76,0.12);
   background: var(--bg-elevated);
 }
+/* #8 密码框视觉引导：聚焦时容器发光 */
+.pw-input-wrap:focus-within {
+  box-shadow: 0 0 0 2px rgba(201,168,76,0.1);
+  border-radius: var(--radius-sm);
+}
 #pw-input:focus ~ .pw-lock-icon,
 .pw-input-wrap:focus-within .pw-lock-icon {
   color: var(--gold-soft);
@@ -528,10 +533,10 @@
   transition: all var(--trans-base);
 }
 .pw-btn:hover {
-  background: linear-gradient(135deg, var(--gold-soft), var(--gold-light));
-  color: #000;
-  border-color: transparent;
-  box-shadow: 0 0 24px rgba(201,168,76,0.25);
+  background: rgba(201,168,76,0.1);
+  color: var(--gold-light);
+  border-color: var(--gold-soft);
+  box-shadow: 0 0 12px rgba(201,168,76,0.12);
 }
 #pw-error { display: none; color: var(--danger); font-size: 12px; margin-top: 8px; }
 #pw-attempts { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
@@ -1364,4 +1369,37 @@ input[type="range"]:focus {
   margin-bottom: 8px;
   padding-bottom: 6px;
   border-bottom: 1px solid var(--border-subtle);
+}
+
+/* ══════════════════════════════════════════════════════
+ * 搜索框清除按钮
+ * ══════════════════════════════════════════════════════ */
+.search-box {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.search-box input {
+  padding-right: 26px;
+}
+.search-clear {
+  position: absolute;
+  right: 4px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+  opacity: 0.5;
+  transition: opacity 0.2s ease, color 0.2s ease;
+}
+.search-clear:hover {
+  opacity: 1;
+  color: var(--danger);
+}
+/* 输入有内容时显示清除按钮 */
+.search-box input:not(:placeholder-shown) ~ .search-clear {
+  display: block;
 }

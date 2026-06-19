@@ -11,7 +11,7 @@
   <!-- 版本快取清除 -->
   <script>
     (function() {
-      var APP_VERSION = '13.0.0.1781838797657';
+      var APP_VERSION = '13.0.0.1781841543446';
       var stored = localStorage.getItem('macau_app_version');
       var qs = location.search || '';
       if (stored && stored !== APP_VERSION && !sessionStorage.getItem('_v13_reloaded')) {
@@ -100,10 +100,14 @@
   --spacing-md:     16px;
   --spacing-lg:     24px;
 
-  /* 阴影 */
-  --shadow-sm:      0 1px 4px rgba(0,0,0,0.2);
-  --shadow-md:      0 4px 16px rgba(0,0,0,0.35);
-  --shadow-lg:      0 8px 32px rgba(0,0,0,0.5);
+  /* 阴影 — 三层次 (#5) */
+  --shadow-surface: 0 1px 4px rgba(0,0,0,0.2);
+  --shadow-card:   0 4px 16px rgba(0,0,0,0.35);
+  --shadow-float:  0 8px 32px rgba(0,0,0,0.5);
+  /* 兼容旧名 */
+  --shadow-sm:     var(--shadow-surface);
+  --shadow-md:     var(--shadow-card);
+  --shadow-lg:     var(--shadow-float);
   --shadow-focus:   0 0 0 2px rgba(0,212,255,0.3);
 
   /* 过渡 */
@@ -434,8 +438,19 @@ a:focus-visible,
 #topbar-title {
   font-size: 16px;
   font-weight: 600;
-  flex: 1;
+  flex: 0 0 auto;
   color: var(--text-primary);
+}
+#topbar-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: 12px;
+  padding-left: 12px;
+  border-left: 1px solid var(--border-subtle);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
 }
 #topbar-actions {
   display: flex;
@@ -642,6 +657,7 @@ a:focus-visible,
   transition: all var(--trans-base);
   position: relative;
   overflow: hidden;
+  box-shadow: var(--shadow-surface);
 }
 .kpi-card::before {
   content: '';
@@ -687,10 +703,11 @@ a:focus-visible,
   margin-bottom: 6px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  font-weight: var(--fw-light);
 }
 .kpi-card-value {
   font-size: 24px;
-  font-weight: 700;
+  font-weight: var(--fw-heavy);
   color: var(--text-primary);
 }
 .kpi-card-value.cyan { color: var(--tech-cyan); }
@@ -869,10 +886,11 @@ a:focus-visible,
   border-radius: var(--radius-md);
   padding: 20px;
   margin-bottom: 16px;
+  box-shadow: var(--shadow-surface);
 }
 .content-card.interactive:hover {
   border-color: rgba(0,212,255,0.15);
-  box-shadow: 0 2px 16px rgba(0,0,0,0.2);
+  box-shadow: var(--shadow-card);
 }
 
 /* ══════════════════════════════════════════════════════
@@ -968,6 +986,24 @@ a:focus-visible,
 .rm-modal,
 .hc-modal {
   scrollbar-color: rgba(255,255,255,0.12) var(--bg-surface);
+}
+
+/* ══════════════════════════════════════════════════════
+ * 手机端触摸反馈 (Ripple 简化版)
+ * ══════════════════════════════════════════════════════ */
+@media (hover: none) and (pointer: coarse) {
+  .btn:active {
+    transform: scale(0.96);
+    transition: transform 0.1s ease;
+  }
+  .kpi-card:active {
+    transform: translateY(-1px) scale(0.99);
+    transition: transform 0.1s ease;
+  }
+  .content-card:active {
+    transform: scale(0.99);
+    transition: transform 0.1s ease;
+  }
 }
 
 /* css/components.css */
@@ -1166,7 +1202,7 @@ a:focus-visible,
   padding: 24px;
   min-width: 420px;
   max-width: 600px;
-  box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  box-shadow: var(--shadow-float);
   animation: modalIn 0.2s ease;
 }
 @keyframes modalIn {
@@ -1477,6 +1513,11 @@ a:focus-visible,
   box-shadow: 0 0 16px rgba(201,168,76,0.12);
   background: var(--bg-elevated);
 }
+/* #8 密码框视觉引导：聚焦时容器发光 */
+.pw-input-wrap:focus-within {
+  box-shadow: 0 0 0 2px rgba(201,168,76,0.1);
+  border-radius: var(--radius-sm);
+}
 #pw-input:focus ~ .pw-lock-icon,
 .pw-input-wrap:focus-within .pw-lock-icon {
   color: var(--gold-soft);
@@ -1501,10 +1542,10 @@ a:focus-visible,
   transition: all var(--trans-base);
 }
 .pw-btn:hover {
-  background: linear-gradient(135deg, var(--gold-soft), var(--gold-light));
-  color: #000;
-  border-color: transparent;
-  box-shadow: 0 0 24px rgba(201,168,76,0.25);
+  background: rgba(201,168,76,0.1);
+  color: var(--gold-light);
+  border-color: var(--gold-soft);
+  box-shadow: 0 0 12px rgba(201,168,76,0.12);
 }
 #pw-error { display: none; color: var(--danger); font-size: 12px; margin-top: 8px; }
 #pw-attempts { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
@@ -2337,6 +2378,39 @@ input[type="range"]:focus {
   margin-bottom: 8px;
   padding-bottom: 6px;
   border-bottom: 1px solid var(--border-subtle);
+}
+
+/* ══════════════════════════════════════════════════════
+ * 搜索框清除按钮
+ * ══════════════════════════════════════════════════════ */
+.search-box {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.search-box input {
+  padding-right: 26px;
+}
+.search-clear {
+  position: absolute;
+  right: 4px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+  opacity: 0.5;
+  transition: opacity 0.2s ease, color 0.2s ease;
+}
+.search-clear:hover {
+  opacity: 1;
+  color: var(--danger);
+}
+/* 输入有内容时显示清除按钮 */
+.search-box input:not(:placeholder-shown) ~ .search-clear {
+  display: block;
 }
 
 /* css/china-theme.css */
@@ -3220,7 +3294,7 @@ tr.rank-1 td {
   <!-- Firebase 初始化已统一由 src/sync/firebase.js 的 initFirebase() 处理（带重试） -->
 
   <!-- JS: 合并后由 build.js 输出为 app.js -->
-  <script src="app.js?v=13.0.0.1781838797657"></script>
+  <script src="app.js?v=13.0.0.1781841543446"></script>
 </head>
 <body>
 
@@ -3342,6 +3416,7 @@ tr.rank-1 td {
       <div id="topbar">
         <div id="mobile-sb-btn" style="display:none;cursor:pointer;font-size:20px" onclick="toggleMobileSidebar()">☰</div>
         <div id="topbar-title">總覽</div>
+        <div id="topbar-subtitle"></div>
         <div id="topbar-actions">
           <button class="btn btn-primary btn-sm" onclick="Events.emit('tx:new')"><span>+ 新增</span></button>
           <button class="btn btn-sm" onclick="doBackup()"><span>📦 備份</span></button>
@@ -3398,7 +3473,8 @@ tr.rank-1 td {
         <div class="page" id="page-all">
           <div id="all-kpi-mini" class="kpi-grid"></div>
           <div class="toolbar">
-            <input type="text" id="all-search" placeholder="搜索..." style="width:200px" oninput="renderAll()">
+            <span class="search-box"><input type="text" id="all-search" placeholder="搜索..." style="width:200px" oninput="renderAll()">
+            <button class="search-clear" onclick="document.getElementById('all-search').value='';renderAll()" title="清除搜索">✕</button></span>
             <button class="btn btn-sm btn-primary" onclick="Events.emit('tx:new')">+ 新增</button>
             <button class="btn btn-sm" onclick="syncUploadAll()">🔄 同步</button>
             <button class="btn btn-sm" onclick="exportTxsCSV()">📤 匯出CSV</button>
@@ -3459,7 +3535,8 @@ tr.rank-1 td {
             <select id="query-agent" onchange="doQuery()"><option value="">全部代理</option></select>
             <select id="query-venue" onchange="doQuery()"><option value="">全部地點</option></select>
             <select id="query-month" onchange="doQuery()"><option value="">全部月份</option></select>
-            <input type="text" id="query-search" placeholder="搜索..." style="width:160px" oninput="doQuery()">
+            <span class="search-box"><input type="text" id="query-search" placeholder="搜索..." style="width:160px" oninput="doQuery()">
+            <button class="search-clear" onclick="document.getElementById('query-search').value='';doQuery()" title="清除搜索">✕</button></span>
             <button class="btn btn-sm btn-primary" onclick="doQuery()">🔍 查詢</button>
           </div>
           <div id="query-kpi" class="kpi-grid"></div>
@@ -3827,6 +3904,6 @@ tr.rank-1 td {
     <div id="v13-debug-log"></div>
   </div>
 
-  <!-- BUILD: v13.0.0 | 2026-06-11 | 2026-06-19T03:13:17.657Z -->
+  <!-- BUILD: v13.0.0 | 2026-06-11 | 2026-06-19T03:59:03.446Z -->
 </body>
 </html>
