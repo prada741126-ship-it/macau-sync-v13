@@ -11,7 +11,7 @@
   <!-- 版本快取清除 -->
   <script>
     (function() {
-      var APP_VERSION = '13.0.0.1781855818265';
+      var APP_VERSION = '13.0.0.1781856820556';
       var stored = localStorage.getItem('macau_app_version');
       var qs = location.search || '';
       if (stored && stored !== APP_VERSION && !sessionStorage.getItem('_v13_reloaded')) {
@@ -2091,6 +2091,29 @@ tr.row-withdraw td { background: rgba(248,81,73,0.03); }
 .badge-green { background: rgba(45,212,160,0.1); color: var(--success); }
 .badge-red { background: rgba(248,81,73,0.1); color: var(--danger); }
 
+/* ── 日期下拉三联动 ── */
+.date-sel-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.date-sel-wrap select {
+  width: auto;
+  min-width: 60px;
+  padding: 5px 6px;
+  font-size: 13px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  transition: border-color var(--trans-base);
+}
+.date-sel-wrap select:focus {
+  border-color: var(--tech-cyan);
+  outline: none;
+}
+
 /* ═══════════════════════════════════════════════════════
  * 工具类
  * ═══════════════════════════════════════════════════════ */
@@ -3277,7 +3300,7 @@ tr.rank-1 td {
   <!-- Firebase 初始化已统一由 src/sync/firebase.js 的 initFirebase() 处理（带重试） -->
 
   <!-- JS: 合并后由 build.js 输出为 app.js -->
-  <script src="app.js?v=13.0.0.1781855818265"></script>
+  <script src="app.js?v=13.0.0.1781856820556"></script>
 </head>
 <body>
 
@@ -3712,7 +3735,14 @@ tr.rank-1 td {
         <h3 id="modal-title">新增交易</h3>
         <div id="draft-indicator" style="display:none;font-size:11px;color:var(--warning);margin-bottom:8px">📝 有未儲存的草稿</div>
         <div class="form-row"><label>類型</label><select name="type" id="tx-type" onchange="toggleTypeFields()"><option value="rolling">轉碼</option><option value="cash">現金寄放</option></select></div>
-        <div class="form-row"><label>日期</label><input type="date" name="date" id="tx-date"></div>
+        <div class="form-row"><label>日期</label>
+          <div class="date-sel-wrap">
+            <select id="tx-date-y" onchange="readDateSels('tx-date')"></select>年
+            <select id="tx-date-m" onchange="readDateSels('tx-date')"></select>月
+            <select id="tx-date-d" onchange="readDateSels('tx-date')"></select>日
+            <input type="hidden" name="date" id="tx-date">
+          </div>
+        </div>
         <div class="form-row"><label>代理</label><select name="agent" id="tx-agent" onchange="_onAgentChange()"><option value="">選擇代理</option></select></div>
         <div class="form-row"><label>客戶</label><input type="text" name="client" id="tx-client"></div>
         <div class="form-row"><label>地點</label><select name="venue" id="tx-venue"><option value="">選擇地點</option></select></div>
@@ -3738,7 +3768,14 @@ tr.rank-1 td {
     <div class="modal-scroll">
       <div class="modal">
         <h3>公基金</h3>
-        <div class="form-row"><label>日期</label><input type="date" id="fund-date"></div>
+        <div class="form-row"><label>日期</label>
+          <div class="date-sel-wrap">
+            <select id="fund-date-y" onchange="readDateSels('fund-date')"></select>年
+            <select id="fund-date-m" onchange="readDateSels('fund-date')"></select>月
+            <select id="fund-date-d" onchange="readDateSels('fund-date')"></select>日
+            <input type="hidden" id="fund-date">
+          </div>
+        </div>
         <div class="form-row"><label>類型</label><select id="fund-type"><option value="deposit">存入</option><option value="withdraw">提領</option></select></div>
         <div class="form-row"><label>金額</label><input type="number" id="fund-amount"></div>
         <div class="form-row"><label>備註</label><input type="text" id="fund-note"></div>
@@ -3756,7 +3793,14 @@ tr.rank-1 td {
       <div class="modal">
         <h3 id="wallet-title">代理錢包</h3>
         <div class="form-row"><label>代理</label><select id="wallet-agent"><option value="">選擇代理</option></select></div>
-        <div class="form-row"><label>日期</label><input type="date" id="wallet-date"></div>
+        <div class="form-row"><label>日期</label>
+          <div class="date-sel-wrap">
+            <select id="wallet-date-y" onchange="readDateSels('wallet-date')"></select>年
+            <select id="wallet-date-m" onchange="readDateSels('wallet-date')"></select>月
+            <select id="wallet-date-d" onchange="readDateSels('wallet-date')"></select>日
+            <input type="hidden" id="wallet-date">
+          </div>
+        </div>
         <div class="form-row"><label>類型</label><select id="wallet-type"><option value="deposit">存入</option><option value="cash_deposit">自存現金</option><option value="withdraw">提領</option></select></div>
         <div class="form-row"><label>金額</label><input type="number" id="wallet-amount"></div>
         <div class="form-row"><label>備註</label><input type="text" id="wallet-note"></div>
@@ -3887,6 +3931,6 @@ tr.rank-1 td {
     <div id="v13-debug-log"></div>
   </div>
 
-  <!-- BUILD: v13.0.0 | 2026-06-11 | 2026-06-19T07:56:58.265Z -->
+  <!-- BUILD: v13.0.0 | 2026-06-11 | 2026-06-19T08:13:40.556Z -->
 </body>
 </html>

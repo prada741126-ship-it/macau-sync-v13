@@ -8435,98 +8435,10 @@ function _renderSummaryTable(txs) {
  * 依赖: core/state.js, data/bookings.js, data/hotel-config.js
  *        utils/format.js, utils/dom.js, calc/finance.js (calcRoomQuota)
  * 对照档: 第七节模块18 (24 方法)
+ *
+ * 日期下拉函数现由 bridge.js 提供（通用版）：
+ *   initDateSels / readDateSels / setDateSels
  */
-
-// ============================================================================
-// 日期下拉辅助 (年/月/日 三联动 select)
-// ============================================================================
-
-/** 填充年月日三个 select。prefix: 'rm-checkin' or 'rm-checkout' */
-function rmInitDateSels(prefix, defYear, defMonth, defDay) {
-  var yEl = $('#' + prefix + '-y');
-  var mEl = $('#' + prefix + '-m');
-  var dEl = $('#' + prefix + '-d');
-  if (!yEl || !mEl || !dEl) return;
-
-  var today = new Date();
-  var curYear  = today.getFullYear();
-  // 若未指定默认值，默认使用今天
-  if (defYear  == null) defYear  = curYear;
-  if (defMonth == null) defMonth = (today.getMonth() + 1 < 10 ? '0' : '') + (today.getMonth() + 1);
-  if (defDay   == null) defDay   = (today.getDate() < 10 ? '0' : '') + today.getDate();
-
-  // 年：当年（默认选中）前后各1年 (总计 3 年)，force rebuild
-  yEl.innerHTML = '';
-  var yOpt0 = document.createElement('option');
-  yOpt0.value = ''; yOpt0.textContent = '年'; yEl.appendChild(yOpt0);
-  for (var y = curYear - 1; y <= curYear + 1; y++) {
-    var yo = document.createElement('option');
-    yo.value = y; yo.textContent = y + '年';
-    if (y == defYear) yo.selected = true;
-    yEl.appendChild(yo);
-  }
-  // 月
-  mEl.innerHTML = '';
-  var mOpt0 = document.createElement('option');
-  mOpt0.value = ''; mOpt0.textContent = '月'; mEl.appendChild(mOpt0);
-  for (var m = 1; m <= 12; m++) {
-    var mv = (m < 10 ? '0' : '') + m;
-    var mo = document.createElement('option');
-    mo.value = mv;
-    mo.textContent = m + '月';
-    if (mv == defMonth) mo.selected = true;
-    mEl.appendChild(mo);
-  }
-  // 日
-  dEl.innerHTML = '';
-  var dOpt0 = document.createElement('option');
-  dOpt0.value = ''; dOpt0.textContent = '日'; dEl.appendChild(dOpt0);
-  for (var d = 1; d <= 31; d++) {
-    var dv = (d < 10 ? '0' : '') + d;
-    var doo = document.createElement('option');
-    doo.value = dv;
-    doo.textContent = d + '日';
-    if (dv == defDay) doo.selected = true;
-    dEl.appendChild(doo);
-  }
-  // 同步到 hidden input
-  rmReadDateSels(prefix);
-}
-
-/** 读取三个 select 合成 YYYY-MM-DD 字符串，并同步 hidden input */
-function rmReadDateSels(prefix) {
-  var y = ($('#' + prefix + '-y') || {}).value;
-  var m = ($('#' + prefix + '-m') || {}).value;
-  var d = ($('#' + prefix + '-d') || {}).value;
-  var val = (y && m && d) ? (y + '-' + m + '-' + d) : '';
-  var hidden = $('#' + prefix);
-  if (hidden) hidden.value = val;
-  return val;
-}
-
-/** 根据 YYYY/MM/DD 字符串反填三个 select + 桌面端 date input */
-function rmSetDateSels(prefix, dateStr) {
-  if (!dateStr) return;
-  // 支持 YYYY/MM/DD 和 YYYY-MM-DD
-  var parts = dateStr.replace(/-/g, '/').split('/');
-  if (parts.length !== 3) return;
-  var yEl = $('#' + prefix + '-y');
-  var mEl = $('#' + prefix + '-m');
-  var dEl = $('#' + prefix + '-d');
-  if (yEl) yEl.value = parts[0];
-  if (mEl) mEl.value = parts[1].length === 1 ? '0' + parts[1] : parts[1];
-  if (dEl) dEl.value = parts[2].length === 1 ? '0' + parts[2] : parts[2];
-  var hidden = $('#' + prefix);
-  if (hidden) hidden.value = dateStr;
-  // 同步桌面端 date input
-  var dtEl = $('#' + prefix + '-dt');
-  if (dtEl) {
-    var y = parts[0];
-    var m = parts[1].length === 1 ? '0' + parts[1] : parts[1];
-    var d = parts[2].length === 1 ? '0' + parts[2] : parts[2];
-    dtEl.value = y + '-' + m + '-' + d;
-  }
-}
 
 var RM = {
   bookings: [],
@@ -8645,8 +8557,8 @@ var RM = {
   // ===== 计算 =====
   calcNights: function() {
     // 先从三联动 select 合成日期并写入 hidden input
-    var checkIn  = rmReadDateSels('rm-checkin');
-    var checkOut = rmReadDateSels('rm-checkout');
+    var checkIn  = readDateSels('rm-checkin');
+    var checkOut = readDateSels('rm-checkout');
     var nights = calcNights(checkIn, checkOut);
     if ($('#rm-nights')) $('#rm-nights').value = nights;
     RM.calcTotal();
@@ -8673,8 +8585,8 @@ var RM = {
 
     if (id) {
       // 编辑：先初始化日期下拉，再用订房数据覆盖
-      rmInitDateSels('rm-checkin');
-      rmInitDateSels('rm-checkout');
+      initDateSels('rm-checkin');
+      initDateSels('rm-checkout');
       var b = getBookingById(id);
       if (b) {
         RM._fillForm(b);
@@ -8682,8 +8594,8 @@ var RM = {
     } else {
       // 新建：先清空表单，再初始化日期下拉（默认为今天）
       RM._resetForm();
-      rmInitDateSels('rm-checkin');
-      rmInitDateSels('rm-checkout');
+      initDateSels('rm-checkin');
+      initDateSels('rm-checkout');
     }
 
     var modal = $('#rm-modal-bg');
@@ -8698,8 +8610,8 @@ var RM = {
 
   saveForm: function() {
     // 先合成日期值到 hidden input
-    rmReadDateSels('rm-checkin');
-    rmReadDateSels('rm-checkout');
+    readDateSels('rm-checkin');
+    readDateSels('rm-checkout');
 
     var data = {
       agent:    ($('#rm-agent') || {}).value,
@@ -8887,8 +8799,8 @@ var RM = {
       if (el) el.value = fields[id] != null ? fields[id] : '';
     }
     // 日期反填到三联动 select
-    rmSetDateSels('rm-checkin',  b.checkIn);
-    rmSetDateSels('rm-checkout', b.checkOut);
+    setDateSels('rm-checkin',  b.checkIn);
+    setDateSels('rm-checkout', b.checkOut);
     // 联动
     RM.populateHotelDropdown(b.casino);
     if ($('#rm-hotel')) $('#rm-hotel').value = b.hotel;
@@ -9947,6 +9859,88 @@ function debugClear() {
 })();
 
 // ============================================================================
+// 日期下拉通用函数 (年/月/日 三联动 select)
+// 用法: initDateSels('tx-date') → 生成 #tx-date-y/m/d + 同步 #tx-date hidden
+// ============================================================================
+
+/** 初始化年月日三个 select。prefix 如 'tx-date' → 生成 #tx-date-y #tx-date-m #tx-date-d */
+function initDateSels(prefix, defYear, defMonth, defDay) {
+  var yEl = document.getElementById(prefix + '-y');
+  var mEl = document.getElementById(prefix + '-m');
+  var dEl = document.getElementById(prefix + '-d');
+  if (!yEl || !mEl || !dEl) return;
+
+  var today = new Date();
+  var curYear = today.getFullYear();
+  if (defYear  == null) defYear  = curYear;
+  if (defMonth == null) defMonth = ('0' + (today.getMonth() + 1)).slice(-2);
+  if (defDay   == null) defDay   = ('0' + today.getDate()).slice(-2);
+
+  // 年：当年前后各1年 (总计3年)
+  yEl.innerHTML = '';
+  var yOpt0 = document.createElement('option');
+  yOpt0.value = ''; yOpt0.textContent = '年'; yEl.appendChild(yOpt0);
+  for (var y = curYear - 1; y <= curYear + 1; y++) {
+    var yo = document.createElement('option');
+    yo.value = y; yo.textContent = y + '年';
+    if (y == defYear) yo.selected = true;
+    yEl.appendChild(yo);
+  }
+  // 月
+  mEl.innerHTML = '';
+  var mOpt0 = document.createElement('option');
+  mOpt0.value = ''; mOpt0.textContent = '月'; mEl.appendChild(mOpt0);
+  for (var m = 1; m <= 12; m++) {
+    var mv = ('0' + m).slice(-2);
+    var mo = document.createElement('option');
+    mo.value = mv; mo.textContent = m + '月';
+    if (mv === defMonth) mo.selected = true;
+    mEl.appendChild(mo);
+  }
+  // 日
+  dEl.innerHTML = '';
+  var dOpt0 = document.createElement('option');
+  dOpt0.value = ''; dOpt0.textContent = '日'; dEl.appendChild(dOpt0);
+  for (var d = 1; d <= 31; d++) {
+    var dv = ('0' + d).slice(-2);
+    var doo = document.createElement('option');
+    doo.value = dv; doo.textContent = d + '日';
+    if (dv === defDay) doo.selected = true;
+    dEl.appendChild(doo);
+  }
+  // 同步到 hidden input
+  readDateSels(prefix);
+}
+
+/** 读取三个 select 合成 YYYY-MM-DD 字符串，并同步 hidden input */
+function readDateSels(prefix) {
+  var y = (document.getElementById(prefix + '-y') || {}).value;
+  var m = (document.getElementById(prefix + '-m') || {}).value;
+  var d = (document.getElementById(prefix + '-d') || {}).value;
+  var val = (y && m && d) ? (y + '-' + m + '-' + d) : '';
+  var hidden = document.getElementById(prefix);
+  if (hidden) hidden.value = val;
+  return val;
+}
+
+/** 根据 YYYY/MM/DD 或 YYYY-MM-DD 字符串反填三个 select + hidden input */
+function setDateSels(prefix, dateStr) {
+  if (!dateStr) return;
+  var parts = dateStr.replace(/-/g, '/').split('/');
+  if (parts.length !== 3) return;
+  var yEl = document.getElementById(prefix + '-y');
+  var mEl = document.getElementById(prefix + '-m');
+  var dEl = document.getElementById(prefix + '-d');
+  if (yEl) yEl.value = parts[0];
+  var mm = parts[1].length === 1 ? '0' + parts[1] : parts[1];
+  var dd = parts[2].length === 1 ? '0' + parts[2] : parts[2];
+  if (mEl) mEl.value = mm;
+  if (dEl) dEl.value = dd;
+  var hidden = document.getElementById(prefix);
+  if (hidden) hidden.value = dateStr;
+}
+
+// ============================================================================
 // 交易表单桥接
 // ============================================================================
 
@@ -10048,9 +10042,15 @@ function _onAgentChange() {
 
 /** 填写编辑表单 */
 function _fillTxForm(tx) {
+  // 先处理日期（需要在其他字段之前初始化下拉）
+  if (tx.date) {
+    initDateSels('tx-date');
+    setDateSels('tx-date', tx.date);
+  } else {
+    initDateSels('tx-date');
+  }
   var fields = {
     'tx-type':  tx.type,
-    'tx-date':  tx.date,
     'tx-agent': tx.agent,
     'tx-client': tx.client,
     'tx-venue': tx.venue,
@@ -10073,7 +10073,7 @@ function _fillTxForm(tx) {
 
 /** 重置新增表单 */
 function _resetTxForm() {
-  var ids = ['tx-type', 'tx-date', 'tx-agent', 'tx-client', 'tx-venue',
+  var ids = ['tx-type', 'tx-agent', 'tx-client', 'tx-venue',
              'tx-volume', 'tx-rate', 'tx-comm', 'tx-bonus', 'tx-drawn',
              'tx-undrawn', 'tx-fund', 'tx-cash', 'tx-note'];
   for (var i = 0; i < ids.length; i++) {
@@ -10082,8 +10082,8 @@ function _resetTxForm() {
   }
   var typeEl = document.getElementById('tx-type');
   if (typeEl) typeEl.value = 'rolling';
-  var dateEl = document.getElementById('tx-date');
-  if (dateEl) dateEl.value = nowStr();
+  // 日期初始化为今天
+  initDateSels('tx-date');
   toggleTypeFields();
 }
 
@@ -10189,6 +10189,8 @@ function saveForm() {
 
 /** 获取当前表单数据 */
 function getCurrentFormData() {
+  // 确保日期下拉已同步到 hidden input
+  readDateSels('tx-date');
   return {
     type:   (document.getElementById('tx-type') || {}).value || 'rolling',
     date:   (document.getElementById('tx-date') || {}).value || '',
@@ -10217,6 +10219,8 @@ function refreshAllViews() {
 // ============================================================================
 
 function saveFundForm() {
+  // 确保日期下拉已同步
+  readDateSels('fund-date');
   var data = {
     date:   (document.getElementById('fund-date') || {}).value || nowStr(),
     type:   (document.getElementById('fund-type') || {}).value || 'deposit',
@@ -10241,8 +10245,7 @@ function saveFundForm() {
 
 /** 打开公基金模态框（重置表单） */
 function openFundModal() {
-  var dateEl = document.getElementById('fund-date');
-  if (dateEl) dateEl.value = nowStr();
+  initDateSels('fund-date');
   var typeEl = document.getElementById('fund-type');
   if (typeEl) typeEl.value = 'deposit';
   var amountEl = document.getElementById('fund-amount');
@@ -10302,8 +10305,8 @@ function openWalletModal(agentName) {
   }
   var title = document.getElementById('wallet-title');
   if (title) title.textContent = '代理錢包' + (agentName ? ' - ' + agentName : '');
-  var dateEl = document.getElementById('wallet-date');
-  if (dateEl) dateEl.value = nowStr();
+  // 日期初始化为今天
+  initDateSels('wallet-date');
   var typeEl = document.getElementById('wallet-type');
   if (typeEl) typeEl.value = 'deposit';
   var amountEl = document.getElementById('wallet-amount');
@@ -10321,6 +10324,8 @@ function saveAgentWalletForm() {
     return;
   }
 
+  // 确保日期下拉已同步
+  readDateSels('wallet-date');
   var data = {
     date:   (document.getElementById('wallet-date') || {}).value || nowStr(),
     type:   (document.getElementById('wallet-type') || {}).value || 'deposit',
@@ -10508,9 +10513,7 @@ function rmSyncDateInput(prefix) {
   var val = dtInput.value;
   hidden.value = val;
   // 同步到三联动 select
-  if (typeof rmSetDateSels === 'function') {
-    rmSetDateSels('rm-' + prefix, val);
-  }
+  setDateSels('rm-' + prefix, val);
   rmCalcNights();
 }
 

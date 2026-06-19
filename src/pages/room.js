@@ -3,98 +3,10 @@
  * 依赖: core/state.js, data/bookings.js, data/hotel-config.js
  *        utils/format.js, utils/dom.js, calc/finance.js (calcRoomQuota)
  * 对照档: 第七节模块18 (24 方法)
+ *
+ * 日期下拉函数现由 bridge.js 提供（通用版）：
+ *   initDateSels / readDateSels / setDateSels
  */
-
-// ============================================================================
-// 日期下拉辅助 (年/月/日 三联动 select)
-// ============================================================================
-
-/** 填充年月日三个 select。prefix: 'rm-checkin' or 'rm-checkout' */
-function rmInitDateSels(prefix, defYear, defMonth, defDay) {
-  var yEl = $('#' + prefix + '-y');
-  var mEl = $('#' + prefix + '-m');
-  var dEl = $('#' + prefix + '-d');
-  if (!yEl || !mEl || !dEl) return;
-
-  var today = new Date();
-  var curYear  = today.getFullYear();
-  // 若未指定默认值，默认使用今天
-  if (defYear  == null) defYear  = curYear;
-  if (defMonth == null) defMonth = (today.getMonth() + 1 < 10 ? '0' : '') + (today.getMonth() + 1);
-  if (defDay   == null) defDay   = (today.getDate() < 10 ? '0' : '') + today.getDate();
-
-  // 年：当年（默认选中）前后各1年 (总计 3 年)，force rebuild
-  yEl.innerHTML = '';
-  var yOpt0 = document.createElement('option');
-  yOpt0.value = ''; yOpt0.textContent = '年'; yEl.appendChild(yOpt0);
-  for (var y = curYear - 1; y <= curYear + 1; y++) {
-    var yo = document.createElement('option');
-    yo.value = y; yo.textContent = y + '年';
-    if (y == defYear) yo.selected = true;
-    yEl.appendChild(yo);
-  }
-  // 月
-  mEl.innerHTML = '';
-  var mOpt0 = document.createElement('option');
-  mOpt0.value = ''; mOpt0.textContent = '月'; mEl.appendChild(mOpt0);
-  for (var m = 1; m <= 12; m++) {
-    var mv = (m < 10 ? '0' : '') + m;
-    var mo = document.createElement('option');
-    mo.value = mv;
-    mo.textContent = m + '月';
-    if (mv == defMonth) mo.selected = true;
-    mEl.appendChild(mo);
-  }
-  // 日
-  dEl.innerHTML = '';
-  var dOpt0 = document.createElement('option');
-  dOpt0.value = ''; dOpt0.textContent = '日'; dEl.appendChild(dOpt0);
-  for (var d = 1; d <= 31; d++) {
-    var dv = (d < 10 ? '0' : '') + d;
-    var doo = document.createElement('option');
-    doo.value = dv;
-    doo.textContent = d + '日';
-    if (dv == defDay) doo.selected = true;
-    dEl.appendChild(doo);
-  }
-  // 同步到 hidden input
-  rmReadDateSels(prefix);
-}
-
-/** 读取三个 select 合成 YYYY-MM-DD 字符串，并同步 hidden input */
-function rmReadDateSels(prefix) {
-  var y = ($('#' + prefix + '-y') || {}).value;
-  var m = ($('#' + prefix + '-m') || {}).value;
-  var d = ($('#' + prefix + '-d') || {}).value;
-  var val = (y && m && d) ? (y + '-' + m + '-' + d) : '';
-  var hidden = $('#' + prefix);
-  if (hidden) hidden.value = val;
-  return val;
-}
-
-/** 根据 YYYY/MM/DD 字符串反填三个 select + 桌面端 date input */
-function rmSetDateSels(prefix, dateStr) {
-  if (!dateStr) return;
-  // 支持 YYYY/MM/DD 和 YYYY-MM-DD
-  var parts = dateStr.replace(/-/g, '/').split('/');
-  if (parts.length !== 3) return;
-  var yEl = $('#' + prefix + '-y');
-  var mEl = $('#' + prefix + '-m');
-  var dEl = $('#' + prefix + '-d');
-  if (yEl) yEl.value = parts[0];
-  if (mEl) mEl.value = parts[1].length === 1 ? '0' + parts[1] : parts[1];
-  if (dEl) dEl.value = parts[2].length === 1 ? '0' + parts[2] : parts[2];
-  var hidden = $('#' + prefix);
-  if (hidden) hidden.value = dateStr;
-  // 同步桌面端 date input
-  var dtEl = $('#' + prefix + '-dt');
-  if (dtEl) {
-    var y = parts[0];
-    var m = parts[1].length === 1 ? '0' + parts[1] : parts[1];
-    var d = parts[2].length === 1 ? '0' + parts[2] : parts[2];
-    dtEl.value = y + '-' + m + '-' + d;
-  }
-}
 
 var RM = {
   bookings: [],
@@ -213,8 +125,8 @@ var RM = {
   // ===== 计算 =====
   calcNights: function() {
     // 先从三联动 select 合成日期并写入 hidden input
-    var checkIn  = rmReadDateSels('rm-checkin');
-    var checkOut = rmReadDateSels('rm-checkout');
+    var checkIn  = readDateSels('rm-checkin');
+    var checkOut = readDateSels('rm-checkout');
     var nights = calcNights(checkIn, checkOut);
     if ($('#rm-nights')) $('#rm-nights').value = nights;
     RM.calcTotal();
@@ -241,8 +153,8 @@ var RM = {
 
     if (id) {
       // 编辑：先初始化日期下拉，再用订房数据覆盖
-      rmInitDateSels('rm-checkin');
-      rmInitDateSels('rm-checkout');
+      initDateSels('rm-checkin');
+      initDateSels('rm-checkout');
       var b = getBookingById(id);
       if (b) {
         RM._fillForm(b);
@@ -250,8 +162,8 @@ var RM = {
     } else {
       // 新建：先清空表单，再初始化日期下拉（默认为今天）
       RM._resetForm();
-      rmInitDateSels('rm-checkin');
-      rmInitDateSels('rm-checkout');
+      initDateSels('rm-checkin');
+      initDateSels('rm-checkout');
     }
 
     var modal = $('#rm-modal-bg');
@@ -266,8 +178,8 @@ var RM = {
 
   saveForm: function() {
     // 先合成日期值到 hidden input
-    rmReadDateSels('rm-checkin');
-    rmReadDateSels('rm-checkout');
+    readDateSels('rm-checkin');
+    readDateSels('rm-checkout');
 
     var data = {
       agent:    ($('#rm-agent') || {}).value,
@@ -455,8 +367,8 @@ var RM = {
       if (el) el.value = fields[id] != null ? fields[id] : '';
     }
     // 日期反填到三联动 select
-    rmSetDateSels('rm-checkin',  b.checkIn);
-    rmSetDateSels('rm-checkout', b.checkOut);
+    setDateSels('rm-checkin',  b.checkIn);
+    setDateSels('rm-checkout', b.checkOut);
     // 联动
     RM.populateHotelDropdown(b.casino);
     if ($('#rm-hotel')) $('#rm-hotel').value = b.hotel;

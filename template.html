@@ -532,7 +532,14 @@
         <h3 id="modal-title">新增交易</h3>
         <div id="draft-indicator" style="display:none;font-size:11px;color:var(--warning);margin-bottom:8px">📝 有未儲存的草稿</div>
         <div class="form-row"><label>類型</label><select name="type" id="tx-type" onchange="toggleTypeFields()"><option value="rolling">轉碼</option><option value="cash">現金寄放</option></select></div>
-        <div class="form-row"><label>日期</label><input type="date" name="date" id="tx-date"></div>
+        <div class="form-row"><label>日期</label>
+          <div class="date-sel-wrap">
+            <select id="tx-date-y" onchange="readDateSels('tx-date')"></select>年
+            <select id="tx-date-m" onchange="readDateSels('tx-date')"></select>月
+            <select id="tx-date-d" onchange="readDateSels('tx-date')"></select>日
+            <input type="hidden" name="date" id="tx-date">
+          </div>
+        </div>
         <div class="form-row"><label>代理</label><select name="agent" id="tx-agent" onchange="_onAgentChange()"><option value="">選擇代理</option></select></div>
         <div class="form-row"><label>客戶</label><input type="text" name="client" id="tx-client"></div>
         <div class="form-row"><label>地點</label><select name="venue" id="tx-venue"><option value="">選擇地點</option></select></div>
@@ -558,7 +565,14 @@
     <div class="modal-scroll">
       <div class="modal">
         <h3>公基金</h3>
-        <div class="form-row"><label>日期</label><input type="date" id="fund-date"></div>
+        <div class="form-row"><label>日期</label>
+          <div class="date-sel-wrap">
+            <select id="fund-date-y" onchange="readDateSels('fund-date')"></select>年
+            <select id="fund-date-m" onchange="readDateSels('fund-date')"></select>月
+            <select id="fund-date-d" onchange="readDateSels('fund-date')"></select>日
+            <input type="hidden" id="fund-date">
+          </div>
+        </div>
         <div class="form-row"><label>類型</label><select id="fund-type"><option value="deposit">存入</option><option value="withdraw">提領</option></select></div>
         <div class="form-row"><label>金額</label><input type="number" id="fund-amount"></div>
         <div class="form-row"><label>備註</label><input type="text" id="fund-note"></div>
@@ -576,7 +590,14 @@
       <div class="modal">
         <h3 id="wallet-title">代理錢包</h3>
         <div class="form-row"><label>代理</label><select id="wallet-agent"><option value="">選擇代理</option></select></div>
-        <div class="form-row"><label>日期</label><input type="date" id="wallet-date"></div>
+        <div class="form-row"><label>日期</label>
+          <div class="date-sel-wrap">
+            <select id="wallet-date-y" onchange="readDateSels('wallet-date')"></select>年
+            <select id="wallet-date-m" onchange="readDateSels('wallet-date')"></select>月
+            <select id="wallet-date-d" onchange="readDateSels('wallet-date')"></select>日
+            <input type="hidden" id="wallet-date">
+          </div>
+        </div>
         <div class="form-row"><label>類型</label><select id="wallet-type"><option value="deposit">存入</option><option value="cash_deposit">自存現金</option><option value="withdraw">提領</option></select></div>
         <div class="form-row"><label>金額</label><input type="number" id="wallet-amount"></div>
         <div class="form-row"><label>備註</label><input type="text" id="wallet-note"></div>
