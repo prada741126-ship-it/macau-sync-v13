@@ -340,8 +340,8 @@
   }
   .wallet-fund-card-header { padding: 10px 14px; }
   .wfc-name { font-size: 13px; }
-  .wfc-balance { font-size: 18px; }
-  .wallet-fund-card-body { padding: 10px 14px; }
+  .wfc-balance { font-size: 16px; }
+  .wallet-fund-card-body { padding: 8px 14px; }
   .wallet-fund-card-body td { font-size: 12px; }
   .wallet-fund-card .wallet-card-detail { padding: 0 14px 10px; }
 

@@ -11,7 +11,7 @@
   <!-- 版本快取清除 -->
   <script>
     (function() {
-      var APP_VERSION = '13.0.0.1781841712929';
+      var APP_VERSION = '13.0.0.1781855818265';
       var stored = localStorage.getItem('macau_app_version');
       var qs = location.search || '';
       if (stored && stored !== APP_VERSION && !sessionStorage.getItem('_v13_reloaded')) {
@@ -1986,66 +1986,49 @@ tr.row-withdraw td { background: rgba(248,81,73,0.03); }
   border-bottom: none;
 }
 
-/* ── 公基金主卡片 — 金边主题，与代理钱包卡片明显区分 ── */
+/* ── 公基金卡片 — 与代理钱包卡片统一规格 ── */
 .wallet-fund-card {
-  background: linear-gradient(135deg, rgba(201,168,76,0.05) 0%, var(--bg-surface) 100%);
+  background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-left: 3px solid var(--gold-soft);
   border-radius: var(--radius-lg);
   overflow: hidden;
   transition: all var(--trans-base);
   margin-bottom: 4px;
 }
 .wallet-fund-card:hover {
-  border-color: rgba(201,168,76,0.25);
-  border-left-color: var(--gold-light);
-  box-shadow: 0 3px 20px rgba(201,168,76,0.08);
+  border-color: rgba(0,212,255,0.12);
+  box-shadow: 0 2px 16px rgba(0,0,0,0.2);
 }
 .wallet-fund-card-header {
-  background: linear-gradient(135deg, rgba(201,168,76,0.09) 0%, rgba(201,168,76,0.02) 100%);
-  padding: 14px 18px;
+  background: var(--bg-elevated);
+  padding: 10px 14px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid var(--border-gold);
 }
-.wfc-name {
-  font-weight: 600;
-  font-size: 15px;
-  color: var(--gold-soft);
-  letter-spacing: 0.5px;
-}
-.wfc-balance {
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--gold-light);
-  text-shadow: 0 0 12px rgba(201,168,76,0.15);
-}
+.wfc-name { font-weight: 500; font-size: 13px; color: var(--text-primary); }
+.wfc-balance { font-size: 16px; font-weight: 700; color: var(--gold-soft); }
 .wallet-fund-card-body {
-  padding: 14px 18px;
+  padding: 8px 14px;
 }
 .wallet-fund-card-body table {
   width: 100%;
   font-size: 12px;
 }
 .wallet-fund-card-body th {
-  padding: 6px 12px;
+  padding: 5px 10px;
   color: var(--text-muted);
   font-weight: 500;
   text-align: left;
   border-bottom: 1px solid var(--border-subtle);
-  font-size: 11px;
-  text-transform: uppercase;
 }
 .wallet-fund-card-body td {
-  padding: 5px 12px;
+  padding: 4px 10px;
   color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 600;
 }
-/* 公基金明细 — 复用通用明细样式但微调间距 */
+/* 公基金明细 — 复用通用明细样式 */
 .wallet-fund-card .wallet-card-detail {
-  padding: 0 18px 14px;
+  padding: 0 14px 10px;
   border-top: 1px solid var(--border-subtle);
 }
 
@@ -3029,8 +3012,8 @@ tr.rank-1 td {
   }
   .wallet-fund-card-header { padding: 10px 14px; }
   .wfc-name { font-size: 13px; }
-  .wfc-balance { font-size: 18px; }
-  .wallet-fund-card-body { padding: 10px 14px; }
+  .wfc-balance { font-size: 16px; }
+  .wallet-fund-card-body { padding: 8px 14px; }
   .wallet-fund-card-body td { font-size: 12px; }
   .wallet-fund-card .wallet-card-detail { padding: 0 14px 10px; }
 
@@ -3294,7 +3277,7 @@ tr.rank-1 td {
   <!-- Firebase 初始化已统一由 src/sync/firebase.js 的 initFirebase() 处理（带重试） -->
 
   <!-- JS: 合并后由 build.js 输出为 app.js -->
-  <script src="app.js?v=13.0.0.1781841712929"></script>
+  <script src="app.js?v=13.0.0.1781855818265"></script>
 </head>
 <body>
 
@@ -3904,6 +3887,6 @@ tr.rank-1 td {
     <div id="v13-debug-log"></div>
   </div>
 
-  <!-- BUILD: v13.0.0 | 2026-06-11 | 2026-06-19T04:01:52.929Z -->
+  <!-- BUILD: v13.0.0 | 2026-06-11 | 2026-06-19T07:56:58.265Z -->
 </body>
 </html>
