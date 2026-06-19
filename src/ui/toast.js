@@ -21,7 +21,9 @@ function showToast(msg, type, duration) {
 
   var toast = document.createElement('div');
   toast.className = 'toast toast-' + (type || 'info');
-  toast.textContent = msg;
+  var iconMap = { success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️' };
+  var icon = iconMap[type] || 'ℹ️';
+  toast.textContent = icon + ' ' + msg;
 
   // 颜色
   var colors = {

@@ -17,7 +17,7 @@
 // 系统识别
 // ============================================================================
 var APP = {
-  VERSION:       'v13.0.0',
+  VERSION:       'v13.0.2',
   TITLE:         '澳門洗碼報表',
   SYSTEM_NAME:   '博盈國際會',
   SYSTEM_SUB:    '洗碼管理系統',
@@ -43,7 +43,7 @@ var CONFIG = {
 };
 
 // ============================================================================
-// localStorage 键 (对照档第四节 - 16 个 key)
+// localStorage 键 (对照档第四节 - 20 个 key)
 // ============================================================================
 var STORAGE_KEYS = {
   DATA:              'macau_data',            // 交易数组 (AES加密)
@@ -64,6 +64,8 @@ var STORAGE_KEYS = {
   HC_CONFIG:         'hc_config',              // 酒店设定
   HC_PRESET_VERSION: 'hc_preset_version',      // 酒店预设版本号
   APP_VERSION:       'macau_app_version',      // 版本快取清除
+  RECENTLY_DELETED:  'macau_recently_deleted', // 最近删除追踪
+  LAST_SYNC_TIME:    'macau_last_sync_time',   // 最后同步时间 ISO
 };
 
 // ============================================================================
@@ -90,6 +92,7 @@ var FB_PATH = {
   AGENT_WALLETS:   'macau_data/agentWallets',
   WORKING_MONTH:   'macau_data/workingMonth',
   RM_BOOKINGS:     'macau_data/rmBookings',
+  HC_CONFIG:       'macau_data/hcConfig',
   ARCHIVES:        'macau_data/archives',
   CONNECTED:       '.info/connected',
 };
@@ -380,6 +383,24 @@ function currentMonth() {
 }
 
 /**
+ * 从日期字符串提取月份 (YYYY-MM)
+ * 支持 "YYYY-MM-DD", "YYYY/MM/DD", "YYYY-M-D", "YYYY/M/D" 等格式
+ * @param {string} dateStr
+ * @returns {string} "YYYY-MM" 或空字符串
+ */
+function extractMonth(dateStr) {
+  if (!dateStr) return '';
+  var parts = String(dateStr).split(/[-\/]/);
+  if (parts.length < 2) return '';
+  var year = parts[0];
+  var month = parts[1];
+  if (!year || !month) return '';
+  // 确保月份两位数
+  if (month.length === 1) month = '0' + month;
+  return year + '-' + month;
+}
+
+/**
  * 获取月份的第一天
  * @param {string} ym - "YYYY-MM"
  * @returns {string} "YYYY-MM-01"
@@ -535,6 +556,24 @@ function log(module, level, args) {
   var extra = Array.prototype.slice.call(arguments, 2);
   var method = console[level] || console.log;
   method.apply(console, [prefix].concat(extra));
+}
+
+// ============================================================================
+// 颜色工具
+// ============================================================================
+
+/**
+ * Hex 颜色 → rgba 字符串
+ * @param {string} hex - "#RRGGBB" 格式
+ * @param {number} alpha - 0~1 透明度
+ * @returns {string} "rgba(r,g,b,a)"
+ */
+function hexToRgba(hex, alpha) {
+  if (!hex || hex.length < 7) return 'rgba(0,0,0,' + (alpha || 0) + ')';
+  var r = parseInt(hex.slice(1, 3), 16);
+  var g = parseInt(hex.slice(3, 5), 16);
+  var b = parseInt(hex.slice(5, 7), 16);
+  return 'rgba(' + r + ',' + g + ',' + b + ',' + (alpha || 0) + ')';
 }
 
 // src/utils/dom.js
@@ -1103,6 +1142,54 @@ function decryptWallets(str) {
   }
 }
 
+// src/utils/countup.js
+/**
+ * v13 countUp 數字滾動動畫
+ * 用法: countUp(el, rawValue, { prefix, suffix, duration })
+ *
+ * 範例:
+ *   countUp(valueEl, 1234567, { suffix: '萬' }) → "1,234,567萬"
+ *   countUp(valueEl, 45000, { prefix: '¥' })    → "¥45,000"
+ *
+ * 機制: easeOutCubic 緩出曲線，600ms 完成
+ * 特點: 不依賴任何外部庫，純 requestAnimationFrame
+ */
+
+function countUp(el, rawValue, opts) {
+  if (!el || rawValue == null) return;
+
+  opts = opts || {};
+  var duration = opts.duration || 600;
+  var prefix = opts.prefix || '';
+  var suffix = opts.suffix || '';
+  var decimals = (opts.decimals != null) ? opts.decimals : 0;
+
+  var startTs = null;
+
+  function fmtNum(n) {
+    if (decimals > 0) {
+      var parts = n.toFixed(decimals).split('.');
+      parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      return parts.join('.');
+    }
+    return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
+
+  function tick(ts) {
+    if (!startTs) startTs = ts;
+    var progress = Math.min((ts - startTs) / duration, 1);
+    // easeOutCubic: 1 - (1-t)³
+    var eased = 1 - Math.pow(1 - progress, 3);
+    var current = rawValue * eased;
+    el.textContent = prefix + fmtNum(current) + suffix;
+    if (progress < 1) {
+      requestAnimationFrame(tick);
+    }
+  }
+
+  requestAnimationFrame(tick);
+}
+
 // src/core/events.js
 /**
  * v13 Event Bus — 核心解耦机制
@@ -1634,9 +1721,13 @@ var Store = (function() {
   // --- 代理名单 ---
   function saveAgentList(list) {
     save(STORAGE_KEYS.AGENT_LIST, list, false);
+    if (typeof debugLog === 'function') debugLog('v13-dlog-cya', '💾 saveAgentList: ' + JSON.stringify(list));
   }
   function loadAgentList() {
-    return load(STORAGE_KEYS.AGENT_LIST, false) || [];
+    var raw = localStorage.getItem(STORAGE_KEYS.AGENT_LIST);
+    var result = load(STORAGE_KEYS.AGENT_LIST, false) || [];
+    if (typeof debugLog === 'function') debugLog('v13-dlog-cya', '📖 loadAgentList: raw=' + raw + ' → ' + JSON.stringify(result));
+    return result;
   }
 
   // --- 草稿 ---
@@ -1661,6 +1752,14 @@ var Store = (function() {
   }
   function loadWorkingMonth() {
     return localStorage.getItem(STORAGE_KEYS.WORKING_MONTH) || '';
+  }
+
+  // --- 最后同步时间 ---
+  function saveLastSyncTime(iso) {
+    localStorage.setItem(STORAGE_KEYS.LAST_SYNC_TIME, iso || '');
+  }
+  function loadLastSyncTime() {
+    return localStorage.getItem(STORAGE_KEYS.LAST_SYNC_TIME) || '';
   }
 
   // --- 月度存档 ---
@@ -1789,6 +1888,42 @@ var Store = (function() {
   }
 
   /**
+   * 清空本地业务数据（交易、公基金、代理钱包、代理名单、订房）
+   * 保留：hotelConfig、workingMonth、auth、密码、appVersion
+   * 同时将 State 重置为空状态
+   */
+  function clearLocalData() {
+    // 清除 localStorage 中的业务数据 key
+    var businessKeys = [
+      STORAGE_KEYS.DATA,          // 交易 'macau_data'
+      STORAGE_KEYS.FUND,          // 公基金 'macau_fund_data'
+      STORAGE_KEYS.AGENT_WALLETS, // 代理钱包 'macau_agent_wallets'
+      STORAGE_KEYS.AGENT_LIST,    // 代理名单 'macau_agent_list'
+      STORAGE_KEYS.RM_BOOKINGS,   // 订房 'rm_bookings'
+      STORAGE_KEYS.RM_LAST_ID,    // 订房ID 'rm_last_id'
+      STORAGE_KEYS.BACKUP_LIST,   // 备份清单 'macau_backup_list'
+      STORAGE_KEYS.DRAFT,         // 草稿 'macau_draft'
+    ];
+    for (var i = 0; i < businessKeys.length; i++) {
+      try { localStorage.removeItem(businessKeys[i]); } catch(e) {}
+    }
+    // 重置 State 中的业务字段（保留 hotelConfig/workingMonth/auth）
+    State.batchSet({
+      txs:             [],
+      fundWithdrawals: [],
+      agentWallets:    {},
+      agentList:       [],
+      bookings:        [],
+      backupList:      [],
+    }, 'store:cleared');
+    State.resetNextId('tx', 1);
+    State.resetNextId('fund', 1);
+    State.resetNextId('wallet', 1);
+    State.resetNextId('booking', 1);
+    console.log('[v13:store] clearLocalData: business data cleared');
+  }
+
+  /**
    * 从 localStorage 全部加载到 State
    * @param {boolean} [silent=false] - 是否抑制事件
    */
@@ -1846,6 +1981,8 @@ var Store = (function() {
     loadConfig:         loadConfig,
     saveWorkingMonth:   saveWorkingMonth,
     loadWorkingMonth:   loadWorkingMonth,
+    saveLastSyncTime:   saveLastSyncTime,
+    loadLastSyncTime:   loadLastSyncTime,
     saveArchives:       saveArchives,
     loadArchives:       loadArchives,
     saveFilters:        saveFilters,
@@ -1871,6 +2008,7 @@ var Store = (function() {
     // 全量
     saveAll:      saveAll,
     loadAll:      loadAll,
+    clearLocalData: clearLocalData,
   };
 })();
 
@@ -2123,27 +2261,28 @@ function calcTotalWallet(txs, fundWithdrawals, agentWallets) {
  */
 function calcRoomQuota(bookings, txs, month) {
   var totalVolume = 0;
-  // 月份归一化 ("2026/06" → "2026-06")
-  var normMonth = month ? month.replace(/\//g, '-') : '';
+  // 月份归一化 (使用 extractMonth 处理各种日期格式)
+  var normMonth = extractMonth(month || '');
 
   for (var i = 0; i < txs.length; i++) {
-    // 日期归一化后再匹配 (支持 "YYYY-MM-DD" 和 "YYYY/MM/DD")
-    var txDate = (txs[i].date || '').replace(/\//g, '-');
-    if (!normMonth || txDate.indexOf(normMonth) === 0) {
+    // ★ 使用 extractMonth 提取交易月份，支持 "YYYY-MM-DD" 和 "YYYY/MM/DD" 及无前导零格式
+    var txMonth = extractMonth(txs[i].date);
+    if (!normMonth || txMonth === normMonth) {
       totalVolume += toNum(txs[i].volume);
     }
   }
 
   var usedThreshold = 0;
   for (var j = 0; j < bookings.length; j++) {
-    // month 字段归一化后再匹配
-    var bkMonth = (bookings[j].month || '').replace(/\//g, '-');
+    // ★ 使用 extractMonth 提取订房月份
+    var bkMonth = extractMonth(bookings[j].month) || extractMonth(bookings[j].checkIn);
     if (!normMonth || bkMonth === normMonth) {
       usedThreshold += toNum(bookings[j].threshold) || 0;
     }
   }
 
-  var remaining = Math.max(0, totalVolume - usedThreshold);
+  // ★ 剩余额度 = 总洗码量 - 已用转变门槛（可为负数，表示不足）
+  var remaining = totalVolume - usedThreshold;
   // 额度使用率计算
   // 业务规则：
   //   1. 有出场量 → 使用率 = 已用额度 / 总出场量
@@ -2159,10 +2298,10 @@ function calcRoomQuota(bookings, txs, month) {
   }
 
   return {
-    totalVolume:      totalVolume,
-    usedThreshold:    usedThreshold,
+    totalVolume:        totalVolume,
+    usedThreshold:      usedThreshold,
     remainingThreshold: remaining,
-    usageRate:        Math.min(100, rate),
+    usageRate:          rate,
   };
 }
 
@@ -2999,6 +3138,8 @@ function deleteTx(fbKey) {
   Store.saveTxs(State.get('txs'));
 
   console.log('[v13:tx] 🔥 從 Firebase 移除...');
+  // ★ 追踪删除 (防止 syncUploadAll transaction 复活)
+  trackRecentlyDeleted('tx', fbKey);
   // ★ 即時從 Firebase 刪除
   removeTxFromFirebase(fbKey);
 
@@ -3312,6 +3453,7 @@ function deleteFund(fbKey) {
 
   if (!deleted) return null;
   Store.saveFund(State.get('fundWithdrawals'));
+  trackRecentlyDeleted('fund', fbKey);
   removeFundFromFirebase(fbKey);
   Events.emit(EVENTS.FUND_DELETED, deleted);
   return deleted;
@@ -3443,6 +3585,7 @@ function deleteWallet(agentName, fbKey) {
 
   if (!deleted) return null;
   Store.saveWallets(State.get('agentWallets'));
+  trackRecentlyDeleted('wallet', fbKey);
   removeWalletFromFirebase(agentName, fbKey);
   Events.emit(EVENTS.WALLET_DELETED, { agent: agentName, record: deleted });
   return deleted;
@@ -3530,6 +3673,10 @@ function syncAgentDrawn(agentName) {
  * 对照档: 第七节模块11
  * 
  * 事件: emit agentList:updated
+ * 
+ * ★ 同步策略：Push-only（本地權威）
+ *   CRUD 操作即時推送 Firebase，監聽器同步跨設備變更。
+ *   跨設備同步：最後推送者勝出。無競態條件。
  */
 
 /**
@@ -3566,23 +3713,33 @@ function addAgent(name) {
  * @returns {object}
  */
 function removeAgent(name) {
+  debugLog('v13-dlog-red', '🔴 removeAgent(' + name + ') before=' + JSON.stringify(State.get('agentList')));
   var removed = false;
   State.update('agentList', function(arr) {
     var idx = arr.indexOf(name);
     if (idx >= 0) {
       arr.splice(idx, 1);
       removed = true;
+      debugLog('v13-dlog-red', '🔴 spliced idx=' + idx + ' after=' + JSON.stringify(arr));
     }
     return arr;
   });
 
   if (!removed) {
+    debugLog('v13-dlog-ylw', '⚠ removeAgent NOT FOUND: ' + name);
     return { success: false, error: '代理 "' + name + '" 不存在' };
   }
 
-  Store.saveAgentList(State.get('agentList'));
-  syncAgentListToFirebase(State.get('agentList'));
-  Events.emit(EVENTS.AGENT_LIST_UPDATED, State.get('agentList'));
+  var newList = State.get('agentList');
+  debugLog('v13-dlog-red', '🔴 State.get → ' + JSON.stringify(newList));
+  Store.saveAgentList(newList);
+  trackRecentlyDeleted('agent', name);
+  // ★ 验证写入
+  var verify = Store.loadAgentList();
+  debugLog('v13-dlog-red', '🔴 localStorage verify: ' + JSON.stringify(verify) + ' match=' + (JSON.stringify(verify) === JSON.stringify(newList)));
+  syncAgentListToFirebase(newList);
+  Events.emit(EVENTS.AGENT_LIST_UPDATED, newList);
+  debugLog('v13-dlog-grn', '✅ removeAgent DONE. remaining=' + JSON.stringify(newList));
   return { success: true, name: name };
 }
 
@@ -3702,8 +3859,7 @@ function addAgentFromMgr() {
  * 支持 YYYY/MM/DD 和 YYYY-MM-DD 输入
  */
 function normalizeMonth(dateStr) {
-  if (!dateStr) return nowStr().substring(0, 7); // "YYYY-MM"
-  return dateStr.replace(/\//g, '-').substring(0, 7);
+  return extractMonth(dateStr) || nowStr().substring(0, 7);
 }
 
 /**
@@ -3813,6 +3969,7 @@ function deleteBooking(fbKey) {
 
   if (!deleted) return null;
   Store.saveBookings(State.get('bookings'));
+  trackRecentlyDeleted('booking', fbKey);
   removeBookingFromFirebase(fbKey);
   Events.emit(EVENTS.BOOKING_DELETED, deleted);
   return deleted;
@@ -4023,6 +4180,8 @@ function createHC(data) {
 
   Store.saveHCConfig(State.get('hotelConfig'));
   Events.emit(EVENTS.HC_CONFIG_UPDATED, State.get('hotelConfig'));
+  // ★ Firebase 同步
+  try { syncHCConfigToFirebase(entry); } catch(e) { console.error('[hc] createHC sync error:', e); }
   return entry;
 }
 
@@ -4055,6 +4214,8 @@ function updateHC(fbKey, data) {
   if (!updated) return null;
   Store.saveHCConfig(State.get('hotelConfig'));
   Events.emit(EVENTS.HC_CONFIG_UPDATED, State.get('hotelConfig'));
+  // ★ Firebase 同步
+  try { syncHCConfigToFirebase(updated); } catch(e) { console.error('[hc] updateHC sync error:', e); }
   return updated;
 }
 
@@ -4077,6 +4238,9 @@ function deleteHC(fbKey) {
   });
 
   if (!deleted) return null;
+  // ★ 追踪最近删除 + Firebase 墓碑同步
+  try { trackRecentlyDeleted('hc', fbKey); } catch(e) { console.error('[hc] trackRecentlyDeleted error:', e); }
+  try { removeHCFromFirebase(fbKey); } catch(e) { console.error('[hc] deleteHC sync error:', e); }
   Store.saveHCConfig(State.get('hotelConfig'));
   Events.emit(EVENTS.HC_CONFIG_UPDATED, State.get('hotelConfig'));
   return deleted;
@@ -4097,6 +4261,12 @@ function resetHCToPreset() {
   Store.saveHCConfig(preset);
   Store.saveHCPresetVersion(PRESET_VERSION);
   Events.emit(EVENTS.HC_CONFIG_UPDATED, preset);
+  // ★ Firebase 同步：逐笔推送所有预设
+  try {
+    for (var j = 0; j < preset.length; j++) {
+      syncHCConfigToFirebase(preset[j]);
+    }
+  } catch(e) { console.error('[hc] resetHCToPreset sync error:', e); }
   return preset.length;
 }
 
@@ -5151,34 +5321,88 @@ function removeBookingFromFirebase(fbKey) {
 }
 
 /**
- * 同步代理名单到 Firebase（用 transaction 原子合併，防止并发丢失）
+ * 同步单笔酒店设定到 Firebase
+ * @param {object} entry
+ */
+function syncHCConfigToFirebase(entry) {
+  if (!entry._fbKey) {
+    console.warn('[v13:firebase] syncHCConfig skipped: missing _fbKey');
+    return;
+  }
+  if (!_db) {
+    console.warn('[v13:firebase] syncHCConfig deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { syncHCConfigToFirebase(entry); });
+    return;
+  }
+  try {
+    console.log('[v13:firebase] 🚀 syncHCConfig WRITE:', entry._fbKey, 'casino=' + (entry.casino || '?'), 'hotel=' + (entry.hotel || '?'));
+    _db.ref(FB_PATH.HC_CONFIG + '/' + entry._fbKey).set(entry, function(err) {
+      if (err) {
+        console.error('[v13:firebase] ❌ syncHCConfig FAILED:', entry._fbKey, err.message || err);
+        enqueueUpload(function() { syncHCConfigToFirebase(entry); });
+      } else {
+        console.log('[v13:firebase] ✅ syncHCConfig OK:', entry._fbKey);
+      }
+    });
+  } catch (e) {
+    console.error('[v13:firebase] syncHCConfig error:', e);
+  }
+}
+
+/**
+ * 从 Firebase 删除单笔酒店设定
+ * @param {string} fbKey
+ */
+function removeHCFromFirebase(fbKey) {
+  if (!_db) {
+    console.warn('[v13:firebase] removeHCConfig deferred (_db null) → auto-enqueue');
+    enqueueUpload(function() { removeHCFromFirebase(fbKey); });
+    return;
+  }
+  try {
+    console.log('[v13:firebase] 🗑️  removeHCConfig TOMBSTONE:', fbKey);
+    _db.ref(FB_PATH.HC_CONFIG + '/' + fbKey).set({
+      _fbKey: fbKey,
+      _deleted: true,
+      _updatedAt: Date.now()
+    }, function(err) {
+      if (err) {
+        console.error('[v13:firebase] ❌ removeHCConfig FAILED:', fbKey, err.message || err);
+      } else {
+        console.log('[v13:firebase] ✅ removeHCConfig TOMBSTONE OK:', fbKey);
+      }
+    });
+  } catch (e) {
+    console.error('[v13:firebase] removeHCConfig error:', e);
+  }
+}
+
+/**
+ * 同步代理名单到 Firebase（用 set() 覆写，支持新增和删除同步）
+ *
+ * 原先用 transaction() 做并集合并，导致删除操作无法传播——
+ * 删掉的代理会被远端数据合并回来。改用 set() 覆写整个名单，
+ * 确保删除操作能正确推送到 Firebase 并传播到所有设备。
+ *
  * @param {Array} agentList - 當前本地代理名單
  */
 function syncAgentListToFirebase(agentList) {
   if (!_db) {
     console.warn('[v13:firebase] syncAgentList deferred (_db null) → auto-enqueue');
-    enqueueUpload(function() { syncAgentListToFirebase(agentList); });
+    // ★ FIX: 不捕获入队时的 agentList，执行时从 State 实时读取
+    //    避免竞态：入队后 agentList 变化（删除/新增）时推送旧数据覆盖新数据
+    enqueueUpload(function() { syncAgentListToFirebase(State.get('agentList')); });
     return;
   }
   try {
-    _db.ref(FB_PATH.AGENT_LIST).transaction(function(remote) {
-      if (!remote || !Array.isArray(remote)) return agentList;
-      // 原子合併：本地 + 遠端（去重）
-      var merged = remote.slice();
-      for (var i = 0; i < agentList.length; i++) {
-        if (merged.indexOf(agentList[i]) === -1) {
-          merged.push(agentList[i]);
-        }
-      }
-      merged.sort(function(a, b) { return a.localeCompare(b); });
-      // 只有当真正有变化时才返回新值（返回 undefined 表示中止事务）
-      if (JSON.stringify(merged) === JSON.stringify(remote)) return;
-      return merged;
-    }, function(err, committed, snapshot) {
+    var sorted = agentList.slice().sort(function(a, b) { return a.localeCompare(b); });
+    _db.ref(FB_PATH.AGENT_LIST).set(sorted, function(err) {
       if (err) {
-        console.error('[v13:firebase] syncAgentList transaction FAILED:', err.message || err);
-        // 失败时重试（用 enqueueUpload 排队）
-        enqueueUpload(function() { syncAgentListToFirebase(agentList); });
+        console.error('[v13:firebase] syncAgentList set FAILED:', err.message || err);
+        // ★ 重试时也实时读取 State
+        enqueueUpload(function() { syncAgentListToFirebase(State.get('agentList')); });
+      } else {
+        console.log('[v13:firebase] ✅ syncAgentList OK:', sorted.length + ' agents', JSON.stringify(sorted));
       }
     });
   } catch (e) {
@@ -5275,6 +5499,33 @@ function decodeFirebaseKey(encoded) {
                 .replace(/_SLASH_/g, '/');
 }
 
+// ============================================================================
+// 管理员操作：清除 Firebase 全部数据
+// ============================================================================
+
+/**
+ * 清除 Firebase macau_data/ 下的所有数据（交易、公基金、代理钱包、订房等）
+ * 警告：此操作不可逆，执行前须由 UI 确认
+ * @param {function} onDone - 成功回调 function(err)
+ */
+function clearFirebaseData(onDone) {
+  var db = getDB();
+  if (!db) {
+    console.error('[v13:firebase] clearFirebaseData: _db not ready');
+    if (onDone) onDone(new Error('Firebase 未連線'));
+    return;
+  }
+  console.warn('[v13:firebase] 🗑️  clearFirebaseData: nuking macau_data/...');
+  db.ref('macau_data').set(null, function(err) {
+    if (err) {
+      console.error('[v13:firebase] ❌ clearFirebaseData FAILED:', err.message || err);
+    } else {
+      console.log('[v13:firebase] ✅ clearFirebaseData OK — macau_data/ cleared');
+    }
+    if (onDone) onDone(err);
+  });
+}
+
 // src/sync/uploader.js
 /**
  * v13 上传队列与批量同步
@@ -5333,7 +5584,7 @@ function _processQueue() {
 // ============================================================================
 
 /**
- * 全量同步到 Firebase (7 路径)
+ * 全量同步到 Firebase (8 路径)
  */
 function syncUploadAll() {
   if (!getDB()) {
@@ -5345,7 +5596,7 @@ function syncUploadAll() {
 
   var txs = State.get('txs');
   var fundWithdrawals = State.get('fundWithdrawals');
-  var agentList = State.get('agentList');
+  // ★ FIX: agentList 不在函數入口捕獲，避免 watchers 更新後用舊數據覆蓋
   var agentWallets = State.get('agentWallets');
   var workingMonth = State.get('workingMonth');
   var bookings = State.get('bookings');
@@ -5355,9 +5606,16 @@ function syncUploadAll() {
 
   // 1. 交易：transaction 原子合併 (個別 CRUD 已即時推送，此為安全網)
   // ★ FIX: mergeTxs(local, remote) — 第一个参数是本地，第二个是远端
+  // ★ 防止删除回魂: 为最近删除的项写入墓碑
   db.ref(FB_PATH.TXS).transaction(function(remote) {
     if (!remote) return fbArrayToObj(txs);
     var rArr = fbObjToArray(remote);
+    // ★ 为最近删除的远端项写入墓碑，防止被复活
+    for (var i = 0; i < rArr.length; i++) {
+      if (rArr[i]._fbKey && isRecentlyDeleted('tx', rArr[i]._fbKey)) {
+        rArr[i] = { _fbKey: rArr[i]._fbKey, _deleted: true, _updatedAt: Date.now() };
+      }
+    }
     var merged = mergeTxs(txs, rArr);  // ✓ local=txs, remote=rArr
     console.log('[v13:uploader] TXS transaction: local=' + txs.length + ' remote=' + rArr.length + ' merged=' + merged.length);
     return fbArrayToObj(merged);
@@ -5369,74 +5627,114 @@ function syncUploadAll() {
     }
   });
 
-  // 2. 公基金：transaction 原子合併
+  // 2. 公基金：transaction 原子合併（★ 使用 mergeTxs 时间戳决胜策略）
   db.ref(FB_PATH.FUND).transaction(function(remote) {
     if (!remote) return fbArrayToObj(fundWithdrawals);
     var rArr = fbObjToArray(remote);
-    var localMap = {};
-    for (var fi = 0; fi < fundWithdrawals.length; fi++) {
-      localMap[fundWithdrawals[fi]._fbKey] = fundWithdrawals[fi];
-    }
-    for (var fj = 0; fj < rArr.length; fj++) {
-      var fKey = rArr[fj]._fbKey;
-      if (!localMap[fKey]) {
-        localMap[fKey] = rArr[fj];
-      } else {
-        var lTs = localMap[fKey]._updatedAt || 0;
-        var rTs = rArr[fj]._updatedAt || 0;
-        if (rTs > lTs) localMap[fKey] = rArr[fj];
+    // ★ 为最近删除的远端项写入墓碑
+    for (var i = 0; i < rArr.length; i++) {
+      if (rArr[i]._fbKey && isRecentlyDeleted('fund', rArr[i]._fbKey)) {
+        rArr[i] = { _fbKey: rArr[i]._fbKey, _deleted: true, _updatedAt: Date.now() };
       }
     }
-    var mf = [];
-    for (var fk in localMap) {
-      if (!localMap[fk]._deleted) mf.push(localMap[fk]);
-    }  // ★ 墓碑过滤
-    return fbArrayToObj(mf);
+    var merged = mergeTxs(fundWithdrawals, rArr);
+    console.log('[v13:uploader] FUND transaction: local=' + fundWithdrawals.length + ' remote=' + rArr.length + ' merged=' + merged.length);
+    return fbArrayToObj(merged);
+  }, function(err, committed, snapshot) {
+    if (err) {
+      console.error('[v13:uploader] FUND transaction FAILED:', err.message || err);
+    } else if (committed) {
+      console.log('[v13:uploader] ✅ FUND transaction committed');
+    }
   });
 
-  // 3. 代理名單：transaction 原子合併
-  db.ref(FB_PATH.AGENT_LIST).transaction(function(remote) {
-    if (!remote || !Array.isArray(remote)) return agentList;
-    return mergeAgentLists(agentList, remote);
-  });
+  // 3. 代理名單：直接 set() 推送本地到 Firebase（不合并）
+  //    CRUD 操作（addAgent/removeAgent/renameAgent）已透過 syncAgentListToFirebase 即時推送，
+  //    此處作為安全網確保頁面加載時本地正確數據能到達 Firebase
+  // ★ FIX: set 回調內實時讀取 State，避免用入隊時的舊數據覆蓋 watchers 已更新的數據
+  (function() {
+    var _al = State.get('agentList');
+    if (!Array.isArray(_al)) _al = [];
+    db.ref(FB_PATH.AGENT_LIST).set(_al.slice().sort(function(a, b) { return a.localeCompare(b); }), function(err) {
+      if (err) {
+        console.error('[v13:uploader] AGENT_LIST set FAILED:', err.message || err);
+      } else {
+        console.log('[v13:uploader] ✅ AGENT_LIST pushed: ' + _al.length + ' agents', JSON.stringify(_al));
+      }
+    });
+  })();
 
-  // 4. 代理钱包：transaction 原子合併
+  // 4. 代理钱包：transaction 原子合併（★ 使用 mergeWallets 时间戳决胜策略）
   // ★ FIX: mergeWallets(local, remote) — local=agentWallets, remote=rw
   db.ref(FB_PATH.AGENT_WALLETS).transaction(function(remote) {
     if (!remote) return fbWalletsToObj(agentWallets);
     var rw = fbObjToWallets(remote);
+    // ★ 为最近删除的远端项写入墓碑
+    for (var ag in rw) {
+      var records = rw[ag];
+      if (!Array.isArray(records)) continue;
+      for (var i = 0; i < records.length; i++) {
+        if (records[i]._fbKey && isRecentlyDeleted('wallet', records[i]._fbKey)) {
+          records[i] = { _fbKey: records[i]._fbKey, _deleted: true, _updatedAt: Date.now() };
+        }
+      }
+    }
     return fbWalletsToObj(mergeWallets(agentWallets, rw));
+  }, function(err, committed, snapshot) {
+    if (err) {
+      console.error('[v13:uploader] WALLETS transaction FAILED:', err.message || err);
+    } else if (committed) {
+      console.log('[v13:uploader] ✅ WALLETS transaction committed');
+    }
   });
 
   // 5. 工作月份
   db.ref(FB_PATH.WORKING_MONTH).set(workingMonth);
 
-  // 6. 订房：transaction 原子合併
+  // 6. 订房：transaction 原子合併（★ 使用 mergeBookings 时间戳决胜策略）
   db.ref(FB_PATH.RM_BOOKINGS).transaction(function(remote) {
     if (!remote) return fbArrayToObj(bookings);
     var rArr = fbObjToArray(remote);
-    var localMap = {};
-    for (var bi = 0; bi < bookings.length; bi++) {
-      localMap[bookings[bi]._fbKey] = bookings[bi];
-    }
-    for (var bj = 0; bj < rArr.length; bj++) {
-      var bKey = rArr[bj]._fbKey;
-      if (!localMap[bKey]) {
-        localMap[bKey] = rArr[bj];
-      } else {
-        var blTs = localMap[bKey]._updatedAt || 0;
-        var brTs = rArr[bj]._updatedAt || 0;
-        if (brTs > blTs) localMap[bKey] = rArr[bj];
+    // ★ 为最近删除的远端项写入墓碑
+    for (var i = 0; i < rArr.length; i++) {
+      if (rArr[i]._fbKey && isRecentlyDeleted('booking', rArr[i]._fbKey)) {
+        rArr[i] = { _fbKey: rArr[i]._fbKey, _deleted: true, _updatedAt: Date.now() };
       }
     }
-    var mb = [];
-    for (var bk in localMap) {
-      if (!localMap[bk]._deleted) mb.push(localMap[bk]);
-    }  // ★ 墓碑过滤
-    return fbArrayToObj(mb);
+    var merged = mergeBookings(bookings, rArr);
+    console.log('[v13:uploader] BOOKINGS transaction: local=' + bookings.length + ' remote=' + rArr.length + ' merged=' + merged.length);
+    return fbArrayToObj(merged);
+  }, function(err, committed, snapshot) {
+    if (err) {
+      console.error('[v13:uploader] BOOKINGS transaction FAILED:', err.message || err);
+    } else if (committed) {
+      console.log('[v13:uploader] ✅ BOOKINGS transaction committed');
+    }
   });
 
-  // 7. 月度存档
+  // 7. 酒店设定：transaction 原子合併（★ 使用 mergeTxs 时间戳决胜策略）
+  var hcConfig = State.get('hotelConfig');
+  db.ref(FB_PATH.HC_CONFIG).transaction(function(remote) {
+    if (!remote) return fbArrayToObj(hcConfig);
+    var rArr = fbObjToArray(remote);
+    // ★ 为最近删除的远端项写入墓碑
+    for (var i = 0; i < rArr.length; i++) {
+      if (rArr[i]._fbKey && isRecentlyDeleted('hc', rArr[i]._fbKey)) {
+        rArr[i] = { _fbKey: rArr[i]._fbKey, _deleted: true, _updatedAt: Date.now() };
+      }
+    }
+    var merged = mergeTxs(hcConfig, rArr);
+    console.log('[v13:uploader] HC_CONFIG transaction: local=' + hcConfig.length + ' remote=' + rArr.length + ' merged=' + merged.length);
+    return fbArrayToObj(merged);
+  }, function(err, committed, snapshot) {
+    if (err) {
+      console.error('[v13:uploader] HC_CONFIG transaction FAILED:', err.message || err);
+    } else if (committed) {
+      console.log('[v13:uploader] ✅ HC_CONFIG transaction committed');
+    }
+  });
+
+  // 8. 月度存档
   db.ref(FB_PATH.ARCHIVES).set(archives);
 
   Events.emit(EVENTS.SYNC_COMPLETE);
@@ -5479,13 +5777,17 @@ function syncSetWithRetry(ref, data, attempt) {
  * 依赖: sync/firebase.js (getDB, fbObjToArray, fbObjToWallets)
  *        core/state.js, core/events.js, core/store.js
  *        core/constants.js (FB_PATH, EVENTS, STORAGE_KEYS, CONFIG)
- * 对照档: 第九节 initSync() — 7 个监听器
+ * 对照档: 第九节 initSync() — 6 个监听器 + 代理名單智能監聽
  */
 
 var _watchers = {};  // 已注册的监听器引用
 
 /**
  * 启动所有 Firebase 即时监听器 (对照档 initSync)
+ * ★ 代理名單使用智能監聽，區分刪除同步和新增同步：
+ *   - 遠端為空 + 本地有數據 → 刪除同步（清空本地）
+ *   - 本地為空 + 遠端有數據 → 新增同步（接受遠端）
+ *   - 兩邊都有數據 → remote 覆蓋（Firebase 權威來源）
  */
 function startWatchers() {
   var db = getDB();
@@ -5501,6 +5803,9 @@ function startWatchers() {
 
     // 用 mergeTxs 合并（时间戳胜出策略）
     var merged = mergeTxs(local, remote);
+
+    // ★ 客户端侧过滤墓碑（state 中不需要墓碑，墓碑只存在于 Firebase）
+    merged = merged.filter(function(r) { return !r._deleted; });
 
     console.log('[v13:watchers] TXS onValue: remote=' + remote.length + ' local=' + local.length + ' merged=' + merged.length);
 
@@ -5518,40 +5823,96 @@ function startWatchers() {
     var remote = fbObjToArray(snap.val());
     var local = State.get('fundWithdrawals');
 
-    // 用 mergeArrays 合并（本地有+远端没有 → 保留本地；远端有+本地没有 → 加入）
-    var merged = mergeArrays(local, remote);
+    // ★ 用 mergeTxs（时间戳决胜），确保编辑/删除能跨端同步（公基金结构与txs一致）
+    var merged = mergeTxs(local, remote);
+
+    // ★ 客户端侧过滤墓碑
+    merged = merged.filter(function(r) { return !r._deleted; });
 
     if (JSON.stringify(merged) !== JSON.stringify(local)) {
+      console.log('[v13:watchers] FUND CHANGED: ' + local.length + ' → ' + merged.length + ' entries');
       State.set('fundWithdrawals', merged);
       Store.saveFund(merged);
       Events.emit(EVENTS.FUND_LOADED, merged);
     }
   });
 
-  // 3. 监听代理名单
+  // 3. 代理名單：智能監聽（區分刪除同步和新增同步）★ FIX: Push-only 無法跨設備同步刪除
+  var _agentListReceivedFirst = false;
   _watchers.agentList = db.ref(FB_PATH.AGENT_LIST).on('value', function(snap) {
-    var remote = snap.val();
-    if (!remote || !Array.isArray(remote)) return;
-
+    var remote = snap.val() || [];
     var local = State.get('agentList');
-    var merged = mergeAgentLists(local, remote);
-    if (JSON.stringify(merged) !== JSON.stringify(local)) {
-      State.set('agentList', merged);
-      Store.saveAgentList(merged);
-      Events.emit(EVENTS.AGENT_LIST_UPDATED, merged);
+    if (!Array.isArray(local)) local = [];
+
+    console.log('[v13:watchers] AGENT_LIST onValue: remote=' + remote.length + ' local=' + local.length + ' first=' + _agentListReceivedFirst);
+
+    // 首次觸發：跳過（避免頁面載入時被 Firebase 回調覆蓋本地數據）
+    if (!_agentListReceivedFirst) {
+      _agentListReceivedFirst = true;
+      console.log('[v13:watchers] AGENT_LIST skip first watcher fire (init)');
+      // 如果本地為空但遠程有數據，接受首次初始化
+      if (local.length === 0 && remote.length > 0) {
+        console.log('[v13:watchers] AGENT_LIST init: local empty, applying remote=' + remote.length);
+        State.set('agentList', remote);
+        Store.saveAgentList(remote);
+        Events.emit(EVENTS.AGENT_LIST_UPDATED, remote);
+      }
+      return;
     }
+
+    // 檢測是否真正有變化
+    var localSorted = local.slice().sort().join(',');
+    var remoteSorted = remote.slice().sort().join(',');
+    if (localSorted === remoteSorted) return;  // 無變化，跳過
+
+    // CASE 1: 遠程為空（其他設備刪除了代理）→ 同步刪除
+    if (remote.length === 0 && local.length > 0) {
+      console.log('[v13:watchers] AGENT_LIST DELETE sync: remote empty, clearing local ' + local.length + ' agents');
+      State.set('agentList', []);
+      Store.saveAgentList([]);
+      Events.emit(EVENTS.AGENT_LIST_UPDATED, []);
+      return;
+    }
+
+    // CASE 2: 本地為空，遠程有數據（其他設備新增了代理）→ 同步新增
+    if (local.length === 0 && remote.length > 0) {
+      console.log('[v13:watchers] AGENT_LIST ADD sync: local empty, applying remote ' + remote.length);
+      State.set('agentList', remote);
+      Store.saveAgentList(remote);
+      Events.emit(EVENTS.AGENT_LIST_UPDATED, remote);
+      return;
+    }
+
+    // CASE 3: 兩邊都有數據但內容不同 → remote 為 Firebase 權威來源，直接覆蓋
+    //   取并集會導致刪除同步失敗（被刪代理復活），必須用 remote 覆蓋
+    console.log('[v13:watchers] AGENT_LIST OVERRIDE: local=' + local.length + ' → remote=' + remote.length, 'local:', JSON.stringify(local), 'remote:', JSON.stringify(remote));
+    State.set('agentList', remote);
+    Store.saveAgentList(remote);
+    Events.emit(EVENTS.AGENT_LIST_UPDATED, remote);
   });
 
   // 4. 监听代理钱包
   _watchers.agentWallets = db.ref(FB_PATH.AGENT_WALLETS).on('value', function(snap) {
     var remote = fbObjToWallets(snap.val());
-    if (!remote || Object.keys(remote).length === 0) return;
-
+    // ★ 去掉 empty remote 的提前 return — 远端清空时需合并（mergeWallets 会正确处理 null）
     var local = State.get('agentWallets');
-    if (JSON.stringify(local) !== JSON.stringify(remote)) {
-      State.set('agentWallets', remote);
-      Store.saveWallets(remote);
-      Events.emit(EVENTS.WALLETS_LOADED, remote);
+
+    // ★ 用 mergeWallets 合并（时间戳决胜），不能用 remote 直接覆盖 local
+    var merged = mergeWallets(local, remote);
+
+    // ★ 客户端侧过滤墓碑（state 中不需要墓碑）
+    var cleaned = {};
+    for (var _ag in merged) {
+      var _filtered = merged[_ag].filter(function(r) { return !r._deleted; });
+      if (_filtered.length > 0) cleaned[_ag] = _filtered;
+    }
+    merged = cleaned;
+
+    if (JSON.stringify(merged) !== JSON.stringify(local)) {
+      console.log('[v13:watchers] WALLETS CHANGED: localAgents=' + Object.keys(local||{}).length + ' remoteAgents=' + Object.keys(remote||{}).length + ' mergedAgents=' + Object.keys(merged||{}).length);
+      State.set('agentWallets', merged);
+      Store.saveWallets(merged);
+      Events.emit(EVENTS.WALLETS_LOADED, merged);
     }
   });
 
@@ -5570,10 +5931,14 @@ function startWatchers() {
     var remote = fbObjToArray(snap.val());
     var local = State.get('bookings');
 
-    // 用 mergeArrays 合并，避免直接覆盖导致本地独有订房丢失
-    var merged = mergeArrays(local, remote);
+    // ★ 用 mergeBookings（时间戳决胜），确保编辑/删除能跨端同步
+    var merged = mergeBookings(local, remote);
+
+    // ★ 客户端侧过滤墓碑
+    merged = merged.filter(function(r) { return !r._deleted; });
 
     if (JSON.stringify(merged) !== JSON.stringify(local)) {
+      console.log('[v13:watchers] BOOKINGS CHANGED: ' + local.length + ' → ' + merged.length + ' entries');
       State.set('bookings', merged);
       Store.saveBookings(merged);
       Events.emit(EVENTS.BOOKINGS_LOADED, merged);
@@ -5589,7 +5954,26 @@ function startWatchers() {
     }
   });
 
-  console.log('[v13:watchers] All 7 watchers started');
+  // 8. 监听酒店设定
+  _watchers.hcConfig = db.ref(FB_PATH.HC_CONFIG).on('value', function(snap) {
+    var remote = fbObjToArray(snap.val());
+    var local = State.get('hotelConfig');
+
+    // ★ 用 mergeTxs（时间戳决胜），确保编辑/删除能跨端同步
+    var merged = mergeTxs(local, remote);
+
+    // ★ 客户端侧过滤墓碑
+    merged = merged.filter(function(r) { return !r._deleted; });
+
+    if (JSON.stringify(merged) !== JSON.stringify(local)) {
+      console.log('[v13:watchers] HC_CONFIG CHANGED: ' + local.length + ' → ' + merged.length + ' entries');
+      State.set('hotelConfig', merged);
+      Store.saveHCConfig(merged);
+      Events.emit(EVENTS.HC_CONFIG_UPDATED, merged);
+    }
+  });
+
+  console.log('[v13:watchers] All 8 watchers started (agent list: smart sync)');
   return true;
 }
 
@@ -5623,6 +6007,8 @@ function syncDownloadAll() {
     var remote = fbObjToArray(snap.val());
     var local = State.get('txs');
     var merged = mergeTxs(local, remote);
+    // ★ 客户端侧过滤墓碑
+    merged = merged.filter(function(r) { return !r._deleted; });
     if (JSON.stringify(merged) !== JSON.stringify(local)) {
       State.set('txs', merged);
       Store.saveTxs(merged);
@@ -5633,7 +6019,10 @@ function syncDownloadAll() {
   db.ref(FB_PATH.FUND).once('value', function(snap) {
     var remote = fbObjToArray(snap.val());
     var local = State.get('fundWithdrawals');
-    var merged = mergeArrays(local, remote);
+    // ★ 用 mergeTxs（时间戳决胜），确保下载合并时编辑/删除能正确处理
+    var merged = mergeTxs(local, remote);
+    // ★ 客户端侧过滤墓碑
+    merged = merged.filter(function(r) { return !r._deleted; });
     if (JSON.stringify(merged) !== JSON.stringify(local)) {
       State.set('fundWithdrawals', merged);
       Store.saveFund(merged);
@@ -5641,15 +6030,41 @@ function syncDownloadAll() {
     }
   });
 
+  // 3. 代理名單：從 Firebase 拉取（智能合併 — 本地刪除優先）
   db.ref(FB_PATH.AGENT_LIST).once('value', function(snap) {
-    var remote = snap.val();
-    if (!remote || !Array.isArray(remote)) return;
+    var remote = snap.val() || [];
     var local = State.get('agentList');
-    var merged = mergeAgentLists(local, remote);
-    if (JSON.stringify(merged) !== JSON.stringify(local)) {
-      State.set('agentList', merged);
-      Store.saveAgentList(merged);
-      Events.emit(EVENTS.AGENT_LIST_UPDATED, merged);
+    if (!Array.isArray(local)) local = [];
+
+    // 如果兩邊一樣就跳過
+    var localSorted = local.slice().sort().join(',');
+    var remoteSorted = remote.slice().sort().join(',');
+    if (localSorted === remoteSorted) return;
+
+    // CASE: 遠程為空（其他設備刪除了所有代理）→ 同步刪除（與 watchers CASE 1 一致）
+    if (local.length > 0 && remote.length === 0) {
+      console.log('[v13:watchers] syncDownloadAll AGENT_LIST DELETE sync: remote empty, clearing local ' + local.length + ' agents');
+      State.set('agentList', []);
+      Store.saveAgentList([]);
+      Events.emit(EVENTS.AGENT_LIST_UPDATED, []);
+      return;
+    }
+
+    // 本地為空，遠程有數據 → 接受遠程
+    if (local.length === 0 && remote.length > 0) {
+      console.log('[v13:watchers] syncDownloadAll AGENT_LIST: remote=' + remote.length + ' → local empty, applying');
+      State.set('agentList', remote);
+      Store.saveAgentList(remote);
+      Events.emit(EVENTS.AGENT_LIST_UPDATED, remote);
+      return;
+    }
+
+    // 兩邊都有 → remote 為 Firebase 權威來源，直接覆蓋
+    if (JSON.stringify(remote.slice().sort()) !== JSON.stringify(local.slice().sort())) {
+      console.log('[v13:watchers] syncDownloadAll AGENT_LIST override: local=' + local.length + ' → remote=' + remote.length);
+      State.set('agentList', remote);
+      Store.saveAgentList(remote);
+      Events.emit(EVENTS.AGENT_LIST_UPDATED, remote);
     }
   });
 
@@ -5657,6 +6072,13 @@ function syncDownloadAll() {
     var remote = fbObjToWallets(snap.val());
     var local = State.get('agentWallets');
     var merged = mergeWallets(local, remote);
+    // ★ 客户端侧过滤墓碑
+    var _cleaned = {};
+    for (var _a in merged) {
+      var _f = merged[_a].filter(function(r) { return !r._deleted; });
+      if (_f.length > 0) _cleaned[_a] = _f;
+    }
+    merged = _cleaned;
     if (JSON.stringify(merged) !== JSON.stringify(local)) {
       State.set('agentWallets', merged);
       Store.saveWallets(merged);
@@ -5676,7 +6098,9 @@ function syncDownloadAll() {
   db.ref(FB_PATH.RM_BOOKINGS).once('value', function(snap) {
     var remote = fbObjToArray(snap.val());
     var local = State.get('bookings');
-    var merged = mergeArrays(local, remote);
+    var merged = mergeBookings(local, remote);
+    // ★ 客户端侧过滤墓碑
+    merged = merged.filter(function(r) { return !r._deleted; });
     if (JSON.stringify(merged) !== JSON.stringify(local)) {
       State.set('bookings', merged);
       Store.saveBookings(merged);
@@ -5689,6 +6113,20 @@ function syncDownloadAll() {
     if (archives) {
       State.set('archives', archives);
       Store.saveArchives(archives);
+    }
+  });
+
+  // 8. 酒店设定
+  db.ref(FB_PATH.HC_CONFIG).once('value', function(snap) {
+    var remote = fbObjToArray(snap.val());
+    var local = State.get('hotelConfig');
+    var merged = mergeTxs(local, remote);
+    // ★ 客户端侧过滤墓碑
+    merged = merged.filter(function(r) { return !r._deleted; });
+    if (JSON.stringify(merged) !== JSON.stringify(local)) {
+      State.set('hotelConfig', merged);
+      Store.saveHCConfig(merged);
+      Events.emit(EVENTS.HC_CONFIG_UPDATED, merged);
     }
   });
 }
@@ -5737,13 +6175,10 @@ function mergeTxs(local, remote) {
     }
   }
 
-  // ★ 墓碑过滤：排除 _deleted:true 的远端墓碑条目
-  // 墓碑机制：删除时写 {_fbKey, _deleted:true, _updatedAt} 而非 set(null)
-  // 这样 mergeTxs 能识别删除操作并同步移除
+  // ★ 不过滤墓碑 — 墓碑由 watchers.js 在客户端侧过滤
+  //   Transaction 写回 Firebase 时需要保留墓碑，否则其他设备收不到删除通知
   for (var k in merged) {
-    if (!merged[k]._deleted) {
-      result.push(merged[k]);
-    }
+    result.push(merged[k]);
   }
 
   return result;
@@ -5788,10 +6223,7 @@ function mergeWallets(local, remote) {
 
     var result = [];
     for (var k in recordMap) {
-      // ★ 墓碑过滤：排除 _deleted:true 的远端删除标记
-      if (!recordMap[k]._deleted) {
-        result.push(recordMap[k]);
-      }
+      result.push(recordMap[k]);  // ★ 不过滤墓碑 — 由 watchers.js 在客户端侧过滤
     }
     if (result.length > 0) {
       merged[agent] = result;
@@ -5832,6 +6264,46 @@ function mergeArrays(local, remote) {
 }
 
 /**
+ * 合并订房数组（时间戳决胜策略，与 mergeTxs 一致）
+ * @param {Array} local - 本地订房数组
+ * @param {Array} remote - 远端订房数组
+ * @returns {Array} 合并结果（含墓碑，由调用方过滤）
+ */
+function mergeBookings(local, remote) {
+  var merged = {};
+
+  // 先收集本地
+  for (var i = 0; i < local.length; i++) {
+    var key = local[i]._fbKey;
+    if (key) merged[key] = local[i];
+  }
+  // 再合并远端（时间戳决胜）
+  for (var j = 0; j < remote.length; j++) {
+    var rKey = remote[j]._fbKey;
+    if (rKey) {
+      if (merged[rKey]) {
+        var localTs  = merged[rKey]._updatedAt || 0;
+        var remoteTs = remote[j]._updatedAt || 0;
+        if (remoteTs > localTs) {
+          // 远端更新（包括墓碑 _deleted:true）胜出
+          merged[rKey] = remote[j];
+        }
+      } else {
+        // 本地没有 → 远端胜出（包括新增和墓碑）
+        merged[rKey] = remote[j];
+      }
+    }
+  }
+
+  // ★ 不过滤墓碑 — 由 watchers.js 在客户端侧过滤
+  var result = [];
+  for (var k in merged) {
+    result.push(merged[k]);
+  }
+  return result;
+}
+
+/**
  * 合并代理名單（純字符串數組，兩邊去重合併）
  * @param {Array} local - 本地名單 ['代理A','代理B']
  * @param {Array} remote - 遠端名單 ['代理B','代理C']
@@ -5846,6 +6318,115 @@ function mergeAgentLists(local, remote) {
   }
   merged.sort(function(a, b) { return a.localeCompare(b); });
   return merged;
+}
+
+// src/sync/recently-deleted.js
+/**
+ * v13 Recently Deleted Tracking Module
+ * 
+ * 依赖: core/constants.js (STORAGE_KEYS), core/store.js (Store)
+ * 影响: sync/uploader.js (syncUploadAll transactions)
+ * 
+ * 用途: 追踪最近删除的 fbKey，防止 syncUploadAll 的 transaction 在墓碑到达 Firebase 前
+ *       将远端旧数据"复活"回本地。删除操作（deleteTx/deleteFund/deleteWallet/deleteBooking）
+ *       会将 fbKey 加入追踪表，syncUploadAll 的事务中会为这些 key 强制写入墓碑。
+ * 
+ * 过期策略: 60 秒后自动清理（单个 remove*FromFirebase 推送通常 < 3 秒完成）
+ */
+
+// ============================================================================
+// 追踪表 (module-level, 不存入 State)
+// ============================================================================
+var _recentlyDeleted = [];
+
+/**
+ * 追踪删除
+ * @param {string} type - 'tx' | 'fund' | 'wallet' | 'booking' | 'agent'
+ * @param {string} key - fbKey
+ */
+function trackRecentlyDeleted(type, key) {
+  if (!type || !key) return;
+  // 去重
+  for (var i = 0; i < _recentlyDeleted.length; i++) {
+    if (_recentlyDeleted[i].type === type && _recentlyDeleted[i].key === key) {
+      _recentlyDeleted[i].at = Date.now();  // 刷新时间戳
+      saveRecentlyDeleted();
+      return;
+    }
+  }
+  _recentlyDeleted.push({ type: type, key: key, at: Date.now() });
+  saveRecentlyDeleted();
+}
+
+/**
+ * 检查是否最近删除
+ * @param {string} type
+ * @param {string} key
+ * @returns {boolean}
+ */
+function isRecentlyDeleted(type, key) {
+  for (var i = 0; i < _recentlyDeleted.length; i++) {
+    if (_recentlyDeleted[i].type === type && _recentlyDeleted[i].key === key) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * 清理过期的追踪条目
+ * @param {number} [maxAge=60000] - 最长保留毫秒数 (默认 60 秒)
+ * @returns {number} 清理的条目数
+ */
+function cleanRecentlyDeleted(maxAge) {
+  if (!maxAge) maxAge = 60000;
+  var now = Date.now();
+  var cleaned = 0;
+  for (var i = _recentlyDeleted.length - 1; i >= 0; i--) {
+    if (now - _recentlyDeleted[i].at > maxAge) {
+      _recentlyDeleted.splice(i, 1);
+      cleaned++;
+    }
+  }
+  if (cleaned > 0) {
+    saveRecentlyDeleted();
+  }
+  return cleaned;
+}
+
+// ============================================================================
+// 持久化 (localStorage)
+// ============================================================================
+
+function saveRecentlyDeleted() {
+  try {
+    Store.save(STORAGE_KEYS.RECENTLY_DELETED, _recentlyDeleted, false);
+  } catch (e) {
+    console.error('[v13:rd] saveRecentlyDeleted error:', e);
+  }
+}
+
+function loadRecentlyDeleted() {
+  try {
+    var saved = Store.load(STORAGE_KEYS.RECENTLY_DELETED, false);
+    if (Array.isArray(saved)) {
+      _recentlyDeleted = saved;
+    }
+    // 清理过期项
+    cleanRecentlyDeleted();
+    console.log('[v13:rd] Loaded ' + _recentlyDeleted.length + ' recently deleted entries');
+  } catch (e) {
+    console.error('[v13:rd] loadRecentlyDeleted error:', e);
+    _recentlyDeleted = [];
+  }
+}
+
+/**
+ * 获取当前追踪数量
+ * @returns {number}
+ */
+function getRecentlyDeletedCount() {
+  return _recentlyDeleted.length;
 }
 
 // src/ui/toast.js
@@ -5872,7 +6453,9 @@ function showToast(msg, type, duration) {
 
   var toast = document.createElement('div');
   toast.className = 'toast toast-' + (type || 'info');
-  toast.textContent = msg;
+  var iconMap = { success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️' };
+  var icon = iconMap[type] || 'ℹ️';
+  toast.textContent = icon + ' ' + msg;
 
   // 颜色
   var colors = {
@@ -6008,6 +6591,61 @@ function isModalOpen() {
   return _openModals.length > 0;
 }
 
+// ============================================================================
+// 全局自訂確認框（替代 window.confirm，兼容手機/iOS Safari/微信内嵌）
+// ============================================================================
+
+var _confirmCallback = null;
+
+/**
+ * 顯示自訂確認框（異步，不阻塞主線程）
+ * @param {string} msg - 確認訊息
+ * @param {function} onConfirm - 用戶點擊「確定」後的回調
+ * @param {object} [opts] - 可選: { okText, cancelText, okColor }
+ */
+function showConfirm(msg, onConfirm, opts) {
+  var bg = document.getElementById('g-confirm-bg');
+  var msgEl = document.getElementById('g-confirm-msg');
+  var okBtn = document.getElementById('g-confirm-ok');
+  var cancelBtn = document.getElementById('g-confirm-cancel');
+
+  if (!bg || !msgEl || !okBtn || !cancelBtn) {
+    // 降級到原生 confirm（桌面端兜底）
+    if (window.confirm(msg)) onConfirm();
+    return;
+  }
+
+  opts = opts || {};
+  msgEl.textContent = msg;
+  okBtn.textContent = opts.okText || '確定';
+  okBtn.style.background = opts.okColor || '#e53935';
+  cancelBtn.textContent = opts.cancelText || '取消';
+
+  bg.style.display = 'flex';
+  _confirmCallback = onConfirm;
+
+  // 確定
+  okBtn.onclick = function() {
+    bg.style.display = 'none';
+    _confirmCallback = null;
+    onConfirm();
+  };
+
+  // 取消
+  cancelBtn.onclick = function() {
+    bg.style.display = 'none';
+    _confirmCallback = null;
+  };
+
+  // 點背景取消
+  bg.onclick = function(e) {
+    if (e.target === bg) {
+      bg.style.display = 'none';
+      _confirmCallback = null;
+    }
+  };
+}
+
 // 监听事件
 Events.on(EVENTS.MODAL_OPEN, function(data) { openModal(data.id, data.data); });
 Events.on(EVENTS.MODAL_CLOSE, function(data) { closeModal(data ? data.id : null); });
@@ -6057,6 +6695,20 @@ function initKeyboard() {
       return;
     }
 
+    // Ctrl + ◀ (ArrowLeft): 上个月
+    if (ctrl && e.key === 'ArrowLeft') {
+      e.preventDefault();
+      if (typeof switchMonth === 'function') switchMonth(-1);
+      return;
+    }
+
+    // Ctrl + ▶ (ArrowRight): 下个月
+    if (ctrl && e.key === 'ArrowRight') {
+      e.preventDefault();
+      if (typeof switchMonth === 'function') switchMonth(1);
+      return;
+    }
+
     // ?: 快捷键帮助
     if (e.key === '?' && !ctrl) {
       e.preventDefault();
@@ -6082,12 +6734,45 @@ function initKeyboard() {
  * 对照档: 第七节模块6 (showPage)
  */
 
+/** 页面切换进度条控制器 */
+var _progressTimer = null;
+
+function _startProgress() {
+  var bar = document.getElementById('page-progress-bar');
+  if (!bar) return;
+  bar.classList.remove('done');
+  bar.classList.add('active');
+  bar.style.width = '0%';
+  // 强制回流后动画到 ~80%
+  requestAnimationFrame(function() {
+    requestAnimationFrame(function() {
+      bar.style.width = '75%';
+    });
+  });
+}
+
+function _finishProgress() {
+  var bar = document.getElementById('page-progress-bar');
+  if (!bar) return;
+  bar.style.width = '100%';
+  bar.classList.add('done');
+  bar.classList.remove('active');
+  // 动画完成后重置
+  setTimeout(function() {
+    bar.style.width = '0%';
+    bar.classList.remove('done');
+  }, 600);
+}
+
 /**
  * 切换到指定页面
  * @param {string} pageName - 'overview'|'all'|'query'|'summary'|'room'|'wallet'
  * @param {Element} [sidebarEl] - 侧边栏点击的元素
  */
 function showPage(pageName, sidebarEl) {
+  // 启动进度条
+  _startProgress();
+
   // 隐藏所有页面
   var pages = document.querySelectorAll('.page');
   for (var i = 0; i < pages.length; i++) {
@@ -6129,6 +6814,9 @@ function showPage(pageName, sidebarEl) {
 
   // 刷新对应页面数据
   _refreshPage(pageName);
+
+  // 完成进度条
+  _finishProgress();
 }
 
 /**
@@ -6381,12 +7069,12 @@ function _renderKPI(kpi) {
   }
 
   var cards = [
-    { label: TERMS.volume,  value: fmt(kpi.totalVolume),  unit: '萬', accent: 'cyan', color: UI_COLORS.techCyan },
-    { label: TERMS.comm,    value: fmtMoney(kpi.totalComm),   accent: 'blue',  color: UI_COLORS.skyBlue },
-    { label: TERMS.bonus,   value: fmtMoney(kpi.totalBonus),  accent: 'violet',color: UI_COLORS.electricViolet },
-    { label: TERMS.fund,    value: fmtMoney(kpi.totalFund),   accent: 'gold',  color: UI_COLORS.goldSoft },
-    { label: TERMS.drawn,   value: fmtMoney(kpi.totalDrawn),  accent: 'orange',color: UI_COLORS.warning },
-    { label: TERMS.undrawn, value: fmtMoney(kpi.totalUndrawn),accent: 'red',   color: UI_COLORS.danger },
+    { label: '📊 ' + TERMS.volume,  value: fmt(kpi.totalVolume),  raw: kpi.totalVolume,  cuOpts: { suffix: '萬' },       accent: 'cyan', color: UI_COLORS.techCyan },
+    { label: '💰 ' + TERMS.comm,    value: fmtMoney(kpi.totalComm),   raw: kpi.totalComm,    cuOpts: { prefix: '¥' },         accent: 'blue',  color: UI_COLORS.skyBlue },
+    { label: '🎁 ' + TERMS.bonus,   value: fmtMoney(kpi.totalBonus),  raw: kpi.totalBonus,   cuOpts: { prefix: '¥' },         accent: 'violet',color: UI_COLORS.electricViolet },
+    { label: '🏦 ' + TERMS.fund,    value: fmtMoney(kpi.totalFund),   raw: kpi.totalFund,    cuOpts: { prefix: '¥' },         accent: 'gold',  color: UI_COLORS.goldSoft },
+    { label: '📤 ' + TERMS.drawn,   value: fmtMoney(kpi.totalDrawn),  raw: kpi.totalDrawn,   cuOpts: { prefix: '¥' },         accent: 'orange',color: UI_COLORS.warning },
+    { label: '📥 ' + TERMS.undrawn, value: fmtMoney(kpi.totalUndrawn),raw: kpi.totalUndrawn, cuOpts: { prefix: '¥' },         accent: 'red',   color: UI_COLORS.danger },
   ];
 
   grid.innerHTML = '';
@@ -6398,7 +7086,9 @@ function _renderKPI(kpi) {
 
     var label = h('div', { className: 'kpi-card-label' }, c.label);
     var value = h('div', { className: 'kpi-card-value ' + c.accent });
-    value.innerHTML = c.value + (c.unit ? ' <span style="font-size:14px;opacity:0.6">' + c.unit + '</span>' : '');
+    value.textContent = '0';  // countUp 起始值
+    value._cuRaw = c.raw;
+    value._cuOpts = c.cuOpts;
 
     card.appendChild(label);
     card.appendChild(value);
@@ -6411,11 +7101,29 @@ function _renderKPI(kpi) {
     grid.appendChild(card);
   }
 
+  // KPI 数字动画 (countUp)
+  var valueEls = grid.querySelectorAll('.kpi-card-value');
+  for (var j = 0; j < valueEls.length; j++) {
+    var el = valueEls[j];
+    if (el._cuRaw != null) {
+      countUp(el, el._cuRaw, el._cuOpts || {});
+    }
+  }
+
   // 笔数/代理数
   var info = h('div', { className: 'kpi-info' });
   info.style.cssText = 'grid-column:1/-1;text-align:center;padding:10px 0;font-size:12px;color:var(--text-muted)';
   info.textContent = '共 ' + kpi.txCount + ' 筆交易 · ' + kpi.agentCount + ' 位代理';
   grid.appendChild(info);
+
+  // ★ countUp 动画
+  var vals = grid.querySelectorAll('.kpi-card-value');
+  for (var j = 0; j < vals.length; j++) {
+    var v = vals[j];
+    if (v._cuRaw != null && typeof countUp === 'function') {
+      countUp(v, v._cuRaw, v._cuOpts);
+    }
+  }
 }
 
 function _renderRecentActivity(txs) {
@@ -6461,15 +7169,82 @@ function _renderRecentActivity(txs) {
  * 对照档: 第七节模块14
  */
 
+// 表格排序状态
+var _allSortCol = null;
+var _allSortDir = 'asc';  // 'asc' | 'desc'
+var _allTableSortInited = false;
+
+/** 初始化全部交易表排序表头点击 */
+function _initAllTableSort() {
+  var ths = document.querySelectorAll('#all-table th.th-sortable');
+  for (var i = 0; i < ths.length; i++) {
+    (function(th) {
+      th.style.cursor = 'pointer';
+      th.addEventListener('click', function() {
+        var col = th.getAttribute('data-sort');
+        if (!col) return;
+        if (_allSortCol === col) {
+          _allSortDir = _allSortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+          _allSortCol = col;
+          _allSortDir = 'asc';
+        }
+        // 更新 UI 指示器
+        var allThs = document.querySelectorAll('#all-table th.th-sortable');
+        for (var j = 0; j < allThs.length; j++) {
+          allThs[j].classList.remove('th-sort-asc', 'th-sort-desc');
+        }
+        th.classList.add(_allSortDir === 'asc' ? 'th-sort-asc' : 'th-sort-desc');
+        renderAll();
+      });
+    })(ths[i]);
+  }
+}
+
+/** 对交易数组按指定列排序 */
+function _sortTxs(txs, col, dir) {
+  var fn = function(a, b) {
+    var va, vb;
+    switch (col) {
+      case 'type':    va = (a.type === 'cash') ? 1 : 0; vb = (b.type === 'cash') ? 1 : 0; break;
+      case 'date':    va = a.date || ''; vb = b.date || ''; break;
+      case 'agent':   va = a.agent || ''; vb = b.agent || ''; break;
+      case 'client':  va = a.client || ''; vb = b.client || ''; break;
+      case 'venue':   va = a.venue || ''; vb = b.venue || ''; break;
+      case 'volume':  va = toNum(a.volume); vb = toNum(b.volume); break;
+      case 'comm':    va = toNum(a.comm); vb = toNum(b.comm); break;
+      case 'bonus':   va = toNum(a.bonus); vb = toNum(b.bonus); break;
+      case 'drawn':   va = toNum(a.drawn); vb = toNum(b.drawn); break;
+      case 'undrawn': va = toNum(a.undrawn); vb = toNum(b.undrawn); break;
+      default: return 0;
+    }
+    if (va < vb) return -1;
+    if (va > vb) return 1;
+    return 0;
+  };
+  var sorted = txs.slice();
+  sorted.sort(fn);
+  if (dir === 'desc') sorted.reverse();
+  return sorted;
+}
+
 function renderAll() {
   var txs = State.get('txs');
   var month = State.get('workingMonth');
+
+  // ★ 首次初始化排序表头
+  if (!_allTableSortInited) { _initAllTableSort(); _allTableSortInited = true; }
 
   // ★ try-catch 包裹，防止单个渲染阶段崩溃导致页面卡死
   try {
     if (month) txs = filterByMonth(txs, month);
   } catch (e) {
     console.error('[v13:all] filterByMonth 崩溃:', e);
+  }
+
+  // ★ 应用排序
+  if (_allSortCol) {
+    try { txs = _sortTxs(txs, _allSortCol, _allSortDir); } catch (e) { console.error('[v13:all] sort 崩溃:', e); }
   }
 
   try {
@@ -6497,18 +7272,26 @@ function _renderAllKPI(txs) {
   mini.innerHTML = '';
 
   var items = [
-    { label: TERMS.volume, value: fmt(_totalVol) + '萬', accent: 'cyan',  color: UI_COLORS.techCyan },
-    { label: TERMS.comm,   value: fmtMoney(_totalComm),  accent: 'blue',  color: UI_COLORS.skyBlue },
-    { label: TERMS.bonus,  value: fmtMoney(_totalBonus), accent: 'violet',color: UI_COLORS.electricViolet },
-    { label: TERMS.fund,   value: fmtMoney(_totalFund),  accent: 'gold',  color: UI_COLORS.goldSoft },
+    { label: '📊 ' + TERMS.volume, raw: _totalVol, cuOpts: { suffix: '萬' },       accent: 'cyan',  color: UI_COLORS.techCyan },
+    { label: '💰 ' + TERMS.comm,   raw: _totalComm,cuOpts: { prefix: '¥' },         accent: 'blue',  color: UI_COLORS.skyBlue },
+    { label: '🎁 ' + TERMS.bonus,  raw: _totalBonus,cuOpts: { prefix: '¥' },        accent: 'violet',color: UI_COLORS.electricViolet },
+    { label: '🏦 ' + TERMS.fund,   raw: _totalFund, cuOpts: { prefix: '¥' },        accent: 'gold',  color: UI_COLORS.goldSoft },
   ];
 
   for (var i = 0; i < items.length; i++) {
     var item = h('div', { className: 'kpi-card' });
     item.style.borderLeft = '3px solid ' + items[i].color;
     item.innerHTML = '<div class="kpi-card-label">' + items[i].label + '</div>' +
-                     '<div class="kpi-card-value ' + items[i].accent + '" style="font-size:18px">' + items[i].value + '</div>';
+                     '<div class="kpi-card-value ' + items[i].accent + '" style="font-size:18px">0</div>';
     mini.appendChild(item);
+  }
+
+  // ★ countUp 动画
+  var vals = mini.querySelectorAll('.kpi-card-value');
+  for (var j = 0; j < vals.length; j++) {
+    if (items[j] && items[j].raw != null && typeof countUp === 'function') {
+      countUp(vals[j], items[j].raw, items[j].cuOpts);
+    }
   }
 }
 
@@ -6538,8 +7321,11 @@ function _renderAllTable(txs) {
       });
       tr.style.cursor = 'pointer';
 
+      // ★ 类型彩色标签 (#28)
+      var typeClass = tx.type === 'cash' ? 'cash' : 'roll';
+      var typeLabel = tx.type === 'cash' ? '現金' : '轉碼';
       var cells = [
-        tx.type === 'cash' ? '現金' : '轉碼',
+        '<span class="tx-type-tag ' + typeClass + '">' + typeLabel + '</span>',
         tx.date,
         tx.agent,
         tx.client || '-',
@@ -6553,7 +7339,10 @@ function _renderAllTable(txs) {
       ];
 
       for (var j = 0; j < cells.length; j++) {
-        var td = h('td', {}, cells[j]);
+        var tdAttrs = {};
+        // 數字欄位: 洗碼量/佣金/碼糧/已提領/未提領 → 右對齊 + 等寬數字
+        if (j >= 5 && j <= 9) tdAttrs.class = 'text-right num-mono';
+        var td = h('td', tdAttrs, cells[j]);
         tr.appendChild(td);
       }
 
@@ -6561,15 +7350,13 @@ function _renderAllTable(txs) {
       var fbKey = tx._fbKey;
       var tdBtn = h('td');
       var delBtn = h('button', {
-        style: 'background:' + UI_COLORS.danger + ';color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px'
+        className: 'btn btn-danger btn-sm'
       }, '刪除');
       delBtn.onclick = (function(key) {
         return function(e) {
           e.stopPropagation();
           console.log('[v13:all] 🗑️ 刪除按鈕點擊, fbKey=' + key);
-          var confirmed = confirm('確定刪除這筆交易？');
-          console.log('[v13:all] confirm 返回值: ' + confirmed);
-          if (confirmed) {
+          showConfirm('確定刪除這筆交易？', function() {
             console.log('[v13:all] 📤 呼叫 deleteTx(' + key + ')...');
             var result = deleteTx(key);
             console.log('[v13:all] deleteTx 返回: ' + (result ? '成功 (' + result._fbKey + ')' : 'null (刪除失敗!)'));
@@ -6583,7 +7370,7 @@ function _renderAllTable(txs) {
               console.log('[v13:all] ⚠️ 數據已成功刪除，請手動刷新頁面');
             }
             console.log('[v13:all] ✅ renderAll 完成, 當前 txs 數量: ' + State.get('txs').length);
-          }
+          });
         };
       })(fbKey);
       tdBtn.appendChild(delBtn);
@@ -6601,11 +7388,68 @@ function _renderAllTable(txs) {
  * 对照档: 第七节模块13 + v12 query.js
  */
 
+// 查询表排序状态
+var _querySortCol = null;
+var _querySortDir = 'asc';
+var _queryTableSortInited = false;
+
+/** 初始化查询表排序表头点击 */
+function _initQueryTableSort() {
+  var ths = document.querySelectorAll('#query-table th.th-sortable');
+  for (var i = 0; i < ths.length; i++) {
+    (function(th) {
+      th.style.cursor = 'pointer';
+      th.addEventListener('click', function() {
+        var col = th.getAttribute('data-sort');
+        if (!col) return;
+        if (_querySortCol === col) {
+          _querySortDir = _querySortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+          _querySortCol = col;
+          _querySortDir = 'asc';
+        }
+        var allThs = document.querySelectorAll('#query-table th.th-sortable');
+        for (var j = 0; j < allThs.length; j++) {
+          allThs[j].classList.remove('th-sort-asc', 'th-sort-desc');
+        }
+        th.classList.add(_querySortDir === 'asc' ? 'th-sort-asc' : 'th-sort-desc');
+        doQuery();
+      });
+    })(ths[i]);
+  }
+}
+
+/** 对查询结果按指定列排序 */
+function _sortQueryResults(txs, col, dir) {
+  var fn = function(a, b) {
+    var va, vb;
+    switch (col) {
+      case 'date':    va = a.date || ''; vb = b.date || ''; break;
+      case 'agent':   va = a.agent || ''; vb = b.agent || ''; break;
+      case 'venue':   va = a.venue || ''; vb = b.venue || ''; break;
+      case 'volume':  va = toNum(a.volume); vb = toNum(b.volume); break;
+      case 'bonus':   va = toNum(a.bonus); vb = toNum(b.bonus); break;
+      case 'drawn':   va = toNum(a.drawn); vb = toNum(b.drawn); break;
+      case 'undrawn': va = toNum(a.undrawn); vb = toNum(b.undrawn); break;
+      default: return 0;
+    }
+    if (va < vb) return -1;
+    if (va > vb) return 1;
+    return 0;
+  };
+  var sorted = txs.slice();
+  sorted.sort(fn);
+  if (dir === 'desc') sorted.reverse();
+  return sorted;
+}
+
 /** 入口：弹出所有下拉并执行默认查询（本月） */
 function renderQuery() {
   _populateQueryFilters();
   _setDefaultMonth();
   _highlightQuickBtn('thisMonth');
+  // ★ 初始化查询表排序
+  if (!_queryTableSortInited) { _initQueryTableSort(); _queryTableSortInited = true; }
   doQuery();
 }
 
@@ -6809,6 +7653,11 @@ function doQuery() {
 
     var filtered = filterTxs(txs, criteria);
 
+    // ★ 应用表格排序
+    if (_querySortCol) {
+      try { filtered = _sortQueryResults(filtered, _querySortCol, _querySortDir); } catch(e) { console.error('[doQuery] sort 崩溃:', e); }
+    }
+
     // 获取选定的月份（用于 pre-balance 和月份过滤）
     var queryMonth = criteria.month || '';
     if (!queryMonth && criteria.dateFrom) {
@@ -6854,18 +7703,26 @@ function _renderQueryKPI(txs) {
   el.innerHTML = '';
 
   var items = [
-    { label: TERMS.volume,  value: fmt(vol) + '萬', accent: 'cyan',   color: UI_COLORS.techCyan },
-    { label: TERMS.comm,    value: fmtMoney(comm), accent: 'blue',    color: UI_COLORS.skyBlue },
-    { label: TERMS.undrawn, value: fmtMoney(undrawn), accent: 'orange', color: UI_COLORS.warning },
-    { label: '💰 總錢包',   value: fmtMoney(totalWallet), accent: 'gold',   color: UI_COLORS.goldSoft },
+    { label: TERMS.volume,  raw: vol,        cuOpts: { suffix: '萬' }, accent: 'cyan',   color: UI_COLORS.techCyan },
+    { label: TERMS.comm,    raw: comm,       cuOpts: { prefix: '¥' },  accent: 'blue',    color: UI_COLORS.skyBlue },
+    { label: TERMS.undrawn, raw: undrawn,    cuOpts: { prefix: '¥' },  accent: 'orange', color: UI_COLORS.warning },
+    { label: '💰 總錢包',   raw: totalWallet, cuOpts: { prefix: '¥' },  accent: 'gold',   color: UI_COLORS.goldSoft },
   ];
 
   for (var i = 0; i < items.length; i++) {
     var card = h('div', { className: 'kpi-card' });
     card.style.borderLeft = '3px solid ' + items[i].color;
     card.innerHTML = '<div class="kpi-card-label">' + items[i].label + '</div>' +
-                     '<div class="kpi-card-value ' + items[i].accent + '" style="font-size:20px">' + items[i].value + '</div>';
+                     '<div class="kpi-card-value ' + items[i].accent + '" style="font-size:20px">0</div>';
     el.appendChild(card);
+  }
+
+  // ★ countUp 动画
+  var vals = el.querySelectorAll('.kpi-card-value');
+  for (var j = 0; j < vals.length; j++) {
+    if (items[j] && items[j].raw != null && typeof countUp === 'function') {
+      countUp(vals[j], items[j].raw, items[j].cuOpts);
+    }
   }
 
   // 隐藏代理帐务汇总
@@ -6880,7 +7737,7 @@ function _renderQueryTable(txs) {
 
   // 恢复默认表头
   if (thead) {
-    thead.innerHTML = '<tr><th>日期</th><th>代理</th><th>地點</th><th>洗碼量</th><th>碼糧</th><th>已提領</th><th>未提領</th><th>備註</th></tr>';
+    thead.innerHTML = '<tr><th>日期</th><th>代理</th><th>地點</th><th class="text-right">洗碼量</th><th class="text-right">碼糧</th><th class="text-right">已提領</th><th class="text-right">未提領</th><th>備註</th></tr>';
   }
 
   tbody.innerHTML = '';
@@ -6889,7 +7746,9 @@ function _renderQueryTable(txs) {
     var tr = h('tr');
     var cells = [tx.date, tx.agent, tx.venue, fmt(tx.volume) + '萬', fmtMoney(tx.bonus), fmtMoney(tx.drawn), fmtMoney(tx.undrawn), tx.note || ''];
     for (var j = 0; j < cells.length; j++) {
-      tr.appendChild(h('td', {}, cells[j]));
+      var tdAttrs = {};
+      if (j >= 3 && j <= 6) tdAttrs.class = 'text-right num-mono';
+      tr.appendChild(h('td', tdAttrs, cells[j]));
     }
     tbody.appendChild(tr);
   }
@@ -6907,7 +7766,9 @@ function _renderQueryAgentSummary(txs) {
     var tr = h('tr');
     var cells = [a.agent, fmt(a.volume) + '萬', fmtMoney(a.bonus), fmtMoney(a.drawn), fmtMoney(a.undrawn), fmtMoney(balance)];
     for (var j = 0; j < cells.length; j++) {
-      tr.appendChild(h('td', {}, cells[j]));
+      var tdAttrs = {};
+      if (j >= 1) tdAttrs.class = 'text-right num-mono';
+      tr.appendChild(h('td', tdAttrs, cells[j]));
     }
     agentTable.appendChild(tr);
   }
@@ -7004,20 +7865,28 @@ function _renderFundLedger() {
     kpiEl.innerHTML = '';
 
     var kpiItems = [
-      { label: '公基金總額', value: fmtMoney(totalFundIncome), color: UI_COLORS.goldSoft },
-      { label: '已提領',      value: fmtMoney(totalW),          color: UI_COLORS.danger },
-      { label: '可提餘額',    value: fmtMoney(balance),         color: UI_COLORS.warning },
+      { label: '公基金總額', raw: totalFundIncome, color: UI_COLORS.goldSoft },
+      { label: '已提領',      raw: totalW,          color: UI_COLORS.danger },
+      { label: '可提餘額',    raw: balance,         color: UI_COLORS.warning },
     ];
     if (totalCDep > 0) {
-      kpiItems.splice(1, 0, { label: '自存現金', value: fmtMoney(totalCDep), color: UI_COLORS.cashOrange });
+      kpiItems.splice(1, 0, { label: '自存現金', raw: totalCDep, color: UI_COLORS.cashOrange });
     }
 
     for (var i = 0; i < kpiItems.length; i++) {
       var card = h('div', { className: 'kpi-card' });
       card.style.borderLeft = '3px solid ' + kpiItems[i].color;
       card.innerHTML = '<div class="kpi-card-label">' + kpiItems[i].label + '</div>' +
-                       '<div class="kpi-card-value" style="font-size:20px;color:' + kpiItems[i].color + '">' + kpiItems[i].value + '</div>';
+                       '<div class="kpi-card-value" style="font-size:20px;color:' + kpiItems[i].color + '">0</div>';
       kpiEl.appendChild(card);
+    }
+
+    // ★ countUp 动画
+    var vals = kpiEl.querySelectorAll('.kpi-card-value');
+    for (var j = 0; j < vals.length; j++) {
+      if (kpiItems[j] && kpiItems[j].raw != null && typeof countUp === 'function') {
+        countUp(vals[j], kpiItems[j].raw, { prefix: '¥' });
+      }
     }
 
     // ＋ 提领 按钮
@@ -7032,7 +7901,7 @@ function _renderFundLedger() {
   if (!tbody) return;
 
   if (thead) {
-    thead.innerHTML = '<tr><th>日期</th><th>說明</th><th class="num">入帳</th><th class="num">提領</th><th>操作</th><th class="num">基金餘額</th></tr>';
+    thead.innerHTML = '<tr><th>日期</th><th>說明</th><th class="text-right num-mono">入帳</th><th class="text-right num-mono">提領</th><th>操作</th><th class="text-right num-mono">基金餘額</th></tr>';
   }
 
   tbody.innerHTML = '';
@@ -7040,8 +7909,8 @@ function _renderFundLedger() {
   // 上月累计行
   if (!skipMonthFilter && preBalance > 0) {
     var pr = h('tr');
-    pr.style.cssText = 'background:rgba(201,168,76,0.08);'; // derived from UI_COLORS.goldSoft
-    pr.innerHTML = '<td>' + (queryMonth || dateFrom).substring(0, 7) + '-01</td><td style="color:' + UI_COLORS.goldSoft + ';font-weight:600;">上月累計</td><td class="num"></td><td class="num"></td><td></td><td class="num" style="font-weight:700;color:' + UI_COLORS.goldSoft + ';">' + fmtMoney(preBalance) + '</td>';
+    pr.style.cssText = 'background:' + hexToRgba(UI_COLORS.goldSoft, 0.08) + ';';
+    pr.innerHTML = '<td>' + (queryMonth || dateFrom).substring(0, 7) + '-01</td><td style="color:' + UI_COLORS.goldSoft + ';font-weight:600;">上月累計</td><td class="text-right num-mono"></td><td class="text-right num-mono"></td><td></td><td class="text-right num-mono" style="font-weight:700;color:' + UI_COLORS.goldSoft + ';">' + fmtMoney(preBalance) + '</td>';
     tbody.appendChild(pr);
   }
 
@@ -7066,21 +7935,21 @@ function _renderFundLedger() {
     }
 
     var tr = h('tr');
-    var typeClr = e.type === '提領' ? 'color:#f85149;font-weight:600;' : (e.type === '存入' ? 'color:#58a6ff;' : (e.type === '自存現金' ? 'color:#e67e22;font-weight:600;' : 'color:' + UI_COLORS.goldSoft + ';'));
+    var typeClr = e.type === '提領' ? 'color:' + UI_COLORS.danger + ';font-weight:600;' : (e.type === '存入' ? 'color:' + UI_COLORS.info + ';' : (e.type === '自存現金' ? 'color:' + UI_COLORS.cashOrange + ';font-weight:600;' : 'color:' + UI_COLORS.goldSoft + ';'));
 
     var delBtn = e.source === 'fund'
       ? '<button class="btn-red" onclick="deleteFundRecord(\'' + (e._fbKey || e.id) + '\')">刪除</button>'
-      : '<span style="color:#6e7681;font-size:11px;">自動</span>';
+      : '<span style="color:' + UI_COLORS.textMuted + ';font-size:11px;">自動</span>';
 
     var inVal = (e.type === '入帳' || e.type === '存入' || e.type === '自存現金') ? fmtMoney(e.amount) : '';
     var outVal = (e.type === '提領') ? fmtMoney(e.amount) : '';
 
     tr.innerHTML = '<td>' + e.date + '</td>' +
       '<td style="' + typeClr + '">' + e.desc + '</td>' +
-      '<td class="num" style="color:' + UI_COLORS.goldSoft + ';">' + inVal + '</td>' +
-      '<td class="num" style="color:#f85149;">' + outVal + '</td>' +
+      '<td class="text-right num-mono" style="color:' + UI_COLORS.goldSoft + ';">' + inVal + '</td>' +
+      '<td class="text-right num-mono" style="color:' + UI_COLORS.danger + ';">' + outVal + '</td>' +
       '<td>' + delBtn + '</td>' +
-      '<td class="num" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
+      '<td class="text-right num-mono" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
     tbody.appendChild(tr);
   }
 
@@ -7248,26 +8117,34 @@ function _renderAgentLedger(agent, filteredTxs, queryMonth) {
     kpiEl.innerHTML = '';
 
     var kpiItems = [
-      { label: '碼糧總額', value: fmtMoney(allBonus), color: UI_COLORS.goldSoft },
+      { label: '碼糧總額', raw: allBonus,  color: UI_COLORS.goldSoft },
     ];
     if (allCash > 0) {
-      kpiItems.push({ label: '現金寄放', value: fmtMoney(allCash), color: UI_COLORS.cashOrange });
+      kpiItems.push({ label: '現金寄放', raw: allCash,  color: UI_COLORS.cashOrange });
     }
     if (awDep > 0) {
-      kpiItems.push({ label: '錢包存入', value: fmtMoney(awDep), color: UI_COLORS.skyBlue });
+      kpiItems.push({ label: '錢包存入', raw: awDep,    color: UI_COLORS.skyBlue });
     }
     if (awCDep > 0) {
-      kpiItems.push({ label: '自存現金', value: fmtMoney(awCDep), color: UI_COLORS.cashOrange });
+      kpiItems.push({ label: '自存現金', raw: awCDep,   color: UI_COLORS.cashOrange });
     }
-    kpiItems.push({ label: '已提領', value: fmtMoney(allDrawn), color: UI_COLORS.danger });
-    kpiItems.push({ label: '未提領', value: fmtMoney(awBalance), color: UI_COLORS.warning });
+    kpiItems.push({ label: '已提領', raw: allDrawn,    color: UI_COLORS.danger });
+    kpiItems.push({ label: '未提領', raw: awBalance,    color: UI_COLORS.warning });
 
     for (var i = 0; i < kpiItems.length; i++) {
       var card = h('div', { className: 'kpi-card' });
       card.style.borderLeft = '3px solid ' + kpiItems[i].color;
       card.innerHTML = '<div class="kpi-card-label">' + kpiItems[i].label + '</div>' +
-                       '<div class="kpi-card-value" style="font-size:20px;color:' + kpiItems[i].color + '">' + kpiItems[i].value + '</div>';
+                       '<div class="kpi-card-value" style="font-size:20px;color:' + kpiItems[i].color + '">0</div>';
       kpiEl.appendChild(card);
+    }
+
+    // ★ countUp 动画
+    var vals = kpiEl.querySelectorAll('.kpi-card-value');
+    for (var j = 0; j < vals.length; j++) {
+      if (kpiItems[j] && kpiItems[j].raw != null && typeof countUp === 'function') {
+        countUp(vals[j], kpiItems[j].raw, { prefix: '¥' });
+      }
     }
 
     // ＋ 異动 按钮
@@ -7282,7 +8159,7 @@ function _renderAgentLedger(agent, filteredTxs, queryMonth) {
   if (!tbody) return;
 
   if (thead) {
-    thead.innerHTML = '<tr><th>日期</th><th>地點/說明</th><th class="num">轉碼數</th><th class="num">碼糧</th><th>操作</th><th class="num">未領餘額</th></tr>';
+    thead.innerHTML = '<tr><th>日期</th><th>地點/說明</th><th class="text-right num-mono">轉碼數</th><th class="text-right num-mono">碼糧</th><th>操作</th><th class="text-right num-mono">未領餘額</th></tr>';
   }
 
   tbody.innerHTML = '';
@@ -7295,8 +8172,8 @@ function _renderAgentLedger(agent, filteredTxs, queryMonth) {
   // 上月累计行
   if (!skipMonthFilter && preRunning > 0) {
     var pr = h('tr');
-    pr.style.cssText = 'background:rgba(201,168,76,0.08);'; // derived from UI_COLORS.goldSoft
-    pr.innerHTML = '<td>' + filterStart.substring(0, 7) + '-01</td><td style="color:' + UI_COLORS.goldSoft + ';font-weight:600;">上月累計</td><td class="num"></td><td class="num"></td><td></td><td class="num" style="font-weight:700;color:' + UI_COLORS.goldSoft + ';">' + fmtMoney(preRunning) + '</td>';
+    pr.style.cssText = 'background:' + hexToRgba(UI_COLORS.goldSoft, 0.08) + ';';
+    pr.innerHTML = '<td>' + filterStart.substring(0, 7) + '-01</td><td style="color:' + UI_COLORS.goldSoft + ';font-weight:600;">上月累計</td><td class="text-right num-mono"></td><td class="text-right num-mono"></td><td></td><td class="text-right num-mono" style="font-weight:700;color:' + UI_COLORS.goldSoft + ';">' + fmtMoney(preRunning) + '</td>';
     tbody.appendChild(pr);
   }
 
@@ -7318,46 +8195,46 @@ function _renderAgentLedger(agent, filteredTxs, queryMonth) {
     if (e.rowType === 'withdraw') {
       var val = (e._fbKey || e.id).toString();
       tr.innerHTML = '<td>' + e.date + '</td>' +
-        '<td style="color:#f85149;font-weight:700;">提領' + (e.note ? '：' + e.note : '') + '</td>' +
-        '<td class="num"></td>' +
-        '<td class="num" style="color:#f85149;font-weight:700;">-' + fmtMoney(e.amount) + '</td>' +
+        '<td style="color:' + UI_COLORS.danger + ';font-weight:700;">提領' + (e.note ? '：' + e.note : '') + '</td>' +
+        '<td class="text-right num-mono"></td>' +
+        '<td class="text-right num-mono" style="color:' + UI_COLORS.danger + ';font-weight:700;">-' + fmtMoney(e.amount) + '</td>' +
         '<td><button class="btn-red" onclick="deleteAgentWallet(\'' + agent.replace(/'/g, "\\'") + '\',\'' + val + '\')">刪除</button></td>' +
-        '<td class="num" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
+        '<td class="text-right num-mono" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
 
     } else if (e.rowType === 'aw_deposit') {
       var val = (e._fbKey || e.id).toString();
       tr.innerHTML = '<td>' + e.date + '</td>' +
-        '<td style="color:#58a6ff;font-weight:700;">存入' + (e.note ? '：' + e.note : '') + '</td>' +
-        '<td class="num"></td>' +
-        '<td class="num" style="color:#58a6ff;font-weight:700;">+' + fmtMoney(e.amount) + '</td>' +
+        '<td style="color:' + UI_COLORS.info + ';font-weight:700;">存入' + (e.note ? '：' + e.note : '') + '</td>' +
+        '<td class="text-right num-mono"></td>' +
+        '<td class="text-right num-mono" style="color:' + UI_COLORS.info + ';font-weight:700;">+' + fmtMoney(e.amount) + '</td>' +
         '<td><button class="btn-red" onclick="deleteAgentWallet(\'' + agent.replace(/'/g, "\\'") + '\',\'' + val + '\')">刪除</button></td>' +
-        '<td class="num" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
+        '<td class="text-right num-mono" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
 
     } else if (e.rowType === 'aw_cash_dep') {
       var val = (e._fbKey || e.id).toString();
       tr.innerHTML = '<td>' + e.date + '</td>' +
-        '<td style="color:#e67e22;font-weight:700;">自存現金' + (e.note ? '：' + e.note : '') + '</td>' +
-        '<td class="num"></td>' +
-        '<td class="num" style="color:#e67e22;font-weight:700;">+' + fmtMoney(e.amount) + '</td>' +
+        '<td style="color:' + UI_COLORS.cashOrange + ';font-weight:700;">自存現金' + (e.note ? '：' + e.note : '') + '</td>' +
+        '<td class="text-right num-mono"></td>' +
+        '<td class="text-right num-mono" style="color:' + UI_COLORS.cashOrange + ';font-weight:700;">+' + fmtMoney(e.amount) + '</td>' +
         '<td><button class="btn-red" onclick="deleteAgentWallet(\'' + agent.replace(/'/g, "\\'") + '\',\'' + val + '\')">刪除</button></td>' +
-        '<td class="num" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
+        '<td class="text-right num-mono" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
 
     } else if (e.rowType === 'cash') {
       tr.innerHTML = '<td>' + e.date + '</td>' +
-        '<td style="color:#e67e22;font-weight:700;">現金寄放' + (e.client ? '：' + e.client : '') + '</td>' +
-        '<td class="num"></td>' +
-        '<td class="num" style="color:#e67e22;font-weight:700;">+' + fmtMoney(e.bonus) + '</td>' +
-        '<td><span style="color:#6e7681;font-size:11px;">自動</span></td>' +
-        '<td class="num" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
+        '<td style="color:' + UI_COLORS.cashOrange + ';font-weight:700;">現金寄放' + (e.client ? '：' + e.client : '') + '</td>' +
+        '<td class="text-right num-mono"></td>' +
+        '<td class="text-right num-mono" style="color:' + UI_COLORS.cashOrange + ';font-weight:700;">+' + fmtMoney(e.bonus) + '</td>' +
+        '<td><span style="color:' + UI_COLORS.textMuted + ';font-size:11px;">自動</span></td>' +
+        '<td class="text-right num-mono" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
 
     } else {
       var volStr = e.volume > 0 ? fmt(e.volume) + '萬' : '';
       tr.innerHTML = '<td>' + e.date + '</td>' +
         '<td>' + (e.venue || '') + '(' + (e.client || '') + ')</td>' +
-        '<td class="num">' + volStr + '</td>' +
-        '<td class="num" style="color:' + UI_COLORS.goldSoft + ';">' + fmtMoney(e.bonus) + '</td>' +
-        '<td><span style="color:#6e7681;font-size:11px;">自動</span></td>' +
-        '<td class="num" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
+        '<td class="text-right num-mono">' + volStr + '</td>' +
+        '<td class="text-right num-mono" style="color:' + UI_COLORS.goldSoft + ';">' + fmtMoney(e.bonus) + '</td>' +
+        '<td><span style="color:' + UI_COLORS.textMuted + ';font-size:11px;">自動</span></td>' +
+        '<td class="text-right num-mono" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
     }
     tbody.appendChild(tr);
   }
@@ -7376,8 +8253,8 @@ function _renderAgentLedger(agent, filteredTxs, queryMonth) {
 
 function _appendTotalRow(tbody, running) {
   var tr = h('tr');
-  tr.style.cssText = 'background:rgba(22,27,34,0.8);font-weight:700;color:' + UI_COLORS.goldSoft + ';'; // bgElevated at 80% opacity
-  tr.innerHTML = '<td></td><td style="color:' + UI_COLORS.textPrimary + ';">合計</td><td class="num"></td><td class="num"></td><td></td><td class="num" style="font-size:15px;">' + fmtMoney(Math.max(0, running)) + '</td>';
+  tr.style.cssText = 'background:' + hexToRgba(UI_COLORS.bgElevated, 0.8) + ';font-weight:700;color:' + UI_COLORS.goldSoft + ';';
+  tr.innerHTML = '<td></td><td style="color:' + UI_COLORS.textPrimary + ';">合計</td><td class="text-right num-mono"></td><td class="text-right num-mono"></td><td></td><td class="text-right num-mono" style="font-size:15px;">' + fmtMoney(Math.max(0, running)) + '</td>';
   tbody.appendChild(tr);
 }
 
@@ -7496,18 +8373,26 @@ function _renderSummaryKPI(txs) {
   el.innerHTML = '';
 
   var items = [
-    { label: '總筆數', value: kpi.txCount, accent: 'cyan',   color: UI_COLORS.techCyan },
-    { label: '代理數', value: kpi.agentCount, accent: 'violet', color: UI_COLORS.electricViolet },
-    { label: TERMS.volume, value: fmt(kpi.totalVolume) + '萬', accent: 'blue',    color: UI_COLORS.skyBlue },
-    { label: TERMS.undrawn, value: fmtMoney(kpi.totalUndrawn), accent: 'orange',  color: UI_COLORS.warning },
+    { label: '總筆數', raw: kpi.txCount,       cuOpts: {},              accent: 'cyan',   color: UI_COLORS.techCyan },
+    { label: '代理數', raw: kpi.agentCount,    cuOpts: {},              accent: 'violet', color: UI_COLORS.electricViolet },
+    { label: TERMS.volume, raw: kpi.totalVolume, cuOpts: { suffix: '萬' }, accent: 'blue',    color: UI_COLORS.skyBlue },
+    { label: TERMS.undrawn, raw: kpi.totalUndrawn, cuOpts: { prefix: '¥' }, accent: 'orange',  color: UI_COLORS.warning },
   ];
 
   for (var i = 0; i < items.length; i++) {
     var card = h('div', { className: 'kpi-card' });
     card.style.borderLeft = '3px solid ' + items[i].color;
     card.innerHTML = '<div class="kpi-card-label">' + items[i].label + '</div>' +
-                     '<div class="kpi-card-value ' + items[i].accent + '">' + items[i].value + '</div>';
+                     '<div class="kpi-card-value ' + items[i].accent + '">0</div>';
     el.appendChild(card);
+  }
+
+  // ★ countUp 动画
+  var vals = el.querySelectorAll('.kpi-card-value');
+  for (var j = 0; j < vals.length; j++) {
+    if (items[j] && items[j].raw != null && typeof countUp === 'function') {
+      countUp(vals[j], items[j].raw, items[j].cuOpts);
+    }
   }
 }
 
@@ -7523,7 +8408,9 @@ function _renderSummaryTable(txs) {
     var tr = h('tr');
     var cells = [d.agent, d.venue, fmt(d.volume) + '萬', fmtMoney(d.bonus), fmtMoney(d.drawn), fmtMoney(d.undrawn)];
     for (var j = 0; j < cells.length; j++) {
-      tr.appendChild(h('td', {}, cells[j]));
+      var tdAttrs = {};
+      if (j >= 2) tdAttrs.class = 'text-right num-mono';
+      tr.appendChild(h('td', tdAttrs, cells[j]));
     }
     tbody.appendChild(tr);
   }
@@ -7604,7 +8491,7 @@ function rmReadDateSels(prefix) {
   return val;
 }
 
-/** 根据 YYYY/MM/DD 字符串反填三个 select */
+/** 根据 YYYY/MM/DD 字符串反填三个 select + 桌面端 date input */
 function rmSetDateSels(prefix, dateStr) {
   if (!dateStr) return;
   // 支持 YYYY/MM/DD 和 YYYY-MM-DD
@@ -7618,6 +8505,14 @@ function rmSetDateSels(prefix, dateStr) {
   if (dEl) dEl.value = parts[2].length === 1 ? '0' + parts[2] : parts[2];
   var hidden = $('#' + prefix);
   if (hidden) hidden.value = dateStr;
+  // 同步桌面端 date input
+  var dtEl = $('#' + prefix + '-dt');
+  if (dtEl) {
+    var y = parts[0];
+    var m = parts[1].length === 1 ? '0' + parts[1] : parts[1];
+    var d = parts[2].length === 1 ? '0' + parts[2] : parts[2];
+    dtEl.value = y + '-' + m + '-' + d;
+  }
 }
 
 var RM = {
@@ -7825,14 +8720,15 @@ var RM = {
   },
 
   delete: function(id) {
-    if (!confirm('確定刪除這筆訂房？')) return;
-    var b = getBookingById(id);
-    if (b) {
-      deleteBooking(b._fbKey);
-      RM.load();
-      RM.render();
-      toastCRUDDone();
-    }
+    showConfirm('確定刪除這筆訂房？', function() {
+      var b = getBookingById(id);
+      if (b) {
+        deleteBooking(b._fbKey);
+        RM.load();
+        RM.render();
+        toastCRUDDone();
+      }
+    });
   },
 
   // ===== 渲染 =====
@@ -7869,7 +8765,9 @@ var RM = {
       ];
 
       for (var j = 0; j < cells.length; j++) {
-        tr.appendChild(h('td', {}, String(cells[j])));
+        var tdAttrs = {};
+        if (j >= 8 && j <= 10) tdAttrs.class = 'text-right num-mono';
+        tr.appendChild(h('td', tdAttrs, String(cells[j])));
       }
 
       // 操作
@@ -7903,7 +8801,7 @@ var RM = {
     // 调试日志
     console.log('[v13:room] _updateQuota month=' + month + ' txs=' + (txs ? txs.length : 0) + ' totalVol=' + quota.totalVolume + ' usedThr=' + quota.usedThreshold + ' rooms=' + roomCount);
 
-    var pct = Math.min(100, quota.usageRate);
+    var pct = Math.min(100, Math.max(0, quota.usageRate));
     var el = $('.rm-quota-bar');
     if (el) {
       el.style.width = pct.toFixed(1) + '%';
@@ -7930,16 +8828,38 @@ var RM = {
     }
 
     var volEl = $('.rm-quota-volume');
-    if (volEl) volEl.textContent = fmt(quota.totalVolume) + '萬';
+    if (volEl) {
+      volEl.textContent = '0萬';
+      if (typeof countUp === 'function') countUp(volEl, quota.totalVolume || 0, { suffix: '萬' });
+      else volEl.textContent = fmt(quota.totalVolume) + '萬';
+    }
 
     var usedEl = $('.rm-quota-used');
-    if (usedEl) usedEl.textContent = fmt(quota.usedThreshold) + '萬';
+    if (usedEl) {
+      usedEl.textContent = '0萬';
+      if (typeof countUp === 'function') countUp(usedEl, quota.usedThreshold || 0, { suffix: '萬' });
+      else usedEl.textContent = fmt(quota.usedThreshold) + '萬';
+    }
 
     var remEl = $('.rm-quota-rem');
-    if (remEl) remEl.textContent = fmt(quota.remainingThreshold) + '萬';
+    if (remEl) {
+      remEl.textContent = '0萬';
+      if (typeof countUp === 'function') countUp(remEl, quota.remainingThreshold || 0, { suffix: '萬' });
+      else remEl.textContent = fmt(quota.remainingThreshold) + '萬';
+      // 赤字时显示红色
+      if (quota.remainingThreshold < 0) {
+        remEl.style.color = 'var(--danger)';
+      } else {
+        remEl.style.color = '';
+      }
+    }
 
     var countEl = $('.rm-booking-count');
-    if (countEl) countEl.textContent = roomCount + '間';
+    if (countEl) {
+      countEl.textContent = '0間';
+      if (typeof countUp === 'function') countUp(countEl, roomCount || 0, { suffix: '間' });
+      else countEl.textContent = roomCount + '間';
+    }
   },
 
   // ===== 辅助 =====
@@ -8454,12 +9374,13 @@ function _renderFlowTable() {
     var flow = flows[f];
     var isOut = flow.sign < 0;
     var tc = isOut ? 'wf-withdraw' : 'wf-deposit';
-    var prefix = isOut ? '-' : '+';
-    html += '<tr>' +
+    var rowClass = isOut ? 'row-withdraw' : 'row-deposit';
+    var prefix = isOut ? '↓ -' : '↑ +';
+    html += '<tr class="' + rowClass + '">' +
       '<td>' + flow.date + '</td>' +
       '<td class="wf-source">' + flow.source + '</td>' +
       '<td class="' + tc + '">' + flow.type + '</td>' +
-      '<td class="' + tc + '" style="text-align:right">' + prefix + fmtMoney(flow.amount) + '</td>' +
+      '<td class="' + tc + ' num-mono" style="text-align:right">' + prefix + fmtMoney(flow.amount) + '</td>' +
       '<td>' + flow.note + '</td>' +
       '</tr>';
   }
@@ -8539,13 +9460,13 @@ function _renderFundCard() {
     return (b.date || '').replace(/\//g, '-').localeCompare((a.date || '').replace(/\//g, '-'));
   });
 
-  // 渲染卡片 — 复用代理钱包卡片样式 (.wallet-agent-card 系列)，视觉统一
-  var html = '<div class="wallet-agent-grid"><div class="wallet-agent-card">' +
-    '<div class="wallet-agent-card-header">' +
-      '<span class="wa-name">🏦 公基金</span>' +
-      '<span class="wa-balance">' + fmtMoney(balance) + '</span>' +
+  // 渲染卡片 — 独立金边主题，与代理钱包卡片视觉区分
+  var html = '<div class="wallet-fund-card">' +
+    '<div class="wallet-fund-card-header">' +
+      '<span class="wfc-name">🏦 公基金</span>' +
+      '<span class="wfc-balance">' + fmtMoney(balance) + '</span>' +
     '</div>' +
-    '<div class="wallet-agent-card-body">' +
+    '<div class="wallet-fund-card-body">' +
       '<table>' +
         '<thead><tr><th>佣金公基金</th><th>存入</th><th>自存現金</th><th>提領</th></tr></thead>' +
         '<tbody><tr>' +
@@ -8580,7 +9501,7 @@ function _renderFundCard() {
     html += '</tbody></table></div>';
   }
 
-  html += '</div></div>';  // 关闭 .wallet-agent-card 和 .wallet-agent-grid
+  html += '</div>';  // 关闭 .wallet-fund-card
 
   container.innerHTML = html;
 }
@@ -8700,23 +9621,56 @@ function _renderAgentWalletCards() {
 
 var _trendChart = null;
 
+/** 设置 Chart.js 全局 tooltip 暗色主题 */
+function _initChartDefaults() {
+  if (typeof Chart === 'undefined' || _initChartDefaults._done) return;
+  _initChartDefaults._done = true;
+  Chart.defaults.plugins.tooltip.backgroundColor = UI_COLORS.bgElevated;
+  Chart.defaults.plugins.tooltip.titleColor = UI_COLORS.textPrimary;
+  Chart.defaults.plugins.tooltip.bodyColor = UI_COLORS.textSecondary;
+  Chart.defaults.plugins.tooltip.borderColor = UI_COLORS.borderSubtle;
+  Chart.defaults.plugins.tooltip.borderWidth = 1;
+  Chart.defaults.plugins.tooltip.padding = 10;
+  Chart.defaults.plugins.tooltip.cornerRadius = 8;
+  Chart.defaults.plugins.tooltip.displayColors = false;
+}
+
 function renderTrendChart(txs, month) {
   if (typeof Chart === 'undefined') return;
+  _initChartDefaults();
   var canvas = document.querySelector('#page-overview .chart-full canvas');
   if (!canvas) return;
 
   var data = aggregateByDay(txs, month || State.get('workingMonth'));
+  var chartContainer = canvas.parentElement;
+  if (!chartContainer) return;
+
+  // ★ 无数据 → 显示空状态
+  if (data.length === 0) {
+    canvas.style.display = 'none';
+    var emptyEl = chartContainer.querySelector('.chart-empty');
+    if (!emptyEl) {
+      chartContainer.insertAdjacentHTML('beforeend', '<div class="chart-empty"><svg class="empty-svg" viewBox="0 0 120 90" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted);opacity:0.35"><line x1="10" y1="80" x2="110" y2="80" stroke="currentColor" opacity="0.3"/><polyline points="20,80 35,50 50,65 65,30 80,45 95,20" stroke="currentColor" stroke-width="2" fill="none" opacity="0.4"/><circle cx="35" cy="50" r="3" fill="currentColor" opacity="0.4"/><circle cx="65" cy="30" r="3" fill="currentColor" opacity="0.4"/><circle cx="95" cy="20" r="3" fill="currentColor" opacity="0.4"/></svg><div class="empty-text">暫無趨勢數據</div><div class="empty-hint">新增交易後此處顯示每日洗碼量趨勢</div></div>');
+    } else { emptyEl.style.display = ''; }
+    if (window._trendChart) { window._trendChart.destroy(); window._trendChart = null; }
+    return;
+  }
+
+  // 有数据 → 显示图表
+  canvas.style.display = '';
+  var existingEmpty = chartContainer.querySelector('.chart-empty');
+  if (existingEmpty) existingEmpty.style.display = 'none';
 
   var labels = [];
   var volumes = [];
   for (var i = 0; i < data.length; i++) {
-    labels.push(data[i].date.substring(5)); // MM-DD
+    labels.push(data[i].date.substring(5));
     volumes.push(data[i].volume);
   }
 
-  if (_trendChart) _trendChart.destroy();
+  if (window._trendChart) window._trendChart.destroy();
 
-  _trendChart = new Chart(canvas, {
+  window._trendChart = new Chart(canvas, {
     type: 'line',
     data: {
       labels: labels,
@@ -8724,7 +9678,7 @@ function renderTrendChart(txs, month) {
         label: '洗碼量 (萬)',
         data: volumes,
         borderColor: UI_COLORS.techCyan,
-        backgroundColor: 'rgba(0,212,255,0.08)',
+        backgroundColor: hexToRgba(UI_COLORS.techCyan, 0.08),
         fill: true,
         tension: 0.3,
         pointRadius: 3,
@@ -8771,6 +9725,24 @@ function renderRankChart(txs) {
   if (!canvas) return;
 
   var ranks = rankByVolume(txs, 10);
+  var chartContainer = canvas.parentElement;
+  if (!chartContainer) return;
+
+  // ★ 无数据 → 显示空状态
+  if (ranks.length === 0) {
+    canvas.style.display = 'none';
+    var emptyEl = chartContainer.querySelector('.chart-empty');
+    if (!emptyEl) {
+      chartContainer.insertAdjacentHTML('beforeend', '<div class="chart-empty"><svg class="empty-svg" viewBox="0 0 120 90" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-muted);opacity:0.35"><rect x="25" y="15" width="70" height="60" rx="6" stroke="currentColor" opacity="0.3"/><rect x="35" y="25" width="50" height="8" rx="2" fill="currentColor" opacity="0.2"/><rect x="35" y="38" width="40" height="8" rx="2" fill="currentColor" opacity="0.15"/><rect x="35" y="51" width="45" height="8" rx="2" fill="currentColor" opacity="0.1"/><circle cx="85" cy="29" r="3" fill="currentColor" opacity="0.3"/><circle cx="80" cy="42" r="3" fill="currentColor" opacity="0.25"/><circle cx="82" cy="55" r="3" fill="currentColor" opacity="0.2"/></svg><div class="empty-text">暫無排行數據</div><div class="empty-hint">新增交易後此處顯示代理洗碼量排行</div></div>');
+    } else { emptyEl.style.display = ''; }
+    if (window._rankChart) { window._rankChart.destroy(); window._rankChart = null; }
+    return;
+  }
+
+  // 有数据 → 显示图表
+  canvas.style.display = '';
+  var existingEmpty = chartContainer.querySelector('.chart-empty');
+  if (existingEmpty) existingEmpty.style.display = 'none';
 
   var labels = [];
   var volumes = [];
@@ -8893,6 +9865,73 @@ function renderRoomChart(bookings, month) {
  * 
  * 依赖: 所有 data/ 和 ui/ 模块已加载
  */
+
+// ============================================================================
+// 手機調試面板 (內建可視 log，不需開 Console)
+// ============================================================================
+var _debugLines = [];
+var _debugMaxLines = 120;
+
+/** 寫入一筆日誌到螢幕面板 + console */
+function debugLog(className, msg) {
+  var ts = new Date().toISOString().slice(11, 23);
+  var line = '<div class="v13-dlog"><span class="v13-dlog-ts">' + ts + '</span> <span class="' + className + '">' + msg + '</span></div>';
+  _debugLines.push(line);
+  if (_debugLines.length > _debugMaxLines) _debugLines.shift();
+  var panel = document.getElementById('v13-debug-log');
+  if (panel) panel.innerHTML = _debugLines.join('');
+  console.log(msg);
+}
+
+function debugToggle() {
+  var panel = document.getElementById('v13-debug-panel');
+  if (!panel) return;
+  var toggle = document.getElementById('v13-debug-toggle');
+  if (panel.classList.contains('collapsed')) {
+    panel.classList.remove('collapsed');
+    panel.classList.add('expanded');
+    if (toggle) toggle.textContent = '▼';
+  } else {
+    panel.classList.remove('expanded');
+    panel.classList.add('collapsed');
+    if (toggle) toggle.textContent = '▶';
+  }
+}
+
+function debugShow() {
+  var panel = document.getElementById('v13-debug-panel');
+  if (panel) {
+    panel.style.display = 'block';
+    // 預設折疊，不擋操作
+    panel.classList.add('collapsed');
+    panel.classList.remove('expanded');
+  }
+  localStorage.setItem('macau_debug', '1');
+}
+function debugHide() {
+  var panel = document.getElementById('v13-debug-panel');
+  if (panel) panel.style.display = 'none';
+}
+function debugClear() {
+  _debugLines = [];
+  var panel = document.getElementById('v13-debug-log');
+  if (panel) panel.innerHTML = '';
+}
+
+// ★ 自動啟用條件: URL ?debug=1 或 localStorage macau_debug=1
+(function() {
+  if (location.search.indexOf('debug=1') !== -1) {
+    localStorage.setItem('macau_debug', '1');
+  }
+  if (localStorage.getItem('macau_debug') === '1') {
+    // 延遲顯示以確保 DOM 已就緒
+    var _di = setInterval(function() {
+      var panel = document.getElementById('v13-debug-panel');
+      if (panel) { panel.style.display = 'block'; clearInterval(_di); }
+    }, 200);
+    setTimeout(function() { clearInterval(_di); }, 5000);
+  }
+})();
 
 // ============================================================================
 // 交易表单桥接
@@ -9202,26 +10241,28 @@ function openFundModal() {
 
 /** 删除公基金记录（从查询页调用） */
 function deleteFundRecord(fbKey) {
-  if (!confirm('確定刪除此筆公基金記錄？')) return;
-  var result = deleteFund(fbKey);
-  if (result) {
-    toastCRUDDone();
-    refreshAllViews();
-  } else {
-    showToast('刪除失敗', 'error');
-  }
+  showConfirm('確定刪除此筆公基金記錄？', function() {
+    var result = deleteFund(fbKey);
+    if (result) {
+      toastCRUDDone();
+      refreshAllViews();
+    } else {
+      showToast('刪除失敗', 'error');
+    }
+  });
 }
 
 /** 删除代理钱包记录（从查询页调用） */
 function deleteAgentWallet(agent, fbKey) {
-  if (!confirm('確定刪除此筆錢包記錄？')) return;
-  var result = deleteWallet(agent, fbKey);
-  if (result) {
-    toastCRUDDone();
-    refreshAllViews();
-  } else {
-    showToast('刪除失敗', 'error');
-  }
+  showConfirm('確定刪除此筆錢包記錄？', function() {
+    var result = deleteWallet(agent, fbKey);
+    if (result) {
+      toastCRUDDone();
+      refreshAllViews();
+    } else {
+      showToast('刪除失敗', 'error');
+    }
+  });
 }
 
 // ============================================================================
@@ -9446,6 +10487,82 @@ function rmHandleImport(event) {
   }
 }
 
+/** 桌面端日期输入同步到三联动 select 和 hidden input */
+function rmSyncDateInput(prefix) {
+  var dtInput = document.getElementById('rm-' + prefix + '-dt');
+  var hidden = document.getElementById('rm-' + prefix);
+  if (!dtInput || !hidden) return;
+  var val = dtInput.value;
+  hidden.value = val;
+  // 同步到三联动 select
+  if (typeof rmSetDateSels === 'function') {
+    rmSetDateSels('rm-' + prefix, val);
+  }
+  rmCalcNights();
+}
+
+// ============================================================================
+// 月份导航桥接
+// ============================================================================
+
+/**
+ * 月份切换（◀ ▶ 箭头导航）
+ * @param {number} dir — -1（上一月）或 1（下一月）
+ */
+function switchMonth(dir) {
+  var current = State.get('workingMonth');
+  if (!current) {
+    current = currentMonth();
+  }
+  
+  var parts = current.split('-');
+  var year = parseInt(parts[0], 10);
+  var month = parseInt(parts[1], 10);
+  
+  // 计算新月
+  month += dir;
+  while (month > 12) { year++; month -= 12; }
+  while (month < 1)  { year--; month += 12; }
+  
+  var newMonth = year + '-' + (month < 10 ? '0' + month : month);
+  
+  // 更新 State & Store
+  State.set('workingMonth', newMonth);
+  Store.saveWorkingMonth(newMonth);
+  
+  // 更新 UI
+  var badge = document.getElementById('month-badge');
+  if (badge) badge.textContent = newMonth;
+  
+  // 如果工作月份被"鎖定"（已归档），清除锁定状态
+  if (State.get('isLocked')) {
+    State.set('isLocked', false);
+  }
+  
+  // 触发全局事件 → 所有页面重新渲染
+  Events.emit(EVENTS.MONTH_CHANGED, newMonth);
+  
+  // 同步到 Firebase（如果已连接）
+  try {
+    if (typeof _db !== 'undefined' && _db) {
+      _db.ref(FB_PATH.WORKING_MONTH).set(newMonth);
+    }
+  } catch(e) {
+    console.error('[bridge] switchMonth sync error:', e);
+  }
+  
+  // 小动画 — 滑动方向暗示
+  var badgeEl = document.getElementById('month-badge');
+  if (badgeEl) {
+    badgeEl.style.transform = 'translateX(' + (dir > 0 ? -8 : 8) + 'px)';
+    badgeEl.style.transition = 'none';
+    requestAnimationFrame(function() {
+      badgeEl.style.transition = 'transform 0.3s ease';
+      badgeEl.style.transform = 'translateX(0)';
+    });
+  }
+}
+
 // ============================================================================
 // 移动端侧栏
 // ============================================================================
@@ -9501,20 +10618,22 @@ function _renderAgentMgrList() {
       var delBtn = document.createElement('button');
       delBtn.textContent = '刪除';
       delBtn.style.cssText = 'background:' + UI_COLORS.danger + ';color:white;border:none;padding:2px 8px;border-radius:4px;cursor:pointer;font-size:11px';
-      delBtn.onclick = function() {
-        if (confirm('確定刪除代理「' + agentName + '」？')) {
-          var result = removeAgent(agentName);
-          if (result.success) {
-            showToast('代理已刪除', 'success');
-            _renderAgentMgrList();
-            _populateTxAgentDropdown();
-            if (RM && RM.populateAgentDropdown) RM.populateAgentDropdown();
-            if (RM && RM.populateAgentFilter) RM.populateAgentFilter();
-          } else {
-            showToast(result.error || '刪除失敗', 'error');
-          }
-        }
-      };
+      delBtn.onclick = (function(name) {
+        return function() {
+          showConfirm('確定刪除代理「' + name + '」？', function() {
+            var result = removeAgent(name);
+            if (result.success) {
+              showToast('代理已刪除', 'success');
+              _renderAgentMgrList();
+              _populateTxAgentDropdown();
+              if (RM && RM.populateAgentDropdown) RM.populateAgentDropdown();
+              if (RM && RM.populateAgentFilter) RM.populateAgentFilter();
+            } else {
+              showToast(result.error || '刪除失敗', 'error');
+            }
+          });
+        };
+      })(agentName);
 
       btnGroup.appendChild(walletBtn);
       btnGroup.appendChild(delBtn);
@@ -9557,17 +10676,19 @@ Events.on(EVENTS.TX_UPDATED, function() { clearDraft(null); });
  * 手動重置為最新預設數據 (UI 按鈕調用)
  */
 function hcResetPreset() {
-  if (!confirm('確定要重置為最新預設數據嗎？\n這會刪除現有所有酒店設定（' + State.get('hotelConfig').length + ' 筆），並載入 ' + PRESET_CONFIG.length + ' 筆預設數據。此操作無法復原！')) return;
-  try {
-    var count = resetHCToPreset();
-    showToast('已重置 ' + count + ' 筆酒店預設數據', 'success');
-    _hcSelected = {};
-    _hcLastClicked = null;
-    hcRender();
-  } catch(e) {
-    console.error('[v13:hc] reset preset error:', e);
-    showToast('重置失敗', 'error');
-  }
+  var msg = '確定要重置為最新預設數據嗎？\n這會刪除現有所有酒店設定（' + State.get('hotelConfig').length + ' 筆），並載入 ' + PRESET_CONFIG.length + ' 筆預設數據。此操作無法復原！';
+  showConfirm(msg, function() {
+    try {
+      var count = resetHCToPreset();
+      showToast('已重置 ' + count + ' 筆酒店預設數據', 'success');
+      _hcSelected = {};
+      _hcLastClicked = null;
+      hcRender();
+    } catch(e) {
+      console.error('[v13:hc] reset preset error:', e);
+      showToast('重置失敗', 'error');
+    }
+  }, { okColor: '#b71c1c' });
 }
 
 /** 批量選取狀態: { fbKey: true } */
@@ -9702,17 +10823,20 @@ function hcRender(filterCasino, filterHotel, filterSearch) {
       var delBtn = document.createElement('button');
       delBtn.textContent = '刪';
       delBtn.style.cssText = 'background:' + UI_COLORS.danger + ';color:white;border:none;padding:2px 8px;border-radius:4px;cursor:pointer;font-size:11px';
-      delBtn.onclick = function() {
-        if (!confirm('確定刪除「' + entry.room + '」？')) return;
-        var deleted = deleteHC(entry._fbKey);
-        if (deleted) {
-          delete _hcSelected[entry._fbKey];
-          showToast('已刪除', 'success');
-          hcRender();
-        } else {
-          showToast('刪除失敗', 'error');
-        }
-      };
+      delBtn.onclick = (function(ent) {
+        return function() {
+          showConfirm('確定刪除「' + ent.room + '」？', function() {
+            var deleted = deleteHC(ent._fbKey);
+            if (deleted) {
+              delete _hcSelected[ent._fbKey];
+              showToast('已刪除', 'success');
+              hcRender();
+            } else {
+              showToast('刪除失敗', 'error');
+            }
+          });
+        };
+      })(entry);
 
       tdOp.appendChild(editBtn);
       tdOp.appendChild(delBtn);
@@ -9826,17 +10950,17 @@ function hcBatchDelete() {
     showToast('請先選取要刪除的項目', 'warning');
     return;
   }
-  if (!confirm('確定要批量刪除 ' + keys.length + ' 筆酒店設定？此操作無法復原！')) return;
-
-  var deleted = 0;
-  for (var i = 0; i < keys.length; i++) {
-    var result = deleteHC(keys[i]);
-    if (result) deleted++;
-  }
-  _hcSelected = {};
-  _hcLastClicked = null;
-  showToast('已刪除 ' + deleted + ' 筆', deleted > 0 ? 'success' : 'error');
-  hcRender();
+  showConfirm('確定要批量刪除 ' + keys.length + ' 筆酒店設定？此操作無法復原！', function() {
+    var deleted = 0;
+    for (var i = 0; i < keys.length; i++) {
+      var result = deleteHC(keys[i]);
+      if (result) deleted++;
+    }
+    _hcSelected = {};
+    _hcLastClicked = null;
+    showToast('已刪除 ' + deleted + ' 筆', deleted > 0 ? 'success' : 'error');
+    hcRender();
+  }, { okColor: '#b71c1c' });
 }
 
 /**
@@ -9880,6 +11004,49 @@ function _v13LoginFallback() {
       var maxAttempts = (typeof CONFIG !== 'undefined' && CONFIG.MAX_PW_ATTEMPTS) ? CONFIG.MAX_PW_ATTEMPTS : 3;
       attemptsEl.textContent = '剩餘 ' + maxAttempts + ' 次機會';
     }
+  }
+}
+
+// ============================================================================
+// 管理员：清除所有数据（Firebase + 本地）
+// ============================================================================
+
+/**
+ * 清除全部数据 (Firebase + 本地 localStorage + State)
+ * 二次确认保护，防止误操作
+ */
+function clearAllDataConfirm() {
+  if (!confirm('⚠️ 警告：此操作將清除 Firebase 及本機所有業務數據（交易、公基金、代理錢包、訂房）！\n\n此操作不可逆，建議先備份！\n\n確定要繼續嗎？')) {
+    return;
+  }
+  if (!confirm('再次確認：您確定要清除全部數據嗎？\n\n清除後所有記錄將消失，無法恢復！')) {
+    return;
+  }
+
+  showToast('正在清除數據...', 'info');
+
+  // 1. 先清除本地
+  try {
+    Store.clearLocalData();
+  } catch(e) {
+    console.error('[v13:bridge] clearAllData: Store.clearLocalData error:', e);
+  }
+
+  // 2. 再清除 Firebase
+  if (typeof clearFirebaseData === 'function') {
+    clearFirebaseData(function(err) {
+      if (err) {
+        showToast('本機數據已清除，Firebase 清除失敗：' + (err.message || err), 'error');
+        console.error('[v13:bridge] clearFirebaseData error:', err);
+      } else {
+        showToast('全部數據已清除！', 'success');
+        // 刷新所有页面
+        try { renderAll(); } catch(e2) {}
+      }
+    });
+  } else {
+    showToast('本機數據已清除（Firebase 清除函數未加載）', 'warning');
+    try { renderAll(); } catch(e2) {}
   }
 }
 
@@ -9989,6 +11156,14 @@ Events.on(EVENTS.HC_CONFIG_UPDATED, function() {
     try {
       Store.loadAll(true);  // silent = true，不触发事件
 
+      // 加载本地数据
+      loadRecentlyDeleted();  // ★ 恢复删除追踪表
+
+      // ★ 调试：显示加载结果
+      if (typeof debugLog === 'function') {
+        debugLog('v13-dlog-cya', '📦 loadAll done → agentList: ' + JSON.stringify(State.get('agentList')));
+      }
+
       // 如果没有工作月份，设为当前月
       if (!State.get('workingMonth')) {
         State.set('workingMonth', currentMonth());
@@ -10078,9 +11253,13 @@ Events.on(EVENTS.HC_CONFIG_UPDATED, function() {
     var pwOverlay = document.getElementById('pw-overlay');
     if (pwOverlay) { pwOverlay.style.display = 'none'; pwOverlay.style.opacity = '0'; }
 
+    // ★ 周期性清理过期删除追踪 (每 30 秒)
+    setInterval(function() { cleanRecentlyDeleted(); }, 30000);
+
     // ★ 首先绑定交互: 先保侧栏能点、页面能切，再渲染数据
     _setupSidebar();
     _setupMonthBar();
+    _setupSyncStatus();
     _setupBackToTop();
     _setupAutoRefresh();
 
@@ -10198,9 +11377,97 @@ Events.on(EVENTS.HC_CONFIG_UPDATED, function() {
     if (monthEl) {
       monthEl.textContent = State.get('workingMonth') || currentMonth();
     }
+    var badgeEl = $('#month-badge');
+    if (badgeEl) {
+      badgeEl.textContent = State.get('workingMonth') || currentMonth();
+    }
     Events.on(EVENTS.MONTH_CHANGED, function(month) {
       if (monthEl) monthEl.textContent = month;
+      if (badgeEl) badgeEl.textContent = month;
+      // 月份切换 → 刷新所有视图
+      _updateTopbarWallet();
+      try { renderOverview(); } catch(e) { console.error('month: overview', e); }
+      try { renderAll(); } catch(e) { console.error('month: all', e); }
+      try { doQuery(); } catch(e) { console.error('month: query', e); }
+      try { renderSummary(); } catch(e) { console.error('month: summary', e); }
+      try { if (typeof renderWallet === 'function') renderWallet(); } catch(e) {}
+      try { if (typeof RM !== 'undefined' && RM.render) RM.render(); } catch(e) {}
     });
+  }
+
+  // 同步状态指示器
+  function _setupSyncStatus() {
+    var capsule = $('#sync-status-capsule');
+    var textEl = $('#sync-status-text');
+    var timeEl = $('#sync-last-time');
+
+    // 初始状态
+    if (capsule && State.get('syncConnected')) {
+      capsule.className = 'sync-capsule connected';
+      if (textEl) textEl.textContent = '已同步';
+    }
+
+    // 恢复最后同步时间
+    var lastTime = Store.loadLastSyncTime();
+    if (lastTime && timeEl) {
+      timeEl.textContent = _formatSyncTime(lastTime);
+    }
+
+    // 连接状态变化
+    Events.on(EVENTS.CONNECTION_CHANGED, function(connected) {
+      if (!capsule) return;
+      if (connected) {
+        capsule.className = 'sync-capsule connected';
+        if (textEl) textEl.textContent = '已同步';
+      } else {
+        capsule.className = 'sync-capsule disconnected';
+        if (textEl) textEl.textContent = '已断开';
+      }
+    });
+
+    // 同步开始
+    Events.on(EVENTS.SYNC_START, function() {
+      if (capsule) {
+        capsule.className = 'sync-capsule syncing';
+        if (textEl) textEl.textContent = '同步中';
+      }
+    });
+
+    // 同步完成 → 记录时间
+    Events.on(EVENTS.SYNC_COMPLETE, function() {
+      if (capsule) {
+        capsule.className = 'sync-capsule connected';
+        if (textEl) textEl.textContent = '已同步';
+      }
+      var now = new Date().toISOString();
+      Store.saveLastSyncTime(now);
+      if (timeEl) timeEl.textContent = _formatSyncTime(now);
+    });
+
+    // 同步错误 → 恢复断开态
+    Events.on(EVENTS.SYNC_ERROR, function() {
+      if (capsule) {
+        capsule.className = 'sync-capsule disconnected';
+        if (textEl) textEl.textContent = '同步失败';
+      }
+    });
+  }
+
+  /** 格式化同步时间为友好显示 */
+  function _formatSyncTime(iso) {
+    if (!iso) return '';
+    try {
+      var diff = Date.now() - new Date(iso).getTime();
+      var seconds = Math.floor(diff / 1000);
+      if (seconds < 60) return '方才同步';
+      if (seconds < 3600) return Math.floor(seconds / 60) + ' 分前';
+      if (seconds < 86400) return Math.floor(seconds / 3600) + ' 小时前';
+      var d = new Date(iso);
+      return (d.getMonth() + 1) + '/' + d.getDate() + ' ' +
+             ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+    } catch(e) {
+      return '';
+    }
   }
 
   // 自动刷新: 数据变更 → 渲染
@@ -10230,6 +11497,41 @@ Events.on(EVENTS.HC_CONFIG_UPDATED, function() {
     Events.on(EVENTS.WALLET_UPDATED, function() { if (typeof renderWallet === 'function') renderWallet(); _updateTopbarWallet(); });
     Events.on(EVENTS.WALLET_DELETED, function() { if (typeof renderWallet === 'function') renderWallet(); _updateTopbarWallet(); });
     Events.on(EVENTS.TXS_LOADED, function() { if (typeof renderWallet === 'function') renderWallet(); });
+
+    // ★ 代理名单变更（含 Firebase 同步）→ 刷新所有代理下拉选单 + 页面渲染
+    Events.on(EVENTS.AGENT_LIST_UPDATED, function() {
+      // 刷新交易表单代理下拉
+      if (typeof _populateTxAgentDropdown === 'function') _populateTxAgentDropdown();
+      // 刷新查询页代理筛选器
+      if (typeof _populateQueryFilters === 'function') _populateQueryFilters();
+      // 刷新房务系统代理下拉和筛选器
+      if (typeof RM !== 'undefined' && RM.populateAgentDropdown) RM.populateAgentDropdown();
+      if (typeof RM !== 'undefined' && RM.populateAgentFilter) RM.populateAgentFilter();
+      // 刷新代理管理弹窗列表（如果弹窗开着）
+      if (typeof _renderAgentMgrList === 'function') _renderAgentMgrList();
+      // 重新渲染当前页面（代理相关数据可能变化）
+      var page = State.get('currentPage');
+      if (page === 'overview') renderOverview();
+      if (page === 'all') renderAll();
+      if (page === 'query') doQuery();
+      if (page === 'summary') renderSummary();
+      if (page === 'wallet' && typeof renderWallet === 'function') renderWallet();
+      if (page === 'room' && typeof RM !== 'undefined' && RM.render) RM.render();
+      _updateTopbarWallet();
+    });
+
+    // ★ 代理钱包从 Firebase 同步下来 → 刷新总钱包页和 topbar
+    Events.on(EVENTS.WALLETS_LOADED, function() {
+      if (typeof renderWallet === 'function') renderWallet();
+      _updateTopbarWallet();
+    });
+
+    // ★ 公基金从 Firebase 同步下来 → 刷新总览和总钱包页
+    Events.on(EVENTS.FUND_LOADED, function() {
+      renderOverview();
+      if (typeof renderWallet === 'function') renderWallet();
+      _updateTopbarWallet();
+    });
   }
 
   function _updateTopbarWallet() {
@@ -10255,6 +11557,8 @@ Events.on(EVENTS.HC_CONFIG_UPDATED, function() {
 
     console.log('[v13:app] Booting v13...');
     console.log('[v13:app] Version:', APP.VERSION);
+    console.log('%c🔍 [v13:app] v13.0.2 — 手機版? URL加 ?debug=1 開啟螢幕診斷面板', 'font-size:16px;color:#0f0;background:#000;padding:4px 8px');
+    if (typeof debugLog === 'function') debugLog('v13-dlog-grn', '🚀 App boot v13.0.2 — 診斷面板已啟動');
     console.log('[v13:app] Events registered:', JSON.stringify(Events.listAll()));
 
     // 1. 检测依赖

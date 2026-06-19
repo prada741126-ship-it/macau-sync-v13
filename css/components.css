@@ -1351,3 +1351,17 @@ input[type="range"]:focus {
   color: var(--text-muted);
   margin-top: 4px;
 }
+
+/* ══════════════════════════════════════════════════════
+ * Chart 容器标题
+ * ══════════════════════════════════════════════════════ */
+
+.chart-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}

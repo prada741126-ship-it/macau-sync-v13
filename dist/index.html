@@ -11,7 +11,7 @@
   <!-- 版本快取清除 -->
   <script>
     (function() {
-      var APP_VERSION = '13.0.0.1781810715734';
+      var APP_VERSION = '13.0.0.1781838797657';
       var stored = localStorage.getItem('macau_app_version');
       var qs = location.search || '';
       if (stored && stored !== APP_VERSION && !sessionStorage.getItem('_v13_reloaded')) {
@@ -2325,6 +2325,20 @@ input[type="range"]:focus {
   margin-top: 4px;
 }
 
+/* ══════════════════════════════════════════════════════
+ * Chart 容器标题
+ * ══════════════════════════════════════════════════════ */
+
+.chart-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
 /* css/china-theme.css */
 /* ============================================================================
  * v13 中国风主题 (隐性克制·30%)
@@ -3206,7 +3220,7 @@ tr.rank-1 td {
   <!-- Firebase 初始化已统一由 src/sync/firebase.js 的 initFirebase() 处理（带重试） -->
 
   <!-- JS: 合并后由 build.js 输出为 app.js -->
-  <script src="app.js?v=13.0.0.1781810715734"></script>
+  <script src="app.js?v=13.0.0.1781838797657"></script>
 </head>
 <body>
 
@@ -3367,11 +3381,13 @@ tr.rank-1 td {
           <div id="ov-kpi-grid" class="kpi-grid"></div>
 
           <div class="chart-container md chart-full">
+            <div class="chart-title">每日洗碼量趨勢</div>
             <canvas></canvas>
           </div>
 
           <div class="two-col ov-two-col">
             <div class="chart-container sm chart-full">
+              <div class="chart-title">代理洗碼量排行</div>
               <canvas></canvas>
             </div>
             <div class="timeline-box"></div>
@@ -3811,6 +3827,6 @@ tr.rank-1 td {
     <div id="v13-debug-log"></div>
   </div>
 
-  <!-- BUILD: v13.0.0 | 2026-06-11 | 2026-06-18T19:25:15.735Z -->
+  <!-- BUILD: v13.0.0 | 2026-06-11 | 2026-06-19T03:13:17.657Z -->
 </body>
 </html>
