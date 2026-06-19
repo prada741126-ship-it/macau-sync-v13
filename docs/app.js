@@ -7334,11 +7334,14 @@ function _renderAllTable(txs) {
       });
       tr.style.cursor = 'pointer';
 
-      // ★ 类型彩色标签 (#28)
+      // ★ 类型彩色标签 (#28) — 用 DOM 元素避免被 h() 當文字處理
       var typeClass = tx.type === 'cash' ? 'cash' : 'roll';
       var typeLabel = tx.type === 'cash' ? '現金' : '轉碼';
+      var typeSpan = document.createElement('span');
+      typeSpan.className = 'tx-type-tag ' + typeClass;
+      typeSpan.textContent = typeLabel;
       var cells = [
-        '<span class="tx-type-tag ' + typeClass + '">' + typeLabel + '</span>',
+        typeSpan,
         tx.date,
         tx.agent,
         tx.client || '-',
