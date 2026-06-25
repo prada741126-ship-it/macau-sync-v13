@@ -38,7 +38,8 @@ var State = (function() {
     bookingEditingId: null,   // 订房编辑中
     hcEditingId: null,        // 酒店设定编辑中
     syncConnected: true,      // Firebase 连接状态
-    isLocked: false,          // 月末是否已锁定
+    isLocked: false,          // 月末是否已锁定（向后兼容）
+    lockedMonths: {},         // 已关账月份集合 { "2026-05": true }
     currentTimeFilter: null,  // 总览时间筛选器
     isModalOpen: false,       // 是否有弹窗开启（影响快捷键行为）
     sidebarCollapsed: false,  // 侧边栏是否折叠
@@ -59,24 +60,6 @@ var State = (function() {
     // --- 草稿 ---
     draftTimer: null,         // 草稿防抖 timer
   };
-
-  // ========================================================================
-  // 全局变量兼容 (旧代码引用的 var 变量)
-  // 这些变量由 State.set 自动同步，旧模块可通过 var 直接访问
-  // ========================================================================
-  window.txs = _state.txs;
-  window.fundWithdrawals = _state.fundWithdrawals;
-  window.agentWallets = _state.agentWallets;
-  window.agentList = _state.agentList;
-  window.workingMonth = _state.workingMonth;
-  window.nextId = _state.nextId;
-  window.fundNextId = _state.fundNextId;
-  window.agentWalletNextId = _state.walletNextId;
-  window.editId = _state.editingId;
-  window.sortState = _state.sortState;
-  window._syncConnected = _state.syncConnected;
-  window._draftTimer = _state.draftTimer;
-  window.__currentTimeFilter = _state.currentTimeFilter;
 
   // ========================================================================
   // 事件→State 路径映射 (set() 自动 emit 的事件)
@@ -231,32 +214,18 @@ var State = (function() {
   /**
    * 同步全局变量
    */
-  function _syncGlobals(key, value) {
-    var map = {
-      'txs':              function(v) { window.txs = v; },
-      'fundWithdrawals':  function(v) { window.fundWithdrawals = v; },
-      'agentWallets':     function(v) { window.agentWallets = v; },
-      'agentList':        function(v) { window.agentList = v; },
-      'workingMonth':     function(v) { window.workingMonth = v; },
-      'nextId':           function(v) { window.nextId = v; },
-      'fundNextId':       function(v) { window.fundNextId = v; },
-      'walletNextId':     function(v) { window.agentWalletNextId = v; },
-      'editingId':        function(v) { window.editId = v; },
-      'sortState':        function(v) { window.sortState = v; },
-      'syncConnected':    function(v) { window._syncConnected = v; },
-      'draftTimer':       function(v) { window._draftTimer = v; },
-      'currentTimeFilter':function(v) { window.__currentTimeFilter = v; },
-    };
-    if (map[key]) map[key](value);
+  /**
+   * (预留) 同步全局变量 — v13 已无外部模块直读 window.*，保留函数签名兼容
+   */
+  function _syncGlobals(/* key, value */) {
+    // v13 所有模块通过 State.get() 访问，不再需要 window 镜像
   }
 
   /**
-   * 同步所有全局变量
+   * (预留) 同步所有全局变量
    */
   function _syncAllGlobals() {
-    for (var key in _state) {
-      _syncGlobals(key, _state[key]);
-    }
+    // v13 所有模块通过 State.get() 访问，不再需要 window 镜像
   }
 
   // ========================================================================
