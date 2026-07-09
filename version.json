@@ -1,6 +1,6 @@
 {
-  "version": "13.0.3",
-  "buildDate": "2026-06-24",
+  "version": "13.0.4",
+  "buildDate": "2026-07-09",
   "codename": "phoenix",
-  "description": "v13.0.3 — 双保险 auto-calc (addEventListener + oninput)"
+  "description": "v13.0.4 — Firebase 腳本 defer 修復加載順序"
 }

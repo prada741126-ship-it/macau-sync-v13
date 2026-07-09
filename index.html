@@ -6,12 +6,12 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>澳門洗碼報表 v13.0.3</title>
+  <title>澳門洗碼報表 v13.0.4</title>
 
   <!-- 版本快取清除 -->
   <script>
     (function() {
-      var APP_VERSION = '13.0.3.1783597047222';
+      var APP_VERSION = '13.0.4.1783597476251';
       var stored = localStorage.getItem('macau_app_version');
       var qs = location.search || '';
       if (stored && stored !== APP_VERSION && !sessionStorage.getItem('_v13_reloaded')) {
@@ -3772,7 +3772,7 @@ tr.rank-1 td {
 
   /* ---- 打印页眉 ---- */
   .page.active::before {
-    content: '澳門洗碼報表 v13.0.3 — ' attr(id);
+    content: '澳門洗碼報表 v13.0.4 — ' attr(id);
     display: block;
     font-size: 14pt;
     font-weight: bold;
@@ -3782,12 +3782,12 @@ tr.rank-1 td {
     color: #000;
   }
 
-  #page-overview::before { content: '澳門洗碼報表 v13.0.3 — 總覽'; }
-  #page-all::before      { content: '澳門洗碼報表 v13.0.3 — 全部交易'; }
-  #page-query::before    { content: '澳門洗碼報表 v13.0.3 — 查詢結果'; }
-  #page-summary::before  { content: '澳門洗碼報表 v13.0.3 — 統計報表'; }
-  #page-room::before     { content: '澳門洗碼報表 v13.0.3 — 房務系統'; }
-  #page-wallet::before   { content: '澳門洗碼報表 v13.0.3 — 總錢包'; }
+  #page-overview::before { content: '澳門洗碼報表 v13.0.4 — 總覽'; }
+  #page-all::before      { content: '澳門洗碼報表 v13.0.4 — 全部交易'; }
+  #page-query::before    { content: '澳門洗碼報表 v13.0.4 — 查詢結果'; }
+  #page-summary::before  { content: '澳門洗碼報表 v13.0.4 — 統計報表'; }
+  #page-room::before     { content: '澳門洗碼報表 v13.0.4 — 房務系統'; }
+  #page-wallet::before   { content: '澳門洗碼報表 v13.0.4 — 總錢包'; }
 
   /* ---- KPI 卡片 ---- */
   .kpi-grid {
@@ -4062,7 +4062,7 @@ tr.rank-1 td {
   <!-- Firebase 初始化已统一由 src/sync/firebase.js 的 initFirebase() 处理（带重试） -->
 
   <!-- JS: 合并后由 build.js 输出为 app.js -->
-  <script src="app.js?v=13.0.3.1783597047222"></script>
+  <script src="app.js?v=13.0.4.1783597476251"></script>
 </head>
 <body>
 
@@ -4109,7 +4109,7 @@ tr.rank-1 td {
       <div id="pw-error"></div>
       <div id="pw-attempts"></div>
       <button class="pw-btn" onclick="v13LoginFallback()">驗 證 進 入</button>
-      <div id="pw-version">v13.0.3</div>
+      <div id="pw-version">v13.0.4</div>
     </div>
   </div>
 
@@ -4162,7 +4162,7 @@ tr.rank-1 td {
         <div class="sb-item" onclick="document.getElementById('file-input').click()"><span class="icon">📥</span><span>匯入CSV</span></div>
       </nav>
       <div class="sb-toggle" title="摺疊/展開">◀</div>
-      <div class="sb-version" id="sb-version">v13.0.3</div>
+      <div class="sb-version" id="sb-version">v13.0.4</div>
     </div>
 
     <div id="sidebar-overlay"></div>
@@ -4682,7 +4682,7 @@ tr.rank-1 td {
   <div id="back-to-top">↑</div>
 
   <!-- 版本徽章 -->
-  <div id="version-badge">v13.0.3</div>
+  <div id="version-badge">v13.0.4</div>
 
   <!-- 隐藏文件上传 -->
   <input type="file" id="file-input" accept=".csv" style="display:none" onchange="handleCSVImport(event)">
@@ -4721,7 +4721,7 @@ tr.rank-1 td {
         var now = new Date();
         var str = now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate()) +
                   ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes());
-        el.textContent = '列印時間: ' + str + '　｜　澳門洗碼報表 v13.0.3';
+        el.textContent = '列印時間: ' + str + '　｜　澳門洗碼報表 v13.0.4';
       }
       // 现代浏览器
       window.addEventListener('beforeprint', setPrintTime);
@@ -4738,6 +4738,6 @@ tr.rank-1 td {
     })();
   </script>
 
-  <!-- BUILD: v13.0.3 | 2026-06-24 | 2026-07-09T11:37:27.222Z -->
+  <!-- BUILD: v13.0.4 | 2026-07-09 | 2026-07-09T11:44:36.251Z -->
 </body>
 </html>
