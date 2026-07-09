@@ -71,7 +71,7 @@ var STORAGE_KEYS = {
 // Firebase 配置
 // ============================================================================
 var FIREBASE_CONFIG = {
-  apiKey:             'AIzaSyDPLdErSQmQ_AD-z7W7pt2fyJxWpBuxjou',
+  apiKey:             'AIzaSyCStj_Wm-xCvxAph4gcCIMtGT-UlNzBdo',
   authDomain:         'macau-sync.firebaseapp.com',
   databaseURL:        'https://macau-sync-default-rtdb.asia-southeast1.firebasedatabase.app',
   projectId:          'macau-sync',
