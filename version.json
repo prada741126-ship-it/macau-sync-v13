@@ -1,6 +1,6 @@
 {
-  "version": "13.0.4",
+  "version": "13.0.5",
   "buildDate": "2026-07-09",
   "codename": "phoenix",
-  "description": "v13.0.4 — Firebase 腳本 defer 修復加載順序"
+  "description": "v13.0.5 — Firebase 降級 9.23.0 修復 auth api-key-not-valid"
 }
