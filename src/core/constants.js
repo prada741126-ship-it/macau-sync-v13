@@ -71,14 +71,13 @@ var STORAGE_KEYS = {
 // Firebase 配置
 // ============================================================================
 var FIREBASE_CONFIG = {
-  apiKey:             'AIzaSyDn9L-9nXBAtsSpI9DThTGi9B_o5paSKnM',
-  authDomain:         'macau-sync.firebaseapp.com',
-  databaseURL:        'https://macau-sync-default-rtdb.asia-southeast1.firebasedatabase.app',
-  projectId:          'macau-sync',
-  storageBucket:      'macau-sync.firebasestorage.app',
-  messagingSenderId:  '539459664910',
-  appId:              '1:539459664910:web:81977ca08a4480aafd05f',
-  measurementId:      'G-YQ9HELJEM1',
+  apiKey:             'AIzaSyC3NKqEVUpL-9WYvun7pBbJe8P7T8o4Y74',
+  authDomain:         'macau-app.firebaseapp.com',
+  databaseURL:        'https://macau-app-default-rtdb.asia-southeast1.firebasedatabase.app',
+  projectId:          'macau-app',
+  storageBucket:      'macau-app.firebasestorage.app',
+  messagingSenderId:  '638116698004',
+  appId:              '1:638116698004:web:1dcbca626fa229e11f6181',
 };
 
 // ============================================================================
