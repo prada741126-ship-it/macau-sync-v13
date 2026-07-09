@@ -11,7 +11,7 @@
   <!-- 版本快取清除 -->
   <script>
     (function() {
-      var APP_VERSION = '13.0.3.1783596430917';
+      var APP_VERSION = '13.0.3.1783597047222';
       var stored = localStorage.getItem('macau_app_version');
       var qs = location.search || '';
       if (stored && stored !== APP_VERSION && !sessionStorage.getItem('_v13_reloaded')) {
@@ -4040,18 +4040,18 @@ tr.rank-1 td {
     });
   </script>
 
-  <!-- CDN 脚本: 全部 async, 不阻塞页面加载 -->
+  <!-- CDN 脚本: defer 保持加载顺序，非阻塞加载 -->
   <!-- Firebase CDN: jsdelivr (大陆可访问) + gstatic 兜底 -->
-  <script src="https://cdn.jsdelivr.net/npm/firebase@10.12.0/firebase-app-compat.js" async></script>
-  <script src="https://cdn.jsdelivr.net/npm/firebase@10.12.0/firebase-auth-compat.js" async></script>
-  <script src="https://cdn.jsdelivr.net/npm/firebase@10.12.0/firebase-database-compat.js" async></script>
+  <script src="https://cdn.jsdelivr.net/npm/firebase@10.12.0/firebase-app-compat.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/firebase@10.12.0/firebase-auth-compat.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/firebase@10.12.0/firebase-database-compat.js" defer></script>
   <!-- 兜底: 如果 jsdelivr 加载失败，尝试 gstatic -->
   <script>
     window.addEventListener('error', function(e) {
       if (e.target && e.target.src && e.target.src.includes('firebase') && e.target.src.includes('jsdelivr')) {
         var s = document.createElement('script');
         s.src = e.target.src.replace('cdn.jsdelivr.net/npm/firebase@', 'www.gstatic.com/firebasejs/');
-        s.async = true;
+        s.defer = true;
         document.head.appendChild(s);
       }
     }, true);
@@ -4062,7 +4062,7 @@ tr.rank-1 td {
   <!-- Firebase 初始化已统一由 src/sync/firebase.js 的 initFirebase() 处理（带重试） -->
 
   <!-- JS: 合并后由 build.js 输出为 app.js -->
-  <script src="app.js?v=13.0.3.1783596430917"></script>
+  <script src="app.js?v=13.0.3.1783597047222"></script>
 </head>
 <body>
 
@@ -4738,6 +4738,6 @@ tr.rank-1 td {
     })();
   </script>
 
-  <!-- BUILD: v13.0.3 | 2026-06-24 | 2026-07-09T11:27:10.917Z -->
+  <!-- BUILD: v13.0.3 | 2026-06-24 | 2026-07-09T11:37:27.222Z -->
 </body>
 </html>
