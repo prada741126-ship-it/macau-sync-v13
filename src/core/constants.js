@@ -16,15 +16,14 @@
 // 系统识别
 // ============================================================================
 var APP = {
-  VERSION:       'v13.0.2',
+  VERSION:       'v13.0.3',
   TITLE:         '澳門洗碼報表',
   SYSTEM_NAME:   '博盈國際會',
   SYSTEM_SUB:    '洗碼管理系統',
   SYSTEM_EN:     'BOYING INTERNATIONAL CLUB',
   LOGIN_TITLE:   '授 權 驗 證',
   LOGO_CHAR:     '\u2660',  // ♠
-  PWD_PLAIN:     'macau888',
-  PWD_ENCODED:   'bWFjYXU4ODg=',  // btoa('macau888')
+  PWD_HASH:       '8204868322789a563871ffa6e828a1f096b4c4cec66706ee848283fae65551d6',  // SHA-256('macau888')
 };
 
 // ============================================================================
@@ -38,6 +37,7 @@ var CONFIG = {
   BACKUP_RETENTION:   7,             // 保留 7 天
   SYNC_RETRY_MAX:     3,
   SYNC_RETRY_BASE:    500,           // 首次重试延迟 (ms)
+  TOMBSTONE_TTL_MS:   30 * 24 * 60 * 60 * 1000,  // 墓碑保留 30 天，超期后从 Firebase 清除
   PRODUCTION:         false,         // 生产模式开关
 };
 
@@ -93,6 +93,7 @@ var FB_PATH = {
   RM_BOOKINGS:     'macau_data/rmBookings',
   HC_CONFIG:       'macau_data/hcConfig',
   ARCHIVES:        'macau_data/archives',
+  CLEARED_AT:      'macau_data/_clearedAt',
   CONNECTED:       '.info/connected',
 };
 

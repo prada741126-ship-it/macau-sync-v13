@@ -192,6 +192,87 @@ function importFromBackupExport(exportData, targetDate) {
 }
 
 /**
+ * 导出当前全部数据为 JSON 文件并下载
+ */
+function exportJSONBackup() {
+  var dateStr = nowStr();
+  var exportData = {
+    appVersion:    APP.VERSION,
+    exportDate:    dateStr,
+    systemName:    APP.SYSTEM_NAME,
+    txs:           State.get('txs') || [],
+    fundWithdrawals: State.get('fundWithdrawals') || [],
+    agentWallets:  State.get('agentWallets') || {},
+    agentList:     State.get('agentList') || [],
+    bookings:      State.get('bookings') || [],
+    hotelConfig:   State.get('hotelConfig') || [],
+    archives:      State.get('archives') || {},
+    workingMonth:  State.get('workingMonth') || '',
+  };
+
+  var json = JSON.stringify(exportData, null, 2);
+  var blob = new Blob([json], { type: 'application/json;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'macau_backup_' + dateStr + '.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  showToast('JSON 備份已下載 (macau_backup_' + dateStr + '.json)', 'success');
+  return exportData;
+}
+
+/**
+ * 从 JSON 文件导入备份
+ * 由文件选择 input 触发
+ * @param {File} file
+ */
+function importJSONBackup(file) {
+  if (!file) {
+    showToast('請選擇備份檔案', 'warning');
+    return;
+  }
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var data = JSON.parse(e.target.result);
+      if (!data.appVersion && !data.txs && !data.exportDate) {
+        showToast('無效的備份檔案格式', 'error');
+        return;
+      }
+      // 确认导入
+      if (!confirm('確定要從 JSON 備份還原？\n\n備份日期: ' + (data.exportDate || '未知') + '\n交易數: ' + ((data.txs || []).length) + '\n\n⚠️ 當前數據將被替換！')) {
+        return;
+      }
+      // 批量恢复
+      State.batchSet({
+        txs:              data.txs || [],
+        fundWithdrawals:  data.fundWithdrawals || [],
+        agentWallets:     data.agentWallets || {},
+        agentList:        data.agentList || [],
+        bookings:         data.bookings || [],
+        hotelConfig:      data.hotelConfig || [],
+        archives:         data.archives || {},
+        workingMonth:     data.workingMonth || '',
+      });
+      Store.saveAll();
+      Events.emit(EVENTS.TXS_LOADED, State.get('txs'));
+      Events.emit(EVENTS.BOOKINGS_LOADED, State.get('bookings'));
+      showToast('備份還原成功！ (交易: ' + (data.txs || []).length + ' 筆)', 'success');
+      // 刷新当前页面
+      if (typeof renderCurrentPage === 'function') renderCurrentPage();
+    } catch (err) {
+      console.error('[v13:backup] importJSONBackup error:', err);
+      showToast('匯入失敗: ' + (err.message || err), 'error');
+    }
+  };
+  reader.readAsText(file, 'utf-8');
+}
+
+/**
  * 每日自动备份检查
  */
 function autoBackupCheck() {

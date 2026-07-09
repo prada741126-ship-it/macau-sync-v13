@@ -11,6 +11,32 @@
  */
 
 // ============================================================================
+// 轻量 Memoization（引用比较 + 参数指纹）
+// ============================================================================
+
+var _calcCache = {};
+
+/**
+ * 包装纯函数，添加引用级缓存
+ * 仅当输入数组引用相同且额外参数一致时才返回缓存
+ * @param {function} fn
+ * @param {string} name
+ * @returns {function}
+ */
+function _memoCalc(fn, name) {
+  return function(txs) {
+    var extraArgs = Array.prototype.slice.call(arguments, 1);
+    var cached = _calcCache[name];
+    if (cached && cached.ref === txs && JSON.stringify(extraArgs) === cached.args) {
+      return cached.result;
+    }
+    var result = fn.apply(null, arguments);
+    _calcCache[name] = { ref: txs, args: JSON.stringify(extraArgs), result: result };
+    return result;
+  };
+}
+
+// ============================================================================
 // 单笔交易计算
 // ============================================================================
 
@@ -53,91 +79,91 @@ function validateTxAmounts(tx) {
  * @param {Array} txs - 交易数组
  * @returns {number}
  */
-function totalVolume(txs) {
+var totalVolume = _memoCalc(function(txs) {
   var sum = 0;
   for (var i = 0; i < txs.length; i++) {
     sum += toNum(txs[i].volume);
   }
   return sum;
-}
+}, 'totalVolume');
 
 /**
  * 计算所有交易的佣金总和
  * @param {Array} txs
  * @returns {number}
  */
-function totalComm(txs) {
+var totalComm = _memoCalc(function(txs) {
   var sum = 0;
   for (var i = 0; i < txs.length; i++) {
     sum += toNum(txs[i].comm);
   }
   return sum;
-}
+}, 'totalComm');
 
 /**
  * 计算所有交易的码粮总和
  * @param {Array} txs
  * @returns {number}
  */
-function totalBonus(txs) {
+var totalBonus = _memoCalc(function(txs) {
   var sum = 0;
   for (var i = 0; i < txs.length; i++) {
     sum += toNum(txs[i].bonus);
   }
   return sum;
-}
+}, 'totalBonus');
 
 /**
  * 计算所有交易的公基金总和
  * @param {Array} txs
  * @returns {number}
  */
-function totalFund(txs) {
+var totalFund = _memoCalc(function(txs) {
   var sum = 0;
   for (var i = 0; i < txs.length; i++) {
     sum += toNum(txs[i].fund);
   }
   return sum;
-}
+}, 'totalFund');
 
 /**
  * 计算所有交易的已提领总和
  * @param {Array} txs
  * @returns {number}
  */
-function totalDrawn(txs) {
+var totalDrawn = _memoCalc(function(txs) {
   var sum = 0;
   for (var i = 0; i < txs.length; i++) {
     sum += toNum(txs[i].drawn);
   }
   return sum;
-}
+}, 'totalDrawn');
 
 /**
  * 计算所有交易的未提领总和
  * @param {Array} txs
  * @returns {number}
  */
-function totalUndrawn(txs) {
+var totalUndrawn = _memoCalc(function(txs) {
   var sum = 0;
   for (var i = 0; i < txs.length; i++) {
     sum += toNum(txs[i].undrawn);
   }
   return sum;
-}
+}, 'totalUndrawn');
 
 /**
  * 计算所有交易的现金寄放总和
  * @param {Array} txs
  * @returns {number}
  */
-function totalCash(txs) {
+var totalCash = _memoCalc(function(txs) {
   var sum = 0;
   for (var i = 0; i < txs.length; i++) {
     sum += toNum(txs[i].cash) || 0;
   }
   return sum;
-}
+}, 'totalCash');
 
 // ============================================================================
 // 公基金余额计算 (对照档第十一节)
@@ -169,14 +195,19 @@ function calcFundBalance(txs, fundWithdrawals) {
 
 /**
  * 计算单个代理的钱包余额
- * 余额 = 码粮 + 现金寄放 + 钱包存入 + 钱包自存现金 - 已提领(交易+钱包)
+ *
+ * 餘額 = 碼糧 + 現金寄放 + 錢包存入 + 錢包自存現金 - 已領碼糧(tx.drawn) - 錢包提領
+ *
+ * 已領碼糧 (tx.drawn) 和錢包提領 (wallet withdraw) 是兩筆獨立的扣減，
+ * 必須分別減掉，不能取 max 也不能省略任何一項。
+ *
  * @param {string} agentName - 代理名
  * @param {Array} txs - 交易数组
  * @param {object} agentWallets - 代理钱包 { agentName: [records] }
  * @returns {number}
  */
 function calcAgentBalance(agentName, txs, agentWallets) {
-  // 从交易中计算该代理的码粮和现金寄放
+  // 从交易中计算该代理的碼糧、現金寄放、已領碼糧
   var bonusSum = 0;
   var cashSum = 0;
   var drawnSum = 0;
@@ -189,7 +220,7 @@ function calcAgentBalance(agentName, txs, agentWallets) {
     }
   }
 
-  // 从代理钱包中计算存入和提领
+  // 从代理钱包中计算存入和提領
   var awDeposit = 0;
   var awCashDep = 0;
   var awWithdraw = 0;
@@ -205,7 +236,8 @@ function calcAgentBalance(agentName, txs, agentWallets) {
     }
   }
 
-  var balance = bonusSum + cashSum + awDeposit + awCashDep - Math.max(awWithdraw, drawnSum);
+  // ★ 正確公式：所有收入 - 已領碼糧 - 錢包提領（兩筆獨立扣減）
+  var balance = bonusSum + cashSum + awDeposit + awCashDep - drawnSum - awWithdraw;
   return Math.max(0, balance);
 }
 

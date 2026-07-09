@@ -42,11 +42,6 @@
 .sb-logo-svg {
   display: block;
   margin: 0 auto 6px;
-  filter: drop-shadow(0 0 12px rgba(201,168,76,0.25));
-  transition: filter var(--trans-slow);
-}
-.sb-logo-svg:hover {
-  filter: drop-shadow(0 0 18px rgba(201,168,76,0.4));
 }
 .sb-logo-text { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
 .sb-logo-name { font-size: 15px; font-weight: 700; color: var(--text-primary); letter-spacing: 2px; }
@@ -71,7 +66,7 @@
   padding: 10px 16px;
   cursor: pointer;
   color: var(--text-secondary);
-  transition: color 0.25s ease, background 0.25s ease, border-color 0.25s ease, padding-left 0.25s ease;
+  transition: color 0.25s ease, background 0.25s ease, border-left-color 0.3s ease, padding-left 0.3s ease;
   font-size: 13px;
   border-left: 3px solid transparent;
   position: relative;
@@ -84,24 +79,11 @@
   padding-left: 20px;
 }
 .sb-item.active {
-  background: linear-gradient(90deg, rgba(0,180,216,0.12) 0%, rgba(123,47,247,0.05) 100%);
+  background: rgba(0,212,255,0.06);
   color: var(--tech-cyan);
   border-left-color: var(--tech-cyan);
   font-weight: var(--fw-semibold);
-  box-shadow: inset 0 0 12px rgba(0,180,216,0.05);
   padding-left: 20px;
-}
-/* 选中态右侧金点 */
-.sb-item.active::after {
-  content: '';
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 4px; height: 4px;
-  border-radius: 50%;
-  background: var(--gold-soft);
-  opacity: 0.6;
 }
 /* 折叠模式 hover tooltip */
 #sidebar.collapsed .sb-item::before {
@@ -146,9 +128,14 @@
 .sb-toggle:hover { color: var(--text-primary); }
 .sb-version {
   padding: 6px 16px 10px;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-muted);
   text-align: center;
+  text-decoration: underline;
+  text-decoration-color: var(--gold-soft);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  letter-spacing: 0.5px;
 }
 
 /* Sidebar Overlay (手机) */
@@ -177,10 +164,11 @@
 /* ── Topbar ── */
 #topbar {
   height: var(--topbar-h);
-  background: rgba(22,27,34,0.92);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(22,27,34,0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--border-subtle);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
   display: flex;
   align-items: center;
   padding: 0 20px;
@@ -217,6 +205,7 @@
   padding: 20px;
   overflow-y: auto;
   scroll-behavior: smooth;
+  position: relative;
 }
 
 /* ── Section (页面内区块) ── */
@@ -411,6 +400,7 @@
   transition: all var(--trans-base);
   position: relative;
   overflow: hidden;
+  min-width: 0;
   box-shadow: var(--shadow-surface);
 }
 .kpi-card::before {
@@ -471,6 +461,21 @@
 .kpi-card-value.orange { color: var(--cash-orange); }
 .kpi-card-value.blue { color: var(--sky-blue); }
 .kpi-card-value.violet { color: var(--electric-violet); }
+
+/* KPI 数字入场动画 — 页面切换时交错淡入 */
+.page.active .kpi-card-value {
+  animation: kpiValueEnter 0.45s ease-out both;
+}
+@keyframes kpiValueEnter {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.page.active .kpi-card:nth-child(1) .kpi-card-value { animation-delay: 0.03s; }
+.page.active .kpi-card:nth-child(2) .kpi-card-value { animation-delay: 0.08s; }
+.page.active .kpi-card:nth-child(3) .kpi-card-value { animation-delay: 0.13s; }
+.page.active .kpi-card:nth-child(4) .kpi-card-value { animation-delay: 0.18s; }
+.page.active .kpi-card:nth-child(5) .kpi-card-value { animation-delay: 0.23s; }
+.page.active .kpi-card:nth-child(6) .kpi-card-value { animation-delay: 0.28s; }
 
 /* ── Two Column Layout ── */
 .two-col {
@@ -538,6 +543,14 @@
   border-radius: var(--radius-md);
   border: 1px solid var(--border-subtle);
   background: var(--bg-elevated);
+  /* #56 横向滑动渐层阴影提示 */
+  background-image:
+    /* 左侧阴影 */  linear-gradient(to right, rgba(0,0,0,0.12), transparent 50%),
+    /* 右侧阴影 */  linear-gradient(to left,  rgba(0,0,0,0.12), transparent 50%);
+  background-repeat: no-repeat;
+  background-position: left center, right center;
+  background-size: 24px 100%, 24px 100%;
+  background-attachment: local, local;
 }
 
 /* ── Toolbar ── */
@@ -676,6 +689,37 @@
 @keyframes progress-bar-shimmer {
   0%   { background-position: 200% 0; }
   100%  { background-position: -200% 0; }
+}
+
+/* ══════════════════════════════════════════════════════
+ * 同步进度条 (#52) — Topbar 下方细条
+ * ══════════════════════════════════════════════════════ */
+#sync-progress-bar {
+  height: 3px;
+  background: var(--bg-surface);
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+#sync-progress-bar.active {
+  opacity: 1;
+}
+#sync-progress-fill {
+  height: 100%;
+  width: 30%;
+  background: linear-gradient(90deg,
+    var(--tech-cyan), var(--electric-violet), var(--gold-soft),
+    var(--tech-cyan)
+  );
+  background-size: 300% 100%;
+  animation: sync-progress-indeterminate 1.8s ease-in-out infinite;
+  border-radius: 0 2px 2px 0;
+}
+@keyframes sync-progress-indeterminate {
+  0%   { transform: translateX(-100%); }
+  50%  { transform: translateX(200%); }
+  100% { transform: translateX(600%); }
 }
 
 #sidebar-toggle {

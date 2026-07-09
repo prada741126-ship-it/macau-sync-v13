@@ -7,6 +7,32 @@
  */
 
 // ============================================================================
+// 轻量 Memoization（引用比较 + 参数指纹）
+// ============================================================================
+
+var _statsCache = {};
+
+/**
+ * 包装纯函数，添加引用级缓存
+ * 仅当输入数组引用相同且额外参数一致时才返回缓存
+ * @param {function} fn
+ * @param {string} name
+ * @returns {function}
+ */
+function _memoStats(fn, name) {
+  return function(txs) {
+    var extraArgs = Array.prototype.slice.call(arguments, 1);
+    var cached = _statsCache[name];
+    if (cached && cached.ref === txs && JSON.stringify(extraArgs) === cached.args) {
+      return cached.result;
+    }
+    var result = fn.apply(null, arguments);
+    _statsCache[name] = { ref: txs, args: JSON.stringify(extraArgs), result: result };
+    return result;
+  };
+}
+
+// ============================================================================
 // 按维度聚合
 // ============================================================================
 
@@ -15,7 +41,7 @@
  * @param {Array} txs - 交易数组
  * @returns {Array} [{ agent, volume, comm, bonus, fund, drawn, undrawn, cash, count }]
  */
-function aggregateByAgent(txs) {
+var aggregateByAgent = _memoStats(function(txs) {
   var map = {};
   for (var i = 0; i < txs.length; i++) {
     var tx = txs[i];
@@ -37,14 +63,14 @@ function aggregateByAgent(txs) {
     result.push(map[key]);
   }
   return result;
-}
+}, 'aggregateByAgent');
 
 /**
  * 按地点聚合
  * @param {Array} txs
  * @returns {Array} [{ venue, volume, comm, bonus, fund, drawn, undrawn, cash, count }]
  */
-function aggregateByVenue(txs) {
+var aggregateByVenue = _memoStats(function(txs) {
   var map = {};
   for (var i = 0; i < txs.length; i++) {
     var tx = txs[i];
@@ -66,14 +92,14 @@ function aggregateByVenue(txs) {
     result.push(map[key]);
   }
   return result;
-}
+}, 'aggregateByVenue');
 
 /**
  * 按月份聚合
  * @param {Array} txs
  * @returns {Array} [{ month, volume, comm, bonus, fund, drawn, undrawn, cash, count }]
  */
-function aggregateByMonth(txs) {
+var aggregateByMonth = _memoStats(function(txs) {
   var map = {};
   for (var i = 0; i < txs.length; i++) {
     var tx = txs[i];
@@ -97,7 +123,7 @@ function aggregateByMonth(txs) {
   }
   result.sort(function(a, b) { return a.month.localeCompare(b.month); });
   return result;
-}
+}, 'aggregateByMonth');
 
 /**
  * 按日期聚合 (每日洗码量趋势)
@@ -105,7 +131,7 @@ function aggregateByMonth(txs) {
  * @param {string} [month] - 指定月份 "YYYY-MM"
  * @returns {Array} [{ date, volume, count }]
  */
-function aggregateByDay(txs, month) {
+var aggregateByDay = _memoStats(function(txs, month) {
   var map = {};
   for (var i = 0; i < txs.length; i++) {
     var tx = txs[i];
@@ -126,14 +152,14 @@ function aggregateByDay(txs, month) {
   }
   result.sort(function(a, b) { return a.date.localeCompare(b.date); });
   return result;
-}
+}, 'aggregateByDay');
 
 /**
  * 代理×地点 交叉聚合 (用于统计页)
  * @param {Array} txs
  * @returns {Array} [{ agent, venue, volume, comm, bonus, fund, drawn, undrawn }]
  */
-function aggregateByAgentVenue(txs) {
+var aggregateByAgentVenue = _memoStats(function(txs) {
   var map = {};
   for (var i = 0; i < txs.length; i++) {
     var tx = txs[i];
@@ -156,7 +182,7 @@ function aggregateByAgentVenue(txs) {
   var result = [];
   for (var k in map) { result.push(map[k]); }
   return result;
-}
+}, 'aggregateByAgentVenue');
 
 // ============================================================================
 // 排名
@@ -168,7 +194,7 @@ function aggregateByAgentVenue(txs) {
  * @param {number} [topN=10]
  * @returns {Array} [{ agent, volume, rank }]
  */
-function rankByVolume(txs, topN) {
+var rankByVolume = _memoStats(function(txs, topN) {
   if (!topN) topN = 10;
   var agg = aggregateByAgent(txs);
   agg.sort(function(a, b) { return b.volume - a.volume; });
@@ -177,7 +203,7 @@ function rankByVolume(txs, topN) {
     result[i].rank = i + 1;
   }
   return result;
-}
+}, 'rankByVolume');
 
 /**
  * 代理按佣金排名
@@ -185,7 +211,7 @@ function rankByVolume(txs, topN) {
  * @param {number} [topN=10]
  * @returns {Array}
  */
-function rankByComm(txs, topN) {
+var rankByComm = _memoStats(function(txs, topN) {
   if (!topN) topN = 10;
   var agg = aggregateByAgent(txs);
   agg.sort(function(a, b) { return b.comm - a.comm; });
@@ -194,49 +220,60 @@ function rankByComm(txs, topN) {
     result[i].rank = i + 1;
   }
   return result;
-}
+}, 'rankByComm');
 
 /**
  * 地点按洗码量排名
  * @param {Array} txs
  * @returns {Array}
  */
-function rankVenueByVolume(txs) {
+var rankVenueByVolume = _memoStats(function(txs) {
   var agg = aggregateByVenue(txs);
   agg.sort(function(a, b) { return b.volume - a.volume; });
   for (var i = 0; i < agg.length; i++) {
     agg[i].rank = i + 1;
   }
   return agg;
-}
+}, 'rankVenueByVolume');
 
 // ============================================================================
-// KPI 汇总
+// KPI 汇总 (单趟遍历优化)
 // ============================================================================
 
 /**
- * 计算 KPI 摘要 (对照档总览页 KPI 卡片)
+ * 计算 KPI 摘要 (单趟遍历，对照档总览页 KPI 卡片)
  * @param {Array} txs
  * @returns {object} { totalVolume, totalComm, totalBonus, totalFund, totalDrawn, totalUndrawn, totalCash, txCount, agentCount }
  */
-function calcKPI(txs) {
+var calcKPI = _memoStats(function(txs) {
   var agents = {};
+  var totalVolume = 0, totalComm = 0, totalBonus = 0, totalFund = 0;
+  var totalDrawn = 0, totalUndrawn = 0, totalCash = 0;
+
   for (var i = 0; i < txs.length; i++) {
-    if (txs[i].agent) agents[txs[i].agent] = true;
+    var tx = txs[i];
+    if (tx.agent) agents[tx.agent] = true;
+    totalVolume  += toNum(tx.volume);
+    totalComm    += toNum(tx.comm);
+    totalBonus   += toNum(tx.bonus);
+    totalFund    += toNum(tx.fund);
+    totalDrawn   += toNum(tx.drawn);
+    totalUndrawn += toNum(tx.undrawn);
+    totalCash    += toNum(tx.cash) || 0;
   }
 
   return {
-    totalVolume:  totalVolume(txs),
-    totalComm:    totalComm(txs),
-    totalBonus:   totalBonus(txs),
-    totalFund:    totalFund(txs),
-    totalDrawn:   totalDrawn(txs),
-    totalUndrawn: totalUndrawn(txs),
-    totalCash:    totalCash(txs),
+    totalVolume:  totalVolume,
+    totalComm:    totalComm,
+    totalBonus:   totalBonus,
+    totalFund:    totalFund,
+    totalDrawn:   totalDrawn,
+    totalUndrawn: totalUndrawn,
+    totalCash:    totalCash,
     txCount:      txs.length,
     agentCount:   Object.keys(agents).length,
   };
-}
+}, 'calcKPI');
 
 // ============================================================================
 // 订房统计
@@ -247,7 +284,7 @@ function calcKPI(txs) {
  * @param {Array} bookings
  * @returns {Array} [{ month, count, totalCost, totalNights }]
  */
-function aggregateBookingsByMonth(bookings) {
+var aggregateBookingsByMonth = _memoStats(function(bookings) {
   var map = {};
   for (var i = 0; i < bookings.length; i++) {
     var b = bookings[i];
@@ -269,4 +306,4 @@ function aggregateBookingsByMonth(bookings) {
   for (var key in map) { result.push(map[key]); }
   result.sort(function(a, b) { return a.month.localeCompare(b.month); });
   return result;
-}
+}, 'aggregateBookingsByMonth');

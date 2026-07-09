@@ -1,7 +1,7 @@
 /**
  * v13 加密/解密模块
  * 
- * 依赖: core/constants.js (APP.PWD_ENCODED), CryptoJS (CDN)
+ * 依赖: core/constants.js (APP.PWD_HASH), CryptoJS (CDN)
  * 影响: core/store.js (localStorage 持久化)
  * 
  * 对照档: 第七节模块2, 第十节安全防护
@@ -156,13 +156,22 @@ function clearSessionPw() {
 }
 
 /**
- * 验证密码
+ * 验证密码 (SHA-256 比对，不含明文)
  * @param {string} input - 用户输入
  * @returns {boolean}
  */
 function verifyPassword(input) {
-  var decoded = atob(APP.PWD_ENCODED);
-  return input === decoded;
+  if (typeof CryptoJS === 'undefined' || !CryptoJS.SHA256) {
+    console.error('[v13:crypto] verifyPassword: CryptoJS not available, cannot verify');
+    return false;
+  }
+  try {
+    var hash = CryptoJS.SHA256(input).toString();
+    return hash === APP.PWD_HASH;
+  } catch (e) {
+    console.error('[v13:crypto] verifyPassword error:', e);
+    return false;
+  }
 }
 
 // ============================================================================
@@ -170,12 +179,15 @@ function verifyPassword(input) {
 // ============================================================================
 
 /**
- * 获取加密密钥 (密码的 SHA256 hash)
+ * 获取加密密钥 (直接使用预计算的 SHA-256 哈希)
  * @returns {string}
  */
 function _getEncKey() {
   var pw = getSessionPw();
-  if (!pw) pw = atob(APP.PWD_ENCODED);  // 回退默认密码
+  if (!pw) return APP.PWD_HASH;  // 回退：直接用预计算哈希
+  // 如果 session 中存储的就是哈希 (autoLogin 场景)，直接使用
+  if (pw === APP.PWD_HASH) return pw;
+  // 用户手动登录时，session 存储的是明文，需要哈希
   return CryptoJS.SHA256(pw).toString();
 }
 

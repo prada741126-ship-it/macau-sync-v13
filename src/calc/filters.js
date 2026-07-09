@@ -221,6 +221,12 @@ function sortTxs(txs, col, asc) {
   result.sort(function(a, b) {
     var va = a[col];
     var vb = b[col];
+    // type 列：binary categorical, cash=1, 其他=0（与 all.js 原始行为一致）
+    if (col === 'type') {
+      va = (va === 'cash') ? 1 : 0;
+      vb = (vb === 'cash') ? 1 : 0;
+      return (va - vb) * dir;
+    }
     if (numericCols[col]) {
       va = toNum(va);
       vb = toNum(vb);

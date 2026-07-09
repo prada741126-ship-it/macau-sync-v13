@@ -149,6 +149,7 @@
         var result = checkPassword(input.value);
         if (result.success) {
           if (errorEl) errorEl.style.display = 'none';
+          input.classList.remove('pw-error');
           // 登入成功后初始化应用
           initAppAfterLogin();
         } else {
@@ -156,6 +157,9 @@
             errorEl.textContent = result.error;
             errorEl.style.display = 'block';
           }
+          input.classList.remove('pw-error');
+          void input.offsetWidth; // 触发重排以重新播放动画
+          input.classList.add('pw-error');
           input.value = '';
         }
       });
@@ -191,6 +195,17 @@
     // ★ 周期性清理过期删除追踪 (每 30 秒)
     setInterval(function() { cleanRecentlyDeleted(); }, 30000);
 
+    // ★ 从 localStorage 恢复已关账月份
+    try {
+      var storedLocked = localStorage.getItem('MACAU_LOCKED_MONTHS');
+      if (storedLocked) {
+        var parsed = JSON.parse(storedLocked);
+        State.set('lockedMonths', parsed);
+        State.set('isLocked', Object.keys(parsed).length > 0);
+        console.log('[v13:app] 已关账月份:', Object.keys(parsed).join(', '));
+      }
+    } catch(e) { console.warn('[v13:app] lockedMonths restore error:', e); }
+
     // ★ 首先绑定交互: 先保侧栏能点、页面能切，再渲染数据
     _setupSidebar();
     _setupMonthBar();
@@ -201,11 +216,8 @@
     // 填充下拉
     try { _populateDropdowns(); } catch(e) { console.error('[v13:app] populateDropdowns error:', e); }
 
-    // 启动 Firebase 监听器 (非致命) — watchers 在连线建立后会自动拉取远端数据
-    try { startWatchers(); } catch(e) { console.warn('[v13:app] startWatchers error:', e); }
-
-    // 立即推送本地数据到 Firebase（异步安全网）
-    try { syncUploadAll(); } catch(e) { console.warn('[v13:app] syncUploadAll error:', e); }
+    // 注意: Firebase watchers 和同步由 firebase.js 的 _onFirebaseReady() 在匿名认证完成后自动启动
+    // 不要在这里直接调用 startWatchers() / syncUploadAll()，否则会在 auth 完成前触发 permission_denied
 
     // 渲染: 加 try-catch 确保一个页面失败不影响其他
     try { renderOverview(); } catch(e) { console.error('[v13:app] renderOverview error:', e); }

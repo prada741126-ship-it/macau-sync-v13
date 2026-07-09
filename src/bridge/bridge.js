@@ -189,7 +189,26 @@ function _openTxModal(fbKey) {
     if (draftEl) draftEl.style.display = 'none';
   }
 
+  // ★ 双保险：JS addEventListener + HTML oninput，确保 auto-calc 永远触发
+  _bindTxFormCalcListeners();
+
   openModal('modal');
+}
+
+/** 双保险绑定 calc 到表单字段 (oninput + onchange) */
+var _txFormCalcBound = false;
+function _bindTxFormCalcListeners() {
+  if (_txFormCalcBound) return;
+  var fields = ['tx-volume', 'tx-rate', 'tx-bonus', 'tx-drawn'];
+  for (var i = 0; i < fields.length; i++) {
+    var el = document.getElementById(fields[i]);
+    if (el) {
+      el.addEventListener('input', calc);
+      el.addEventListener('change', calc);
+    }
+  }
+  _txFormCalcBound = true;
+  console.log('[bridge] _bindTxFormCalcListeners: bound input+change on ' + fields.join(', '));
 }
 
 /** 填充交易表单代理下拉 */
@@ -205,7 +224,7 @@ function _populateTxAgentDropdown() {
     sel.appendChild(opt);
   }
   // 绑定代理选择联动 → 自动填入碼佣率
-  sel.onchange = _onAgentChange;
+  sel.onchange = onAgentChange;
 }
 
 /** 填充交易表单地点下拉 */
@@ -231,7 +250,7 @@ function _populateTxVenueDropdown() {
 }
 
 /** 代理选择变更 → 自动填入该代理最近交易的碼佣率 */
-function _onAgentChange() {
+function onAgentChange() {
   var agentSel = document.getElementById('tx-agent');
   var rateEl = document.getElementById('tx-rate');
   if (!agentSel || !rateEl) return;
@@ -328,7 +347,9 @@ function toggleTypeFields() {
   }
 }
 
-/** 自动计算佣金/基金/未提领 */
+/** 自动计算佣金/基金/未提领 (alias: recalcComm — template.html 的 oninput 绑定) */
+function recalcComm() { calc(); }
+
 function calc() {
   try {
     var volEl   = document.getElementById('tx-volume');
@@ -372,12 +393,18 @@ function calc() {
 
 /** 保存交易表单 */
 function saveForm() {
-  var data = getCurrentFormData();
-
-  if (!data.agent) {
-    showToast('請選擇代理', 'warning');
+  // 字段级验证
+  var result = validateTxForm();
+  if (!result.valid) {
+    if (result.firstErrorId) {
+      var el = document.getElementById(result.firstErrorId);
+      if (el) el.focus();
+    }
+    showToast('請修正表單錯誤', 'warning');
     return;
   }
+
+  var data = getCurrentFormData();
 
   if (_txEditingKey) {
     // 编辑
@@ -431,10 +458,319 @@ function refreshAllViews() {
 }
 
 // ============================================================================
+// 表单验证辅助函数
+// ============================================================================
+
+/**
+ * 清除表单中所有字段错误状态
+ * @param {string} formContext - 表单上下文标识，如 'tx'、'fund'、'wallet'、'hc'、'rm'
+ */
+function clearFieldErrors(formContext) {
+  var prefixMap = {
+    'tx':    ['tx-type','tx-agent','tx-client','tx-venue','tx-volume','tx-rate','tx-bonus','tx-drawn','tx-cash','tx-note'],
+    'fund':  ['fund-date','fund-type','fund-amount','fund-note'],
+    'wallet':['wallet-agent','wallet-date','wallet-type','wallet-amount','wallet-note'],
+    'hc':   ['hc-casino','hc-hotel','hc-code','hc-room','hc-weekday','hc-weekend','hc-special','hc-threshold'],
+    'rm':   ['rm-agent','rm-client','rm-casino','rm-hotel','rm-room','rm-checkin','rm-checkout','rm-nights','rm-price','rm-total'],
+  };
+  var ids = prefixMap[formContext] || [];
+  for (var i = 0; i < ids.length; i++) {
+    var el = document.getElementById(ids[i]);
+    if (!el) continue;
+    // 移除字段错误样式
+    el.classList.remove('field-error');
+    var row = el.closest('.form-row');
+    if (row) row.classList.remove('has-error');
+    // 移除错误提示文字
+    var next = el.nextElementSibling;
+    if (next && next.classList && next.classList.contains('field-error-msg')) {
+      next.remove();
+    }
+    // 也检查 parentNode 内的 error msg
+    if (row) {
+      var existingMsg = row.querySelector('.field-error-msg');
+      if (existingMsg) existingMsg.remove();
+    }
+  }
+  // 清除表单级错误汇总
+  var summary = document.getElementById(formContext + '-error-summary');
+  if (summary) {
+    summary.textContent = '';
+    summary.classList.remove('visible');
+  }
+}
+
+/**
+ * 在字段下方显示错误提示
+ * @param {string} fieldId - 字段 DOM ID
+ * @param {string} message - 错误提示文字
+ */
+function showFieldError(fieldId, message) {
+  var el = document.getElementById(fieldId);
+  if (!el) return;
+  // 标记错误样式
+  el.classList.add('field-error');
+  var row = el.closest('.form-row');
+  if (row) row.classList.add('has-error');
+
+  // 避免重复添加错误提示
+  var existingMsg = row ? row.querySelector('.field-error-msg') : null;
+  if (existingMsg) {
+    existingMsg.textContent = message;
+    return;
+  }
+
+  // 创建错误提示元素
+  var msgEl = document.createElement('div');
+  msgEl.className = 'field-error-msg';
+  msgEl.textContent = message;
+  msgEl.style.cssText = 'font-size:11px;color:var(--danger);margin-top:3px;padding-left:2px;animation:errorFadeIn 0.2s ease';
+
+  if (row) {
+    row.appendChild(msgEl);
+  } else {
+    el.parentNode.insertBefore(msgEl, el.nextSibling);
+  }
+}
+
+/**
+ * 验证交易表单
+ * @returns {{ valid: boolean, firstErrorId: string|null }}
+ */
+function validateTxForm() {
+  clearFieldErrors('tx');
+  var data = getCurrentFormData();
+  var errors = [];
+  var firstErrorId = null;
+
+  // 代理必填
+  if (!data.agent) {
+    errors.push({ id: 'tx-agent', msg: '請選擇代理' });
+  }
+  // 客户必填
+  if (!data.client || !data.client.trim()) {
+    errors.push({ id: 'tx-client', msg: '請輸入客戶名稱' });
+  }
+  // 日期必填
+  if (!data.date) {
+    errors.push({ id: 'tx-date', msg: '請選擇日期' });
+  }
+  // 转码类型：洗码量必填且 > 0
+  if (data.type === 'rolling') {
+    var vol = toNum(data.volume);
+    if (!data.volume || vol <= 0) {
+      errors.push({ id: 'tx-volume', msg: '請輸入洗碼量（須大於0）' });
+    }
+    var rate = toNum(data.rate);
+    if (!data.rate || rate < 0) {
+      errors.push({ id: 'tx-rate', msg: '請輸入碼佣率' });
+    }
+  }
+  // 现金寄放类型：金额必填且 > 0
+  if (data.type === 'cash') {
+    var cash = toNum(data.cash);
+    if (!data.cash || cash <= 0) {
+      errors.push({ id: 'tx-cash', msg: '請輸入現金寄放金額（須大於0）' });
+    }
+  }
+
+  // 显示所有错误
+  for (var i = 0; i < errors.length; i++) {
+    showFieldError(errors[i].id, errors[i].msg);
+    if (i === 0) firstErrorId = errors[i].id;
+  }
+
+  return { valid: errors.length === 0, firstErrorId: firstErrorId };
+}
+
+/**
+ * 验证公基金表单
+ * @returns {{ valid: boolean, firstErrorId: string|null }}
+ */
+function validateFundForm() {
+  clearFieldErrors('fund');
+  var errors = [];
+  var firstErrorId = null;
+
+  var date = (document.getElementById('fund-date') || {}).value;
+  if (!date) {
+    errors.push({ id: 'fund-date', msg: '請選擇日期' });
+  }
+  var amount = toNum((document.getElementById('fund-amount') || {}).value);
+  if (!amount || amount <= 0) {
+    errors.push({ id: 'fund-amount', msg: '請輸入金額（須大於0）' });
+  }
+
+  for (var i = 0; i < errors.length; i++) {
+    showFieldError(errors[i].id, errors[i].msg);
+    if (i === 0) firstErrorId = errors[i].id;
+  }
+
+  return { valid: errors.length === 0, firstErrorId: firstErrorId };
+}
+
+/**
+ * 验证代理钱包表单
+ * @returns {{ valid: boolean, firstErrorId: string|null }}
+ */
+function validateWalletForm() {
+  clearFieldErrors('wallet');
+  var errors = [];
+  var firstErrorId = null;
+
+  var agent = ((document.getElementById('wallet-agent') || {}).value || _walletAgentName || '');
+  if (!agent) {
+    errors.push({ id: 'wallet-agent', msg: '請選擇代理' });
+  }
+  var amount = toNum((document.getElementById('wallet-amount') || {}).value);
+  if (!amount || amount <= 0) {
+    errors.push({ id: 'wallet-amount', msg: '請輸入金額（須大於0）' });
+  }
+
+  for (var i = 0; i < errors.length; i++) {
+    showFieldError(errors[i].id, errors[i].msg);
+    if (i === 0) firstErrorId = errors[i].id;
+  }
+
+  return { valid: errors.length === 0, firstErrorId: firstErrorId };
+}
+
+/**
+ * 验证酒店设定表单
+ * @returns {{ valid: boolean, firstErrorId: string|null }}
+ */
+function validateHcForm() {
+  clearFieldErrors('hc');
+  var errors = [];
+  var firstErrorId = null;
+
+  var casino = (document.getElementById('hc-casino') || {}).value;
+  if (!casino) {
+    errors.push({ id: 'hc-casino', msg: '請選擇體系' });
+  }
+  var hotel = (document.getElementById('hc-hotel') || {}).value;
+  if (!hotel) {
+    errors.push({ id: 'hc-hotel', msg: '請選擇酒店' });
+  }
+  var room = (document.getElementById('hc-room') || {}).value;
+  if (!room || !room.trim()) {
+    errors.push({ id: 'hc-room', msg: '請輸入房型名稱' });
+  }
+  var weekday = toNum((document.getElementById('hc-weekday') || {}).value);
+  if (weekday < 0) {
+    errors.push({ id: 'hc-weekday', msg: '平日價不能為負數' });
+  }
+  var weekend = toNum((document.getElementById('hc-weekend') || {}).value);
+  if (weekend < 0) {
+    errors.push({ id: 'hc-weekend', msg: '週末價不能為負數' });
+  }
+
+  for (var i = 0; i < errors.length; i++) {
+    showFieldError(errors[i].id, errors[i].msg);
+    if (i === 0) firstErrorId = errors[i].id;
+  }
+
+  return { valid: errors.length === 0, firstErrorId: firstErrorId };
+}
+
+/**
+ * 验证房务订房表单
+ * @returns {{ valid: boolean, firstErrorId: string|null }}
+ */
+function validateRoomForm() {
+  clearFieldErrors('rm');
+  var errors = [];
+  var firstErrorId = null;
+
+  var agent = (document.getElementById('rm-agent') || {}).value;
+  if (!agent) {
+    errors.push({ id: 'rm-agent', msg: '請選擇代理' });
+  }
+  var client = (document.getElementById('rm-client') || {}).value;
+  if (!client || !client.trim()) {
+    errors.push({ id: 'rm-client', msg: '請輸入客戶名稱' });
+  }
+  var casino = (document.getElementById('rm-casino') || {}).value;
+  if (!casino) {
+    errors.push({ id: 'rm-casino', msg: '請選擇體系' });
+  }
+  var hotel = (document.getElementById('rm-hotel') || {}).value;
+  if (!hotel) {
+    errors.push({ id: 'rm-hotel', msg: '請選擇酒店' });
+  }
+  var room = (document.getElementById('rm-room') || {}).value;
+  if (!room) {
+    errors.push({ id: 'rm-room', msg: '請選擇房型' });
+  }
+  var checkIn = (document.getElementById('rm-checkin') || {}).value;
+  if (!checkIn) {
+    errors.push({ id: 'rm-checkin', msg: '請選擇入住日期' });
+  }
+  var checkOut = (document.getElementById('rm-checkout') || {}).value;
+  if (!checkOut) {
+    errors.push({ id: 'rm-checkout', msg: '請選擇退房日期' });
+  }
+  if (checkIn && checkOut && checkOut <= checkIn) {
+    errors.push({ id: 'rm-checkout', msg: '退房日期必須晚於入住日期' });
+  }
+  var nights = toNum((document.getElementById('rm-nights') || {}).value);
+  if (!nights || nights <= 0) {
+    errors.push({ id: 'rm-nights', msg: '天數必須大於0' });
+  }
+  var total = toNum((document.getElementById('rm-total') || {}).value);
+  if (total < 0) {
+    errors.push({ id: 'rm-total', msg: '總費用不能為負數' });
+  }
+
+  for (var i = 0; i < errors.length; i++) {
+    showFieldError(errors[i].id, errors[i].msg);
+    if (i === 0) firstErrorId = errors[i].id;
+  }
+
+  return { valid: errors.length === 0, firstErrorId: firstErrorId };
+}
+
+/**
+ * 显示表单级错误汇总（可选，在多个错误时使用）
+ */
+function showFormErrorSummary(formContext, message) {
+  var summary = document.getElementById(formContext + '-error-summary');
+  if (!summary) {
+    // 动态创建
+    summary = document.createElement('div');
+    summary.id = formContext + '-error-summary';
+    summary.className = 'form-error-summary';
+    // 插入到 Modal 标题之后
+    var modal = document.querySelector('#modal .modal');
+    if (modal) {
+      var title = modal.querySelector('h3');
+      if (title && title.nextSibling) {
+        modal.insertBefore(summary, title.nextSibling);
+      }
+    }
+  }
+  if (summary) {
+    summary.textContent = message || '請修正以下錯誤';
+    summary.classList.add('visible');
+  }
+}
+
+// ============================================================================
 // 公基金表单桥接
 // ============================================================================
 
 function saveFundForm() {
+  // 字段级验证
+  var result = validateFundForm();
+  if (!result.valid) {
+    if (result.firstErrorId) {
+      var el = document.getElementById(result.firstErrorId);
+      if (el) el.focus();
+    }
+    showToast('請修正表單錯誤', 'warning');
+    return;
+  }
+
   // 确保日期下拉已同步
   readDateSels('fund-date');
   var data = {
@@ -443,11 +779,6 @@ function saveFundForm() {
     amount: (document.getElementById('fund-amount') || {}).value || '0',
     note:   (document.getElementById('fund-note') || {}).value || '',
   };
-
-  if (!data.amount || toNum(data.amount) <= 0) {
-    showToast('請輸入金額', 'warning');
-    return;
-  }
 
   var record = createFund(data);
   if (record) {
@@ -533,12 +864,19 @@ function openWalletModal(agentName) {
 }
 
 function saveAgentWalletForm() {
-  var agentSel = document.getElementById('wallet-agent');
-  var agent = (agentSel && agentSel.value) ? agentSel.value : _walletAgentName;
-  if (!agent) {
-    showToast('請選擇代理', 'warning');
+  // 字段级验证
+  var result = validateWalletForm();
+  if (!result.valid) {
+    if (result.firstErrorId) {
+      var el = document.getElementById(result.firstErrorId);
+      if (el) el.focus();
+    }
+    showToast('請修正表單錯誤', 'warning');
     return;
   }
+
+  var agentSel = document.getElementById('wallet-agent');
+  var agent = (agentSel && agentSel.value) ? agentSel.value : _walletAgentName;
 
   // 确保日期下拉已同步
   readDateSels('wallet-date');
@@ -548,11 +886,6 @@ function saveAgentWalletForm() {
     amount: (document.getElementById('wallet-amount') || {}).value || '0',
     note:   (document.getElementById('wallet-note') || {}).value || '',
   };
-
-  if (!data.amount || toNum(data.amount) <= 0) {
-    showToast('請輸入金額', 'warning');
-    return;
-  }
 
   var record = createWallet(agent, data);
   if (record) {
@@ -604,6 +937,17 @@ function hcCloseModal() {
 }
 
 function hcSaveModal() {
+  // 字段级验证
+  var result = validateHcForm();
+  if (!result.valid) {
+    if (result.firstErrorId) {
+      var el = document.getElementById(result.firstErrorId);
+      if (el) el.focus();
+    }
+    showToast('請修正表單錯誤', 'warning');
+    return;
+  }
+
   var data = {
     casino:    (document.getElementById('hc-casino') || {}).value || '',
     hotel:     (document.getElementById('hc-hotel') || {}).value || '',
@@ -614,11 +958,6 @@ function hcSaveModal() {
     special:   (document.getElementById('hc-special') || {}).value || '0',
     threshold: (document.getElementById('hc-threshold') || {}).value || '0',
   };
-
-  if (!data.casino || !data.hotel || !data.room) {
-    showToast('請填寫體系、酒店、房型', 'warning');
-    return;
-  }
 
   if (_hcEditingKey) {
     var updated = updateHC(_hcEditingKey, data);
@@ -998,7 +1337,15 @@ function hcRender(filterCasino, filterHotel, filterSearch) {
     var emptyTd = document.createElement('td');
     emptyTd.colSpan = 10;
     emptyTd.style.cssText = 'text-align:center;padding:24px;color:' + UI_COLORS.textMuted;
-    emptyTd.textContent = '暫無資料';
+    // #40 区分「完全無資料」和「無匹配結果」
+    var hasFilters = !!(fCasino || fHotel || fSearchLower);
+    if (config.length === 0) {
+      emptyTd.textContent = '暫無資料，請點擊「+ 新增房型」添加';
+    } else if (hasFilters) {
+      emptyTd.textContent = '無匹配結果，請調整篩選條件';
+    } else {
+      emptyTd.textContent = '暫無資料';
+    }
     emptyTr.appendChild(emptyTd);
     tbody.appendChild(emptyTr);
     hcUpdateBatchBar();
@@ -1212,7 +1559,7 @@ function hcFilter() {
 /**
  * 登入按钮回调 — 读取密码调用 checkPassword，显示错误/剩余次数
  */
-function _v13LoginFallback() {
+function v13LoginFallback() {
   var inputEl = document.getElementById('pw-input');
   var errorEl = document.getElementById('pw-error');
   var attemptsEl = document.getElementById('pw-attempts');
@@ -1229,8 +1576,14 @@ function _v13LoginFallback() {
   if (result.success) {
     if (errorEl) errorEl.textContent = '';
     if (attemptsEl) attemptsEl.textContent = '';
+    if (inputEl) inputEl.classList.remove('pw-error');
   } else {
     if (errorEl) errorEl.textContent = result.error || '驗證失敗';
+    if (inputEl) {
+      inputEl.classList.remove('pw-error');
+      void inputEl.offsetWidth;
+      inputEl.classList.add('pw-error');
+    }
     // 自动从 _pwAttempts(若可访问) 或直接隐藏
     if (attemptsEl) {
       var maxAttempts = (typeof CONFIG !== 'undefined' && CONFIG.MAX_PW_ATTEMPTS) ? CONFIG.MAX_PW_ATTEMPTS : 3;
@@ -1248,7 +1601,7 @@ function _v13LoginFallback() {
  * 二次确认保护，防止误操作
  */
 function clearAllDataConfirm() {
-  if (!confirm('⚠️ 警告：此操作將清除 Firebase 及本機所有業務數據（交易、公基金、代理錢包、訂房）！\n\n此操作不可逆，建議先備份！\n\n確定要繼續嗎？')) {
+  if (!confirm('⚠️ 警告：此操作將清除 Firebase 及本機所有業務數據（交易、公基金、代理錢包、訂房）！\n\n代理名單會保留。此操作不可逆，建議先備份！\n\n確定要繼續嗎？')) {
     return;
   }
   if (!confirm('再次確認：您確定要清除全部數據嗎？\n\n清除後所有記錄將消失，無法恢復！')) {
@@ -1293,3 +1646,99 @@ Events.on(EVENTS.HC_CONFIG_UPDATED, function() {
     RM.populateCasinoDropdown();
   }
 });
+
+// ============================================================================
+// 快捷键帮助面板 (#48)
+// ============================================================================
+
+/**
+ * 渲染快捷键帮助 Modal — 两栏表格显示所有快捷键
+ */
+function renderShortcutHelp() {
+  var listEl = document.getElementById('shortcut-list');
+  if (!listEl) return;
+
+  var shortcuts = (typeof SHORTCUTS !== 'undefined') ? SHORTCUTS : [];
+
+  var html = '<table class="shortcut-table"><thead><tr><th>快捷鍵</th><th>功能說明</th></tr></thead><tbody>';
+  for (var i = 0; i < shortcuts.length; i++) {
+    var s = shortcuts[i];
+    html += '<tr><td class="sc-key"><kbd>' + (s.keys || '') + '</kbd></td>';
+    html += '<td class="sc-desc">' + (s.desc || '') + '</td></tr>';
+  }
+  html += '</tbody></table>';
+
+  // 额外提示
+  html += '<p class="shortcut-hint">💡 提示：按 <kbd>?</kbd> 可隨時打開此面板；按 <kbd>Ctrl+N</kbd> 快速新增交易</p>';
+
+  listEl.innerHTML = html;
+}
+
+// ============================================================================
+// 同步进度条 (#52)
+// ============================================================================
+
+var _syncProgressTimer = null;
+
+/**
+ * 显示同步进度条（不确定长度动画）
+ */
+function showSyncProgress() {
+  var bar = document.getElementById('sync-progress-bar');
+  if (!bar) return;
+  bar.classList.add('active');
+  // 自动隐藏 — 最多 10 秒后消失
+  if (_syncProgressTimer) clearTimeout(_syncProgressTimer);
+  _syncProgressTimer = setTimeout(hideSyncProgress, 10000);
+}
+
+/**
+ * 隐藏同步进度条
+ */
+function hideSyncProgress() {
+  var bar = document.getElementById('sync-progress-bar');
+  if (!bar) return;
+  bar.classList.remove('active');
+  if (_syncProgressTimer) {
+    clearTimeout(_syncProgressTimer);
+    _syncProgressTimer = null;
+  }
+}
+
+// ============================================================================
+// JSON 备份导出/导入
+// ============================================================================
+
+/**
+ * 导出 JSON 备份文件 (Bridge for onclick)
+ */
+function downloadJSONBackup() {
+  if (typeof exportJSONBackup === 'function') {
+    exportJSONBackup();
+  } else {
+    showToast('匯出功能不可用', 'error');
+  }
+}
+
+/**
+ * 触发 JSON 文件选择器进行导入
+ */
+function triggerJSONImport() {
+  var input = document.getElementById('json-import-input');
+  if (!input) {
+    input = document.createElement('input');
+    input.type = 'file';
+    input.id = 'json-import-input';
+    input.accept = '.json';
+    input.style.display = 'none';
+    input.addEventListener('change', function() {
+      var file = this.files[0];
+      if (file && typeof importJSONBackup === 'function') {
+        importJSONBackup(file);
+      }
+      this.value = ''; // 允许重复选择同一文件
+    });
+    document.body.appendChild(input);
+  }
+  input.click();
+}

@@ -17,16 +17,35 @@ var _fbPollTimer = null;     // 轮询定时器
 
 /**
  * 真正执行 Firebase 初始化
+ * 必须先完成匿名认证，再启动 watchers + 同步，否则 permission_denied
+ * @param {function} onReady - 认证完成后调用
  * @returns {object|null}
  */
-function _doInitFirebase() {
+function _doInitFirebase(onReady) {
   if (typeof firebase === 'undefined') return null;
   try {
     if (!firebase.apps.length) {
       firebase.initializeApp(FIREBASE_CONFIG);
     }
+
+    // 必须等待 firebase-auth-compat.js 加载完成
+    if (typeof firebase.auth !== 'function') {
+      console.log('[v13:firebase] ⏳ Auth SDK not ready yet, retrying...');
+      return null; // 返回 null，让轮询继续
+    }
+
     _db = firebase.database();
-    console.log('[v13:firebase] ✅ Connected! _db ready, database:', _db.ref.toString().substring(0,30));
+
+    // Anonymous auth — RTDB 读写都需要认证完成后才能操作
+    firebase.auth().signInAnonymously().then(function() {
+      console.log('[v13:firebase] 🔑 Anonymous auth OK');
+      if (typeof onReady === 'function') onReady();
+    }).catch(function(err) {
+      console.error('[v13:firebase] ❌ Anonymous auth failed:', err.message);
+      if (typeof onReady === 'function') onReady();
+    });
+
+    console.log('[v13:firebase] ✅ Connected! _db ready');
     _watchConnection();
     return _db;
   } catch (e) {
@@ -37,6 +56,7 @@ function _doInitFirebase() {
 
 /**
  * 初始化成功后补启动 watchers + 同步
+ * 必须在匿名认证完成后调用
  */
 function _onFirebaseReady() {
   console.log('[v13:firebase] 🚀 Starting watchers + sync...');
@@ -49,24 +69,25 @@ function _onFirebaseReady() {
  * 1. 立即尝试（如果 SDK 已加载）
  * 2. load 事件重试（兼容 document.readyState===complete）
  * 3. 1秒间隔轮询 最多 30 次
+ * 关键：必须先完成匿名认证，再启动 watchers，否则 permission_denied
  * @returns {object|null} database 实例，未就绪时返回 null
  */
 function initFirebase() {
   // 如果已经连上了，直接返回
   if (_db) return _db;
 
-  // 立即尝试
-  var result = _doInitFirebase();
+  // 立即尝试 — 传入 onReady 回调，auth 完成后才启动 watchers
+  var result = _doInitFirebase(function onReady() {
+    _onFirebaseReady();
+  });
   if (result) {
     _fbRetryDone = true;
-    // ★ 首次成功也触发 onFirebaseReady（延迟，等连接真正建立后再同步）
-    // 但不在 initAppAfterLogin 之前启动 watchers，避免与后续 initAppAfterLogin 双重注册
-    // 标记需要延迟同步，由 _watchConnection 在连通时触发
+    // _onFirebaseReady 会在 signInAnonymously().then() 中调用
     return result;
   }
 
   // 还没连上 — 安排重试
-  if (_fbRetryDone) return null;  // 已经安排过了
+  if (_fbRetryDone) return null;
   _fbRetryDone = true;
 
   console.warn('[v13:firebase] Firebase SDK not loaded yet, setting up retry...');
@@ -75,8 +96,9 @@ function initFirebase() {
   function tryInitViaEvent() {
     if (!_db) {
       console.log('[v13:firebase] ⏳ Retry via event...');
-      _doInitFirebase();
-      if (_db) _onFirebaseReady();
+      _doInitFirebase(function onReady() {
+        _onFirebaseReady();
+      });
     }
   }
 
@@ -94,12 +116,13 @@ function initFirebase() {
     pollCount++;
     if (typeof firebase !== 'undefined' && !_db) {
       console.log('[v13:firebase] ⏳ Poll #' + pollCount + ' — Firebase SDK detected, initializing...');
-      _doInitFirebase();
-      if (_db) {
-        clearInterval(_fbPollTimer);
-        _fbPollTimer = null;
+      _doInitFirebase(function onReady() {
+        if (_fbPollTimer) {
+          clearInterval(_fbPollTimer);
+          _fbPollTimer = null;
+        }
         _onFirebaseReady();
-      }
+      });
     }
     if (pollCount >= 30) {
       clearInterval(_fbPollTimer);
@@ -148,11 +171,17 @@ function _watchConnection() {
 
     if (connected) {
       console.log('[v13:firebase] ✅ Firebase RTDB 已連線');
-      // 安全网：2 秒后推送本地数据到 Firebase（transaction 合并，幂等）
+      // 重连双向同步：先拉取远端数据，再推送本地变更
       setTimeout(function() {
         if (!State.get('syncConnected')) return;
-        console.log('[v13:firebase] 🔄 安全網推送...');
-        try { syncUploadAll(); } catch(e) { console.error('[v13:firebase] syncUploadAll error:', e); }
+        console.log('[v13:firebase] 🔄 重連同步：下載遠端...');
+        try { syncDownloadAll(); } catch(e) { console.error('[v13:firebase] syncDownloadAll error:', e); }
+        // 等下载合并完成后，再推送本地数据
+        setTimeout(function() {
+          if (!State.get('syncConnected')) return;
+          console.log('[v13:firebase] 🔄 重連同步：推送本地...');
+          try { syncUploadAll(); } catch(e) { console.error('[v13:firebase] syncUploadAll error:', e); }
+        }, 3000);
       }, 2000);
     } else {
       // 只有从 connected→disconnected 变化时才警告（避免首次 false 状态误报）
@@ -596,12 +625,30 @@ function clearFirebaseData(onDone) {
     if (onDone) onDone(new Error('Firebase 未連線'));
     return;
   }
-  console.warn('[v13:firebase] 🗑️  clearFirebaseData: nuking macau_data/...');
-  db.ref('macau_data').set(null, function(err) {
+  console.warn('[v13:firebase] 🗑️  clearFirebaseData: clearing macau_data/ (with _clearedAt marker)...');
+
+  // ★ FIX: 不能直接用 set(null) 清空父节点
+  //   set(null) 会让手机端 watcher 收到 snap.val()=null → fbObjToArray=[] → mergeTxs 保留本地数据不删
+  //   解决方案：写入 _clearedAt 标记 + 逐个清空子路径，手机端 watcher 监听 _clearedAt 执行同步清除
+  var clearedAt = Date.now();
+  // 路径必须与 watchers.js 中 db.ref(FB_PATH.XXX) 一致
+  var clearPayload = {
+    '_clearedAt':           clearedAt,
+    'txs':                  null,
+    'fundWithdrawals':      null,
+    'agentWallets':         null,
+    'rmBookings':           null,
+    // agentList 保留，不刪除代理名單
+    'workingMonth':         null,
+    'hcConfig':             null,
+    'archives':             null,
+  };
+
+  db.ref('macau_data').update(clearPayload, function(err) {
     if (err) {
       console.error('[v13:firebase] ❌ clearFirebaseData FAILED:', err.message || err);
     } else {
-      console.log('[v13:firebase] ✅ clearFirebaseData OK — macau_data/ cleared');
+      console.log('[v13:firebase] ✅ clearFirebaseData OK — macau_data cleared (clearedAt=' + clearedAt + ')');
     }
     if (onDone) onDone(err);
   });

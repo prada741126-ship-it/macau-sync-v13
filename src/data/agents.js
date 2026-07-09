@@ -95,6 +95,10 @@ function renameAgent(oldName, newName) {
     return { success: false, error: '代理 "' + newName + '" 已存在' };
   }
 
+  // ★ 保存旧钱包记录（用于后续 Firebase tombstone 清理）
+  var walletsSnapshot = State.get('agentWallets');
+  var oldWalletRecords = (walletsSnapshot[oldName] || []).slice();
+
   // 更新名单
   State.update('agentList', function(arr) {
     var idx = arr.indexOf(oldName);
@@ -111,7 +115,7 @@ function renameAgent(oldName, newName) {
     return arr;
   });
 
-  // 更新钱包
+  // 更新钱包 (oldName → newName)
   State.update('agentWallets', function(wallets) {
     if (wallets[oldName]) {
       wallets[newName] = wallets[oldName];
@@ -124,7 +128,35 @@ function renameAgent(oldName, newName) {
   Store.saveTxs(State.get('txs'));
   Store.saveWallets(State.get('agentWallets'));
 
+  // ★ 同步到 Firebase（确保跨设备一致）
+
+  // 1. 代理名单
   syncAgentListToFirebase(State.get('agentList'));
+
+  // 2. 交易：逐笔推送（因为有 _fbKey，set 不会新建）
+  var _txs = State.get('txs');
+  for (var _ti = 0; _ti < _txs.length; _ti++) {
+    if (_txs[_ti].agent === newName) {
+      syncTxToFirebase(_txs[_ti]);
+    }
+  }
+
+  // 3. 钱包：新 agent 名下逐笔同步到 Firebase
+  var _aw = State.get('agentWallets');
+  var _newRecords = _aw[newName];
+  if (_newRecords) {
+    for (var _ri = 0; _ri < _newRecords.length; _ri++) {
+      syncWalletToFirebase(newName, _newRecords[_ri]);
+    }
+  }
+
+  // 4. 钱包：旧 agent 名下逐笔 tombstone（标记删除，防止同步还原）
+  for (var _oi = 0; _oi < oldWalletRecords.length; _oi++) {
+    var _or = oldWalletRecords[_oi];
+    if (_or._fbKey) {
+      removeWalletFromFirebase(oldName, _or._fbKey);
+    }
+  }
 
   Events.emit(EVENTS.AGENT_LIST_UPDATED, State.get('agentList'));
   Events.emit(EVENTS.TXS_LOADED, State.get('txs'));

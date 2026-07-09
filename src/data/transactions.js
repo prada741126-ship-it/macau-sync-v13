@@ -21,8 +21,16 @@
  * @returns {object} 新增的交易对象
  */
 function createTx(formData) {
-  var txs = State.get('txs');
   var month = State.get('workingMonth');
+
+  // ★ 关账守卫：已关账月份禁止新增交易
+  if (isMonthLocked(month)) {
+    console.warn('[v13:tx] ⛔ createTx 被阻止：月份 ' + month + ' 已关账');
+    if (typeof showToast === 'function') showToast('该月份已关账，禁止新增交易', 'warning');
+    return null;
+  }
+
+  var txs = State.get('txs');
 
   // 计算金额
   var vol = toNum(formData.volume);
@@ -84,6 +92,21 @@ function createTx(formData) {
  * @returns {object|null} 更新后的交易对象，找不到返回 null
  */
 function updateTx(fbKey, formData) {
+  // ★ 关账守卫：先查交易的月份
+  var txsAll = State.get('txs');
+  var targetTx = null;
+  for (var fi = 0; fi < txsAll.length; fi++) {
+    if (txsAll[fi]._fbKey === fbKey) { targetTx = txsAll[fi]; break; }
+  }
+  if (targetTx) {
+    var txMonth = (targetTx.date || '').substring(0, 7);
+    if (isMonthLocked(txMonth)) {
+      console.warn('[v13:tx] ⛔ updateTx 被阻止：交易所属月份 ' + txMonth + ' 已关账');
+      if (typeof showToast === 'function') showToast('该交易所属月份已关账，禁止编辑', 'warning');
+      return null;
+    }
+  }
+
   var txs = State.get('txs');
   var updated = null;
 
@@ -143,6 +166,22 @@ function updateTx(fbKey, formData) {
  */
 function deleteTx(fbKey) {
   console.log('[v13:tx] 🔵 deleteTx ENTERED, fbKey=' + fbKey + ', 當前 txs 數量=' + State.get('txs').length);
+
+  // ★ 关账守卫：先查交易的月份
+  var txsAll = State.get('txs');
+  var targetTx = null;
+  for (var fi = 0; fi < txsAll.length; fi++) {
+    if (txsAll[fi]._fbKey === fbKey) { targetTx = txsAll[fi]; break; }
+  }
+  if (targetTx) {
+    var txMonth = (targetTx.date || '').substring(0, 7);
+    if (isMonthLocked(txMonth)) {
+      console.warn('[v13:tx] ⛔ deleteTx 被阻止：交易所属月份 ' + txMonth + ' 已关账');
+      if (typeof showToast === 'function') showToast('该交易所属月份已关账，禁止删除', 'warning');
+      return null;
+    }
+  }
+
   var deleted = null;
 
   State.update('txs', function(arr) {
@@ -254,6 +293,17 @@ function sortTable(tableId, colName) {
 // ============================================================================
 
 /**
+ * 检查指定月份是否已关账
+ * @param {string} month - "YYYY-MM"
+ * @returns {boolean}
+ */
+function isMonthLocked(month) {
+  if (!month) return false;
+  var lockedMonths = State.get('lockedMonths') || {};
+  return !!lockedMonths[month];
+}
+
+/**
  * 月末结算：锁定当月
  * 将当月交易打包到 archives，然后不再允许当月交易
  * @returns {object} { success, month, txCount }
@@ -262,6 +312,11 @@ function closeCurrentMonth() {
   var month = State.get('workingMonth');
   if (!month) {
     return { success: false, error: '无效的工作月份' };
+  }
+
+  // ★ 防止重复关账
+  if (isMonthLocked(month)) {
+    return { success: false, error: '该月已关账，无需重复操作' };
   }
 
   var monthTxs = getTxsForMonth(month);
@@ -278,7 +333,13 @@ function closeCurrentMonth() {
   State.set('archives', archives);
   Store.saveArchives(archives);
 
-  // 锁定
+  // ★ 锁定当前月份（改为记录已锁定月份集合）
+  var lockedMonths = State.get('lockedMonths') || {};
+  lockedMonths[month] = true;
+  State.set('lockedMonths', lockedMonths);
+  localStorage.setItem('MACAU_LOCKED_MONTHS', JSON.stringify(lockedMonths));
+
+  // ★ 也设置 isLocked 向后兼容
   State.set('isLocked', true);
 
   // 通知事件

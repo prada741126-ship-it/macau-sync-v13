@@ -14,7 +14,11 @@
  *   - 快捷按钮设定 dateFrom/dateTo，存入 State
  *   - 各渲染函数从 State 读取范围进行筛选
  *   - 「全部時間」时 dateFrom='' && dateTo='' → 不过滤
+ * 
+ * 命名空间: 仅导出 window.renderWallet / window.walletQuickFilter
  */
+
+(function() {
 
 // ============================================================================
 // 快捷时间筛选器 (与查询页一致)
@@ -641,3 +645,9 @@ function _renderAgentWalletCards() {
   html += '</div>';
   container.innerHTML = html;
 }
+
+// 导出公开 API
+window.renderWallet = renderWallet;
+window.walletQuickFilter = walletQuickFilter;
+
+})();

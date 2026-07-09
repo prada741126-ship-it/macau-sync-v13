@@ -2,7 +2,11 @@
  * v13 查询页渲染
  * 依赖: core/state.js, calc/filters.js (filterTxs, sortTxs), utils/format.js, utils/dom.js ($)
  * 对照档: 第七节模块13 + v12 query.js
+ * 
+ * 命名空间: 仅导出 renderQuery / doQuery / saveCurrentFilter / loadSavedFilter / deleteSavedFilter / quickFilter
  */
+
+(function() {
 
 // 查询表排序状态
 var _querySortCol = 'date';   // 默认按日期排序
@@ -35,35 +39,13 @@ function _initQueryTableSort() {
   }
 }
 
-/** 对查询结果按指定列排序 */
-function _sortQueryResults(txs, col, dir) {
-  var fn = function(a, b) {
-    var va, vb;
-    switch (col) {
-      case 'date':    va = a.date || ''; vb = b.date || ''; break;
-      case 'agent':   va = a.agent || ''; vb = b.agent || ''; break;
-      case 'venue':   va = a.venue || ''; vb = b.venue || ''; break;
-      case 'volume':  va = toNum(a.volume); vb = toNum(b.volume); break;
-      case 'bonus':   va = toNum(a.bonus); vb = toNum(b.bonus); break;
-      case 'drawn':   va = toNum(a.drawn); vb = toNum(b.drawn); break;
-      case 'undrawn': va = toNum(a.undrawn); vb = toNum(b.undrawn); break;
-      default: return 0;
-    }
-    if (va < vb) return -1;
-    if (va > vb) return 1;
-    return 0;
-  };
-  var sorted = txs.slice();
-  sorted.sort(fn);
-  if (dir === 'desc') sorted.reverse();
-  return sorted;
-}
-
 /** 入口：弹出所有下拉并执行默认查询（本月） */
 function renderQuery() {
   _populateQueryFilters();
   _setDefaultMonth();
   _highlightQuickBtn('thisMonth');
+  // ★ 初始化已存筛选器
+  _initSavedFilters();
   // ★ 初始化查询表排序
   if (!_queryTableSortInited) { _initQueryTableSort(); _queryTableSortInited = true; }
   doQuery();
@@ -271,7 +253,7 @@ function doQuery() {
 
     // ★ 应用表格排序
     if (_querySortCol) {
-      try { filtered = _sortQueryResults(filtered, _querySortCol, _querySortDir); } catch(e) { console.error('[doQuery] sort 崩溃:', e); }
+      try { filtered = sortTxs(filtered, _querySortCol, _querySortDir === 'asc'); } catch(e) { console.error('[doQuery] sort 崩溃:', e); }
     }
 
     // 获取选定的月份（用于 pre-balance 和月份过滤）
@@ -605,14 +587,13 @@ function _renderAgentLedger(agent, filteredTxs, queryMonth) {
     else awWithdraw += amt;
   }
 
-  // 所有提领 = 交易中已提领 + 钱包提领
+  // ★ 已領碼糧 (tx.drawn) 和錢包提領 (awWithdraw) 是兩筆獨立的扣減，都要減
   var allDrawn = 0;
   for (var i = 0; i < txs.length; i++) {
     if (txs[i].agent === agent) {
       allDrawn += (txs[i].drawn || 0);
     }
   }
-  // 钱包提领也加到已提领
   allDrawn += awWithdraw;
 
   var awBalance = Math.max(0, allBonus + allCash + awDep + awCDep - allDrawn);
@@ -640,6 +621,7 @@ function _renderAgentLedger(agent, filteredTxs, queryMonth) {
         client: txs[i].client || '',
         volume: toNum(txs[i].volume) || 0,
         bonus: bv,
+        drawn: txs[i].drawn || 0,
         rowType: 'rolling',
         type: '入帳',
         source: 'tx',
@@ -775,26 +757,29 @@ function _renderAgentLedger(agent, filteredTxs, queryMonth) {
   if (!tbody) return;
 
   if (thead) {
-    thead.innerHTML = '<tr><th>日期</th><th>地點/說明</th><th class="text-right num-mono">轉碼數</th><th class="text-right num-mono">碼糧</th><th>操作</th><th class="text-right num-mono">未領餘額</th></tr>';
+    thead.innerHTML = '<tr><th>日期</th><th>地點/說明</th><th class="text-right num-mono">轉碼數</th><th class="text-right num-mono">碼糧</th><th class="text-right num-mono">已提領</th><th>操作</th><th class="text-right num-mono">未領餘額</th></tr>';
   }
 
   tbody.innerHTML = '';
 
   // 标题行
   var titleRow = h('tr');
-  titleRow.innerHTML = '<td colspan="6" style="padding:8px 0;font-weight:700;color:' + UI_COLORS.goldSoft + ';font-size:14px;">💼 ' + agent + ' 代理對帳單</td>';
+  titleRow.innerHTML = '<td colspan="7" style="padding:8px 0;font-weight:700;color:' + UI_COLORS.goldSoft + ';font-size:14px;">💼 ' + agent + ' 代理對帳單</td>';
   tbody.appendChild(titleRow);
 
   // 上月累计行
   if (!skipMonthFilter && preRunning > 0) {
     var pr = h('tr');
     pr.style.cssText = 'background:' + hexToRgba(UI_COLORS.goldSoft, 0.08) + ';';
-    pr.innerHTML = '<td>' + filterStart.substring(0, 7) + '-01</td><td style="color:' + UI_COLORS.goldSoft + ';font-weight:600;">上月累計</td><td class="text-right num-mono"></td><td class="text-right num-mono"></td><td></td><td class="text-right num-mono" style="font-weight:700;color:' + UI_COLORS.goldSoft + ';">' + fmtMoney(preRunning) + '</td>';
+    pr.innerHTML = '<td>' + filterStart.substring(0, 7) + '-01</td><td style="color:' + UI_COLORS.goldSoft + ';font-weight:600;">上月累計</td><td class="text-right num-mono"></td><td class="text-right num-mono"></td><td class="text-right num-mono"></td><td></td><td class="text-right num-mono" style="font-weight:700;color:' + UI_COLORS.goldSoft + ';">' + fmtMoney(preRunning) + '</td>';
     tbody.appendChild(pr);
   }
 
   // 数据行
   var running = preRunning;
+  var totalDrawnShown = 0;
+  var totalVolShown = 0;
+  var totalBonusShown = 0;
   for (var i = 0; i < allLedger.length; i++) {
     var e = allLedger[i];
 
@@ -805,7 +790,7 @@ function _renderAgentLedger(agent, filteredTxs, queryMonth) {
       if (dateTo && e.date > dateTo) continue;
     }
 
-    running += e.bonus;
+    running += e.bonus - (e.drawn || 0);  // 碼糧收入增加，己領碼糧減少餘額
     var tr = h('tr');
 
     if (e.rowType === 'withdraw') {
@@ -814,6 +799,7 @@ function _renderAgentLedger(agent, filteredTxs, queryMonth) {
         '<td style="color:' + UI_COLORS.danger + ';font-weight:700;">提領' + (e.note ? '：' + e.note : '') + '</td>' +
         '<td class="text-right num-mono"></td>' +
         '<td class="text-right num-mono" style="color:' + UI_COLORS.danger + ';font-weight:700;">-' + fmtMoney(e.amount) + '</td>' +
+        '<td class="text-right num-mono"></td>' +
         '<td><button class="btn-red" onclick="deleteAgentWallet(\'' + agent.replace(/'/g, "\\'") + '\',\'' + val + '\')">刪除</button></td>' +
         '<td class="text-right num-mono" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
 
@@ -823,6 +809,7 @@ function _renderAgentLedger(agent, filteredTxs, queryMonth) {
         '<td style="color:' + UI_COLORS.info + ';font-weight:700;">存入' + (e.note ? '：' + e.note : '') + '</td>' +
         '<td class="text-right num-mono"></td>' +
         '<td class="text-right num-mono" style="color:' + UI_COLORS.info + ';font-weight:700;">+' + fmtMoney(e.amount) + '</td>' +
+        '<td class="text-right num-mono"></td>' +
         '<td><button class="btn-red" onclick="deleteAgentWallet(\'' + agent.replace(/'/g, "\\'") + '\',\'' + val + '\')">刪除</button></td>' +
         '<td class="text-right num-mono" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
 
@@ -832,6 +819,7 @@ function _renderAgentLedger(agent, filteredTxs, queryMonth) {
         '<td style="color:' + UI_COLORS.cashOrange + ';font-weight:700;">自存現金' + (e.note ? '：' + e.note : '') + '</td>' +
         '<td class="text-right num-mono"></td>' +
         '<td class="text-right num-mono" style="color:' + UI_COLORS.cashOrange + ';font-weight:700;">+' + fmtMoney(e.amount) + '</td>' +
+        '<td class="text-right num-mono"></td>' +
         '<td><button class="btn-red" onclick="deleteAgentWallet(\'' + agent.replace(/'/g, "\\'") + '\',\'' + val + '\')">刪除</button></td>' +
         '<td class="text-right num-mono" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
 
@@ -840,23 +828,30 @@ function _renderAgentLedger(agent, filteredTxs, queryMonth) {
         '<td style="color:' + UI_COLORS.cashOrange + ';font-weight:700;">現金寄放' + (e.client ? '：' + e.client : '') + '</td>' +
         '<td class="text-right num-mono"></td>' +
         '<td class="text-right num-mono" style="color:' + UI_COLORS.cashOrange + ';font-weight:700;">+' + fmtMoney(e.bonus) + '</td>' +
+        '<td class="text-right num-mono"></td>' +
         '<td><span style="color:' + UI_COLORS.textMuted + ';font-size:11px;">自動</span></td>' +
         '<td class="text-right num-mono" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
 
     } else {
       var volStr = e.volume > 0 ? fmt(e.volume) + '萬' : '';
+      var drawnStr = e.drawn > 0 ? fmtMoney(e.drawn) : '';
+      if (e.drawn > 0) totalDrawnShown += e.drawn;
+      if (e.volume > 0) totalVolShown += e.volume;
+      totalBonusShown += e.bonus;
       tr.innerHTML = '<td>' + e.date + '</td>' +
         '<td>' + (e.venue || '') + '(' + (e.client || '') + ')</td>' +
         '<td class="text-right num-mono">' + volStr + '</td>' +
         '<td class="text-right num-mono" style="color:' + UI_COLORS.goldSoft + ';">' + fmtMoney(e.bonus) + '</td>' +
+        '<td class="text-right num-mono" style="color:' + UI_COLORS.danger + ';">' + drawnStr + '</td>' +
         '<td><span style="color:' + UI_COLORS.textMuted + ';font-size:11px;">自動</span></td>' +
         '<td class="text-right num-mono" style="font-weight:700;">' + fmtMoney(Math.max(0, running)) + '</td>';
     }
     tbody.appendChild(tr);
   }
 
-  // 合计行
-  _appendTotalRow(tbody, running);
+  // 合计行：碼糧合计含全部来源（交易碼糧+錢包存入），未领余额与 KPI awBalance 保持一致
+  var allIncome = allBonus + allCash + awDep + awCDep;
+  _appendTotalRow(tbody, running, allDrawn, totalVolShown, allIncome, awBalance);
 
   // 隐藏代理帐务汇总
   var summarySection = document.getElementById('query-agent-summary-section');
@@ -867,10 +862,28 @@ function _renderAgentLedger(agent, filteredTxs, queryMonth) {
 // 共用：合计行
 // ============================================================================
 
-function _appendTotalRow(tbody, running) {
+function _appendTotalRow(tbody, running, drawnTotal, volTotal, bonusTotal, undrawnTotal) {
   var tr = h('tr');
-  tr.style.cssText = 'background:' + hexToRgba(UI_COLORS.bgElevated, 0.8) + ';font-weight:700;color:' + UI_COLORS.goldSoft + ';';
-  tr.innerHTML = '<td></td><td style="color:' + UI_COLORS.textPrimary + ';">合計</td><td class="text-right num-mono"></td><td class="text-right num-mono"></td><td></td><td class="text-right num-mono" style="font-size:15px;">' + fmtMoney(Math.max(0, running)) + '</td>';
+  tr.style.cssText = 'background:' + hexToRgba(UI_COLORS.bgElevated, 0.8) + ';font-weight:700;color:' + UI_COLORS.goldSoft + ';border-top:2px solid ' + UI_COLORS.borderSubtle + ';';
+  if (drawnTotal !== undefined) {
+    // 代理對帳單模式：7列（含总洗码数、碼糧合计、已提领、未领余额）
+    var volStr   = (volTotal   > 0) ? fmt(volTotal)   + '萬' : '';
+    var bonusStr = (bonusTotal > 0) ? fmtMoney(bonusTotal) : '';
+    var drawnStr = (drawnTotal > 0) ? fmtMoney(drawnTotal) : '';
+    // 未领余额优先使用传入的精确值，退而使用 running
+    var undrawnVal = (undrawnTotal !== undefined) ? undrawnTotal : Math.max(0, running);
+    tr.innerHTML =
+      '<td></td>' +
+      '<td style="color:' + UI_COLORS.textPrimary + ';">合計</td>' +
+      '<td class="text-right num-mono">' + volStr + '</td>' +
+      '<td class="text-right num-mono" style="color:' + UI_COLORS.goldSoft + ';">' + bonusStr + '</td>' +
+      '<td class="text-right num-mono" style="color:' + UI_COLORS.danger + ';">' + drawnStr + '</td>' +
+      '<td></td>' +
+      '<td class="text-right num-mono" style="font-size:15px;color:' + UI_COLORS.warning + ';">' + fmtMoney(undrawnVal) + '</td>';
+  } else {
+    // 公基金模式：6列
+    tr.innerHTML = '<td></td><td style="color:' + UI_COLORS.textPrimary + ';">合計</td><td class="text-right num-mono"></td><td class="text-right num-mono"></td><td></td><td class="text-right num-mono" style="font-size:15px;">' + fmtMoney(Math.max(0, running)) + '</td>';
+  }
   tbody.appendChild(tr);
 }
 
@@ -948,3 +961,161 @@ function _ymd(d) {
 function pad2(n) {
   return n < 10 ? '0' + n : '' + n;
 }
+
+// ============================================================================
+// 已存筛选器
+// ============================================================================
+
+/**
+ * 获取当前筛选条件快照
+ * @returns {object}
+ */
+function _getCurrentFilterSnapshot() {
+  return {
+    agent:    ($('#query-agent') || {}).value || '',
+    venue:    ($('#query-venue') || {}).value || '',
+    month:    ($('#query-month') || {}).value || '',
+    search:   ($('#query-search') || {}).value || '',
+    dateFrom: ($('#query-date-from') || {}).value || '',
+    dateTo:   ($('#query-date-to') || {}).value || '',
+    _savedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * 应用筛选器快照
+ * @param {object} snap
+ */
+function _applyFilterSnapshot(snap) {
+  var agentEl = $('#query-agent');
+  var venueEl = $('#query-venue');
+  var monthEl = $('#query-month');
+  var searchEl = $('#query-search');
+  var fromEl = $('#query-date-from');
+  var toEl = $('#query-date-to');
+  var customRange = $('#query-date-range');
+
+  if (agentEl) agentEl.value = snap.agent || '';
+  if (venueEl) venueEl.value = snap.venue || '';
+  if (monthEl) monthEl.value = snap.month || '';
+  if (searchEl) searchEl.value = snap.search || '';
+  if (fromEl) fromEl.value = snap.dateFrom || '';
+  if (toEl) toEl.value = snap.dateTo || '';
+
+  // 有自定义日期时展开日期范围
+  if (customRange && (snap.dateFrom || snap.dateTo)) {
+    customRange.style.display = '';
+  }
+
+  doQuery();
+}
+
+/**
+ * 刷新已存筛选器下拉列表
+ */
+function _refreshSavedFilterDropdown(selectName) {
+  var sel = $('#query-saved-filters');
+  if (!sel) return;
+
+  var filters = State.get('savedFilters') || {};
+  var names = Object.keys(filters).sort();
+
+  sel.innerHTML = '';
+  if (names.length === 0) {
+    sel.innerHTML = '<option value="">(無已存篩選)</option>';
+    sel.disabled = true;
+    return;
+  }
+
+  sel.disabled = false;
+  sel.innerHTML = '<option value="">— 選擇已存篩選 —</option>';
+  for (var i = 0; i < names.length; i++) {
+    var opt = document.createElement('option');
+    opt.value = names[i];
+    opt.textContent = names[i] + ' (' + (filters[names[i]].agent || '全部') + ')';
+    if (selectName === names[i]) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+
+/**
+ * 儲存目前篩選條件
+ */
+function saveCurrentFilter() {
+  var snap = _getCurrentFilterSnapshot();
+
+  // 检查是否有实际筛选条件
+  if (!snap.agent && !snap.venue && !snap.month && !snap.search && !snap.dateFrom && !snap.dateTo) {
+    if (typeof showToast === 'function') showToast('目前無篩選條件可儲存', 'warning');
+    return;
+  }
+
+  // 用代理+月份作为默认名称
+  var defaultName = (snap.agent || '全部') + ' - ' + (snap.month || snap.dateFrom || '自訂');
+  var name = prompt('為此篩選器命名：', defaultName);
+  if (!name) return;
+  name = name.trim();
+  if (!name) return;
+
+  var filters = State.get('savedFilters') || {};
+  filters[name] = snap;
+  State.set('savedFilters', filters);
+  Store.saveFilters(filters);
+
+  _refreshSavedFilterDropdown(name);
+  if (typeof showToast === 'function') showToast('篩選器「' + name + '」已儲存', 'success');
+}
+
+/**
+ * 載入已存篩選
+ * @param {string} name
+ */
+function loadSavedFilter(name) {
+  if (!name) return;
+  var filters = State.get('savedFilters') || {};
+  var snap = filters[name];
+  if (!snap) {
+    if (typeof showToast === 'function') showToast('篩選器不存在', 'warning');
+    return;
+  }
+  _applyFilterSnapshot(snap);
+  if (typeof showToast === 'function') showToast('已載入篩選器「' + name + '」', 'info');
+}
+
+/**
+ * 刪除目前選中的已存篩選
+ */
+function deleteSavedFilter() {
+  var sel = $('#query-saved-filters');
+  if (!sel || !sel.value) {
+    if (typeof showToast === 'function') showToast('請先選擇要刪除的篩選器', 'warning');
+    return;
+  }
+  var name = sel.value;
+  if (!confirm('確定刪除篩選器「' + name + '」？')) return;
+
+  var filters = State.get('savedFilters') || {};
+  delete filters[name];
+  State.set('savedFilters', filters);
+  Store.saveFilters(filters);
+
+  _refreshSavedFilterDropdown();
+  if (typeof showToast === 'function') showToast('篩選器「' + name + '」已刪除', 'success');
+}
+
+/**
+ * 初始化已存筛选器下拉（页面渲染时调用）
+ */
+function _initSavedFilters() {
+  _refreshSavedFilterDropdown();
+}
+
+// 导出公开 API
+window.renderQuery = renderQuery;
+window.doQuery = doQuery;
+window.saveCurrentFilter = saveCurrentFilter;
+window.loadSavedFilter = loadSavedFilter;
+window.deleteSavedFilter = deleteSavedFilter;
+window.quickFilter = quickFilter;
+
+})();

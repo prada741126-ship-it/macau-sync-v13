@@ -1,6 +1,6 @@
 {
-  "version": "13.0.0",
-  "buildDate": "2026-06-11",
+  "version": "13.0.3",
+  "buildDate": "2026-06-24",
   "codename": "phoenix",
-  "description": "v13 全新架构 — Event Bus + State Manager + 35模块"
+  "description": "v13.0.3 — 双保险 auto-calc (addEventListener + oninput)"
 }

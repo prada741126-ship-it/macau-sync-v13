@@ -131,6 +131,26 @@
   color: rgba(201,168,76,0.4);
 }
 
+/* 加载态 — 文字半透明 + 左侧 spinner */
+.btn-loading {
+  pointer-events: none;
+  opacity: 0.75;
+}
+.btn-loading::before {
+  content: '';
+  display: inline-block;
+  width: 12px; height: 12px;
+  margin-right: 4px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: btnSpinner 0.5s linear infinite;
+  vertical-align: -1px;
+}
+@keyframes btnSpinner {
+  to { transform: rotate(360deg); }
+}
+
 /* Ghost (透明背景) */
 .btn-ghost {
   background: transparent;
@@ -365,6 +385,22 @@
   to   { opacity: 0; transform: translateX(40px); }
 }
 
+/* Toast 底部剩余时间进度条 */
+.toast::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0;
+  height: 2px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  animation: toastTimer 3s linear forwards;
+}
+@keyframes toastTimer {
+  from { width: 100%; }
+  to   { width: 0%; }
+}
+.toast { position: relative; overflow: hidden; }
+
 /* ═══════════════════════════════════════════════════════
  * 加载动画
  * ═══════════════════════════════════════════════════════ */
@@ -551,6 +587,24 @@
   80% { transform: translateX(4px); }
 }
 .pw-shake { animation: pwShake 0.4s ease; }
+
+/* #10 密码错误增强：红色边框闪烁 + 抖动 */
+@keyframes pwErrorFlash {
+  0%   { border-color: var(--danger); box-shadow: 0 0 0 0 rgba(231,76,60,0.6); transform: translateX(0); }
+  15%  { border-color: var(--danger); box-shadow: 0 0 12px 2px rgba(231,76,60,0.5); transform: translateX(-4px); }
+  30%  { border-color: var(--danger); box-shadow: 0 0 0 0 rgba(231,76,60,0); transform: translateX(4px); }
+  45%  { border-color: var(--danger); box-shadow: 0 0 8px 1px rgba(231,76,60,0.3); transform: translateX(-3px); }
+  60%  { border-color: var(--danger); box-shadow: 0 0 0 0 rgba(231,76,60,0); transform: translateX(3px); }
+  75%  { border-color: rgba(231,76,60,0.5); box-shadow: 0 0 4px 0px rgba(231,76,60,0.15); transform: translateX(0); }
+  100% { border-color: var(--border-subtle); box-shadow: none; transform: translateX(0); }
+}
+#pw-input.pw-error {
+  animation: pwErrorFlash 0.7s ease;
+}
+#pw-input.pw-error:focus {
+  border-color: var(--danger);
+  box-shadow: 0 0 10px rgba(231,76,60,0.15);
+}
 
 /* ═══════════════════════════════════════════════════════
  * 版本徽章 & 回到顶部
@@ -1066,21 +1120,103 @@ tr.row-withdraw td { background: rgba(248,81,73,0.03); }
 }
 
 /* ═══════════════════════════════════════════════════════
- * 徽章
+ * 通用表格增强 (斑马纹 / 悬停 / 冻结表头 / 金额右对齐)
  * ═══════════════════════════════════════════════════════ */
 
+/* 斑马纹 */
+.data-table tbody tr:nth-child(even) td {
+  background: rgba(255,255,255,0.01);
+}
+.data-table tbody tr:nth-child(odd) td {
+  background: transparent;
+}
+
+/* 悬停整行高亮 */
+.data-table tbody tr:hover td {
+  background: rgba(0,212,255,0.04) !important;
+  transition: background 0.15s ease;
+}
+
+/* 冻结表头 */
+.data-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg-elevated);
+}
+
+/* 金额右对齐 + 千分位 */
+.data-table .col-num,
+.data-table td.num-right {
+  text-align: right;
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-variant-numeric: tabular-nums;
+  padding-right: 16px !important;
+}
+
+/* 表格单元格垂直居中 */
+.data-table th,
+.data-table td {
+  vertical-align: middle;
+}
+
+/* ═══════════════════════════════════════════════════════
+ * 状态圆角 Badge (统一规范)
+ * ═══════════════════════════════════════════════════════ */
+
+/* 基础 Badge — 所有状态标签统一用这个 */
 .badge {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
-  border-radius: 10px;
+  justify-content: center;
+  padding: 3px 10px;
+  border-radius: 12px;
   font-size: 11px;
   font-weight: 500;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  line-height: 1.4;
 }
-.badge-cyan { background: rgba(0,212,255,0.1); color: var(--tech-cyan); }
-.badge-gold { background: rgba(201,168,76,0.1); color: var(--gold-soft); }
-.badge-green { background: rgba(45,212,160,0.1); color: var(--success); }
-.badge-red { background: rgba(248,81,73,0.1); color: var(--danger); }
+.badge-cyan   { background: rgba(0,212,255,0.1);  color: var(--tech-cyan);  border: 1px solid rgba(0,212,255,0.15); }
+.badge-gold   { background: rgba(201,168,76,0.1); color: var(--gold-soft);  border: 1px solid rgba(201,168,76,0.15); }
+.badge-green  { background: rgba(45,212,160,0.1);  color: var(--success);    border: 1px solid rgba(45,212,160,0.15); }
+.badge-red    { background: rgba(248,81,73,0.1);  color: var(--danger);     border: 1px solid rgba(248,81,73,0.15); }
+.badge-yellow { background: rgba(243,156,18,0.1);  color: var(--warning);    border: 1px solid rgba(243,156,18,0.15); }
+.badge-blue   { background: rgba(52,152,219,0.1);  color: var(--info);       border: 1px solid rgba(52,152,219,0.15); }
+.badge-violet { background: rgba(123,47,247,0.1);  color: var(--electric-violet); border: 1px solid rgba(123,47,247,0.15); }
+
+/* 交易类型标签 — 用 badge 样式覆盖 */
+.tx-type-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+.tx-type-tag.roll { background: rgba(0,212,255,0.1); color: var(--tech-cyan); border: 1px solid rgba(0,212,255,0.15); }
+.tx-type-tag.cash { background: rgba(230,126,54,0.1); color: var(--cash-orange); border: 1px solid rgba(230,126,54,0.15); }
+
+/* 房务状态 Badge */
+.rm-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+.rm-status-badge.checked-in  { background: rgba(45,212,160,0.1); color: var(--success); border: 1px solid rgba(45,212,160,0.15); }
+.rm-status-badge.checked-out { background: rgba(248,81,73,0.1); color: var(--danger);  border: 1px solid rgba(248,81,73,0.15); }
+.rm-status-badge.pending     { background: rgba(243,156,18,0.1); color: var(--warning); border: 1px solid rgba(243,156,18,0.15); }
 
 /* ── 日期下拉三联动 ── */
 .date-sel-wrap {
@@ -1304,6 +1440,21 @@ input[type="range"]:focus {
   padding: 60px 20px;
   color: var(--text-muted);
   text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+/* 空状态微网格背景 — 科技终端感 */
+.empty-state::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.025;
+  background-image:
+    radial-gradient(circle 0.5px, var(--tech-cyan), transparent),
+    radial-gradient(circle 0.5px, var(--tech-cyan), transparent);
+  background-size: 28px 28px;
+  background-position: 0 0, 14px 14px;
 }
 .empty-state .empty-icon {
   font-size: 48px;
@@ -1408,4 +1559,203 @@ input[type="range"]:focus {
 /* 输入有内容时显示清除按钮 */
 .search-box input:not(:placeholder-shown) ~ .search-clear {
   display: block;
+}
+
+/* ══════════════════════════════════════════════════════
+ * 分页控件
+ * ══════════════════════════════════════════════════════ */
+
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-top: none;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.page-info {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.page-btns {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.page-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 32px;
+  text-align: center;
+}
+
+.page-btn:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border-color: var(--tech-cyan);
+}
+
+.page-btn.active {
+  background: linear-gradient(135deg, var(--tech-cyan), var(--sky-blue));
+  color: #000;
+  border-color: transparent;
+  font-weight: 700;
+  box-shadow: 0 0 8px rgba(0,212,255,0.3);
+  cursor: default;
+}
+
+.page-ellipsis {
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 0 4px;
+}
+
+/* ════════════════════════════════════════════════════
+ * 表单验证反馈样式
+ * ════════════════════════════════════════════════════ */
+
+/* 字段错误状态 — 红色边框 + 浅红背景 */
+.form-row.has-error input,
+.form-row.has-error select,
+.form-row.has-error textarea {
+  border-color: var(--danger) !important;
+  box-shadow: 0 0 0 2px rgba(248,81,73,0.2) !important;
+  background: rgba(248,81,73,0.04) !important;
+}
+
+/* 错误提示文字 */
+.field-error-msg {
+  display: block;
+  font-size: 11px;
+  color: var(--danger);
+  margin-top: 3px;
+  padding-left: 2px;
+  line-height: 1.4;
+  animation: errorFadeIn 0.2s ease;
+}
+
+@keyframes errorFadeIn {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* 字段成功状态 — 绿色边框（可选，用于实时验证通过） */
+.form-row.has-success input,
+.form-row.has-success select,
+.form-row.has-success textarea {
+  border-color: var(--success) !important;
+  box-shadow: 0 0 0 2px rgba(45,212,160,0.15) !important;
+}
+
+/* 表单级错误汇总 */
+.form-error-summary {
+  background: rgba(248,81,73,0.06);
+  border: 1px solid rgba(248,81,73,0.2);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: var(--danger);
+  display: none;
+}
+.form-error-summary.visible {
+  display: block;
+  animation: errorFadeIn 0.2s ease;
+}
+
+/* ═══════════════════════════════════════════════════════
+ * 快捷键帮助面板 (#48)
+ * ═══════════════════════════════════════════════════════ */
+
+.shortcut-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 13px;
+}
+.shortcut-table th {
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 2px solid var(--border-subtle);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.shortcut-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  color: var(--text-secondary);
+}
+.shortcut-table tbody tr:hover td {
+  background: rgba(255,255,255,0.03);
+}
+.shortcut-table .sc-key {
+  width: 120px;
+  white-space: nowrap;
+}
+.shortcut-table kbd {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  color: var(--tech-cyan);
+  line-height: 1.6;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+.shortcut-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+  text-align: center;
+}
+.shortcut-hint kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  color: var(--tech-cyan);
+}
+
+/* ═══════════════════════════════════════════════════════
+ * 统计页合计行
+ * ═══════════════════════════════════════════════════════ */
+.summary-total-row {
+  border-top: 2px solid var(--border-subtle);
+  background: rgba(0,212,255,0.04);
+}
+.summary-total-row td {
+  font-weight: 700;
+  color: var(--text-primary);
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+.summary-total-row td:first-child {
+  color: var(--gold-light);
+  letter-spacing: 1px;
 }

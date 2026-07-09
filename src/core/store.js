@@ -275,12 +275,22 @@ var Store = (function() {
    * 同时将 State 重置为空状态
    */
   function clearLocalData() {
+    // ★ DEFENSIVE: 清除前保存 agentList 快照（雙來源備份）
+    var _savedAgentList = State.get('agentList');
+    var _savedFromLS = null;
+    try {
+      var _raw = localStorage.getItem(STORAGE_KEYS.AGENT_LIST);
+      if (_raw) _savedFromLS = JSON.parse(_raw);
+    } catch(_e) {}
+    console.log('[v13:store] clearLocalData: agentList snapshot saved (' +
+      (_savedAgentList && Array.isArray(_savedAgentList) ? _savedAgentList.length : 0) + ' from State, ' +
+      (_savedFromLS && Array.isArray(_savedFromLS) ? _savedFromLS.length : 0) + ' from LS)');
+
     // 清除 localStorage 中的业务数据 key
     var businessKeys = [
       STORAGE_KEYS.DATA,          // 交易 'macau_data'
       STORAGE_KEYS.FUND,          // 公基金 'macau_fund_data'
       STORAGE_KEYS.AGENT_WALLETS, // 代理钱包 'macau_agent_wallets'
-      STORAGE_KEYS.AGENT_LIST,    // 代理名单 'macau_agent_list'
       STORAGE_KEYS.RM_BOOKINGS,   // 订房 'rm_bookings'
       STORAGE_KEYS.RM_LAST_ID,    // 订房ID 'rm_last_id'
       STORAGE_KEYS.BACKUP_LIST,   // 备份清单 'macau_backup_list'
@@ -289,12 +299,11 @@ var Store = (function() {
     for (var i = 0; i < businessKeys.length; i++) {
       try { localStorage.removeItem(businessKeys[i]); } catch(e) {}
     }
-    // 重置 State 中的业务字段（保留 hotelConfig/workingMonth/auth）
+    // 重置 State 中的业务字段（保留 agentList/hotelConfig/workingMonth/auth）
     State.batchSet({
       txs:             [],
       fundWithdrawals: [],
       agentWallets:    {},
-      agentList:       [],
       bookings:        [],
       backupList:      [],
     }, 'store:cleared');
@@ -302,6 +311,16 @@ var Store = (function() {
     State.resetNextId('fund', 1);
     State.resetNextId('wallet', 1);
     State.resetNextId('booking', 1);
+
+    // ★ DEFENSIVE: 强制恢复 agentList（State + localStorage 双重写入）
+    var _restored = (_savedAgentList && Array.isArray(_savedAgentList) && _savedAgentList.length > 0) ? _savedAgentList : _savedFromLS;
+    if (_restored && Array.isArray(_restored) && _restored.length > 0) {
+      State.set('agentList', _restored);
+      try { localStorage.setItem(STORAGE_KEYS.AGENT_LIST, JSON.stringify(_restored)); } catch(_e2) {}
+      console.log('[v13:store] clearLocalData: ✅ agentList RESTORED (' + _restored.length + ' agents)');
+    } else {
+      console.warn('[v13:store] clearLocalData: ⚠️ no agentList to restore (both State and LS empty)');
+    }
     console.log('[v13:store] clearLocalData: business data cleared');
   }
 

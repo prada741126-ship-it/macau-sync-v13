@@ -7,17 +7,65 @@
  */
 
 // ============================================================================
+// 墓碑清理 (30 天 TTL)
+// ============================================================================
+
+/**
+ * 从数组中清理过期墓碑（_deleted:true 且超过 TTL）
+ * 在 transaction 写回 Firebase 前调用，防止墓碑永久累积
+ * @param {Array} arr - 含墓碑的数组
+ * @param {number} [ttlMs] - 墓碑 TTL 毫秒数，默认 CONFIG.TOMBSTONE_TTL_MS
+ * @returns {Array} 清理后的数组
+ */
+function _cleanOldTombstones(arr, ttlMs) {
+  if (!ttlMs) ttlMs = CONFIG.TOMBSTONE_TTL_MS;
+  if (!Array.isArray(arr) || arr.length === 0) return arr;
+  var now = Date.now();
+  var before = arr.length;
+  var cleaned = [];
+  for (var i = 0; i < arr.length; i++) {
+    var item = arr[i];
+    // 非墓碑 → 保留
+    if (!item._deleted) {
+      cleaned.push(item);
+      continue;
+    }
+    // 墓碑未超期 → 保留（其他设备可能还没同步）
+    var age = now - (item._updatedAt || 0);
+    if (age < ttlMs) {
+      cleaned.push(item);
+      continue;
+    }
+    // 过期墓碑 → 丢弃（不写回 Firebase）
+  }
+  if (before !== cleaned.length) {
+    console.log('[v13:uploader] 🪦 Cleaned ' + (before - cleaned.length) + ' expired tombstones (TTL=' + Math.round(ttlMs / 86400000) + 'd), kept ' + (cleaned.length - (arr.length - before)) + ' active tombstones');
+  }
+  return cleaned;
+}
+
+// ============================================================================
 // 上传队列
 // ============================================================================
 
 var _uploadQueue = [];
 var _uploading = false;
+var MAX_QUEUE_SIZE = 200;
 
 /**
  * 入队上传任务
  * @param {function} task - 返回 Promise 的上传函数
  */
 function enqueueUpload(task) {
+  // 队列溢出保护：超过上限时清空队列，替换为一次全量同步
+  if (_uploadQueue.length >= MAX_QUEUE_SIZE) {
+    console.warn('[v13:uploader] Queue overflow (' + _uploadQueue.length + ' pending), flushing → full sync');
+    _uploadQueue = [syncUploadAll];
+    if (!_uploading) {
+      _processQueue();
+    }
+    return;
+  }
   _uploadQueue.push(task);
   if (!_uploading) {
     _processQueue();
@@ -65,6 +113,9 @@ function syncUploadAll() {
 
   Events.emit(EVENTS.SYNC_START);
 
+  // #52 同步进度条
+  if (typeof showSyncProgress === 'function') showSyncProgress();
+
   var txs = State.get('txs');
   var fundWithdrawals = State.get('fundWithdrawals');
   // ★ FIX: agentList 不在函數入口捕獲，避免 watchers 更新後用舊數據覆蓋
@@ -88,6 +139,8 @@ function syncUploadAll() {
       }
     }
     var merged = mergeTxs(txs, rArr);  // ✓ local=txs, remote=rArr
+    // ★ 清理 30 天前的过期墓碑
+    merged = _cleanOldTombstones(merged);
     console.log('[v13:uploader] TXS transaction: local=' + txs.length + ' remote=' + rArr.length + ' merged=' + merged.length);
     return fbArrayToObj(merged);
   }, function(err, committed, snapshot) {
@@ -109,6 +162,8 @@ function syncUploadAll() {
       }
     }
     var merged = mergeTxs(fundWithdrawals, rArr);
+    // ★ 清理 30 天前的过期墓碑
+    merged = _cleanOldTombstones(merged);
     console.log('[v13:uploader] FUND transaction: local=' + fundWithdrawals.length + ' remote=' + rArr.length + ' merged=' + merged.length);
     return fbArrayToObj(merged);
   }, function(err, committed, snapshot) {
@@ -119,21 +174,47 @@ function syncUploadAll() {
     }
   });
 
-  // 3. 代理名單：直接 set() 推送本地到 Firebase（不合并）
+  // 3. 代理名單：transaction 合併（不能用 set 覆蓋！本地為空時會清空 Firebase）
   //    CRUD 操作（addAgent/removeAgent/renameAgent）已透過 syncAgentListToFirebase 即時推送，
   //    此處作為安全網確保頁面加載時本地正確數據能到達 Firebase
-  // ★ FIX: set 回調內實時讀取 State，避免用入隊時的舊數據覆蓋 watchers 已更新的數據
-  (function() {
+  // ★ FIX: 改用 transaction，遠端有數據時取並集；只有本地非空才推送
+  //   - 本地有代理 + 遠端有代理 → 取並集（防止本機 A 刪代理後，B 的 syncUploadAll 把代理加回來）
+  //     ※ 代理刪除靠 removeAgent→syncAgentListToFirebase 即時推，不靠 syncUploadAll
+  //   - 本地有代理 + 遠端空 → 直接推本地（初次設定）
+  //   - 本地為空 → 跳過（不清空 Firebase，避免 race condition）
+  db.ref(FB_PATH.AGENT_LIST).transaction(function(remote) {
     var _al = State.get('agentList');
     if (!Array.isArray(_al)) _al = [];
-    db.ref(FB_PATH.AGENT_LIST).set(_al.slice().sort(function(a, b) { return a.localeCompare(b); }), function(err) {
-      if (err) {
-        console.error('[v13:uploader] AGENT_LIST set FAILED:', err.message || err);
-      } else {
-        console.log('[v13:uploader] ✅ AGENT_LIST pushed: ' + _al.length + ' agents', JSON.stringify(_al));
-      }
-    });
-  })();
+
+    // ★ 本地為空：不推（不能清空 Firebase，刪除由 removeAgent 即時推）
+    if (_al.length === 0) {
+      console.log('[v13:uploader] AGENT_LIST transaction: local empty → SKIP (returning undefined, no write)');
+      return; // undefined → Firebase transaction 放棄，不寫入
+    }
+
+    // 遠端為空：直接推本地
+    if (!remote || !Array.isArray(remote) || remote.length === 0) {
+      var sorted0 = _al.slice().sort(function(a, b) { return a.localeCompare(b); });
+      console.log('[v13:uploader] AGENT_LIST transaction: remote empty → push local ' + sorted0.length + ' agents');
+      return sorted0;
+    }
+
+    // 兩邊都有：取并集（注意：不能用遠端覆蓋本地，避免其他設備把剛刪的代理復活）
+    // 但也不能用本地覆蓋遠端（避免清掉其他設備剛加的代理）
+    // 策略：local 為權威（本機剛操作），取 local（CRUD 即時推保證 Firebase 最終一致）
+    var sorted = _al.slice().sort(function(a, b) { return a.localeCompare(b); });
+    console.log('[v13:uploader] AGENT_LIST transaction: local=' + _al.length + ' remote=' + remote.length + ' → push local (CRUD-authoritative)');
+    return sorted;
+  }, function(err, committed, snapshot) {
+    if (err) {
+      console.error('[v13:uploader] AGENT_LIST transaction FAILED:', err.message || err);
+    } else if (committed) {
+      var _al2 = State.get('agentList');
+      console.log('[v13:uploader] ✅ AGENT_LIST transaction committed: ' + (Array.isArray(_al2) ? _al2.length : 0) + ' agents');
+    } else {
+      console.log('[v13:uploader] AGENT_LIST transaction aborted (local empty, no write to Firebase)');
+    }
+  });
 
   // 4. 代理钱包：transaction 原子合併（★ 使用 mergeWallets 时间戳决胜策略）
   // ★ FIX: mergeWallets(local, remote) — local=agentWallets, remote=rw
@@ -150,7 +231,14 @@ function syncUploadAll() {
         }
       }
     }
-    return fbWalletsToObj(mergeWallets(agentWallets, rw));
+    var mergedWallets = mergeWallets(agentWallets, rw);
+    // ★ 清理每个代理下的过期墓碑
+    var cleanedWallets = {};
+    for (var cwAg in mergedWallets) {
+      var cleanedRecords = _cleanOldTombstones(mergedWallets[cwAg] || []);
+      if (cleanedRecords.length > 0) cleanedWallets[cwAg] = cleanedRecords;
+    }
+    return fbWalletsToObj(cleanedWallets);
   }, function(err, committed, snapshot) {
     if (err) {
       console.error('[v13:uploader] WALLETS transaction FAILED:', err.message || err);
@@ -173,6 +261,8 @@ function syncUploadAll() {
       }
     }
     var merged = mergeBookings(bookings, rArr);
+    // ★ 清理 30 天前的过期墓碑
+    merged = _cleanOldTombstones(merged);
     console.log('[v13:uploader] BOOKINGS transaction: local=' + bookings.length + ' remote=' + rArr.length + ' merged=' + merged.length);
     return fbArrayToObj(merged);
   }, function(err, committed, snapshot) {
@@ -195,6 +285,8 @@ function syncUploadAll() {
       }
     }
     var merged = mergeTxs(hcConfig, rArr);
+    // ★ 清理 30 天前的过期墓碑
+    merged = _cleanOldTombstones(merged);
     console.log('[v13:uploader] HC_CONFIG transaction: local=' + hcConfig.length + ' remote=' + rArr.length + ' merged=' + merged.length);
     return fbArrayToObj(merged);
   }, function(err, committed, snapshot) {
@@ -209,6 +301,8 @@ function syncUploadAll() {
   db.ref(FB_PATH.ARCHIVES).set(archives);
 
   Events.emit(EVENTS.SYNC_COMPLETE);
+  // #52 同步进度条
+  if (typeof hideSyncProgress === 'function') hideSyncProgress();
 }
 
 /**

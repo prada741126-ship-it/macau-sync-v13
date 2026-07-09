@@ -112,7 +112,9 @@ function fmt(n) {
 function fmtDec(n, dec) {
   if (dec === undefined) dec = 2;
   if (n == null || isNaN(n)) return '0.00';
-  return n.toFixed(dec).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  var factor = Math.pow(10, dec);
+  var truncated = Math.trunc(n * factor) / factor;
+  return truncated.toFixed(dec).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
 /**

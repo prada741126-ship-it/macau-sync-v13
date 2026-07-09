@@ -116,7 +116,7 @@ a:hover { text-decoration: underline; }
 /* 滚动条 */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; transition: background 0.2s ease; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 
 /* 选中 */
@@ -181,6 +181,11 @@ tr:nth-child(even) td {
 }
 tr:hover td {
   background: rgba(255,255,255,0.03);
+}
+/* 点击反馈 */
+tr:active td {
+  background: rgba(0,212,255,0.04) !important;
+  transition: background 0.08s ease;
 }
 
 /* 键盘焦点环 — Tab 导航可见指示器 */

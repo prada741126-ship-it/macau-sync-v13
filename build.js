@@ -29,6 +29,7 @@ const CSS_FILES = [
   'css/components.css',
   'css/china-theme.css',
   'css/mobile.css',
+  'css/print.css',    // 打印样式（@media print）
 ];
 
 // JS 文件 (按依赖顺序)
@@ -79,6 +80,7 @@ const JS_FILES = [
   'src/pages/room.js',
   'src/pages/wallet.js',
   'src/charts/trend.js',
+  'src/charts/rank.js',
 
   // Phase 7: Bridge (HTML onclick → JS glue, 最后加载)
   'src/bridge/bridge.js',

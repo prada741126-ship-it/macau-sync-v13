@@ -170,15 +170,19 @@
   }
   .nav-item .icon { font-size: 18px; }
   .nav-item.active { color: var(--tech-cyan); }
-  .nav-item.active::before {
+  .nav-item::before {
     content: '';
     position: absolute;
     top: 0; left: 50%;
-    transform: translateX(-50%);
+    transform: translateX(-50%) scaleX(0);
     width: 20px;
     height: 2px;
     background: var(--tech-cyan);
     border-radius: 0 0 2px 2px;
+    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .nav-item.active::before {
+    transform: translateX(-50%) scaleX(1);
   }
   .nav-item:active { transform: scale(0.95); }
 
@@ -200,11 +204,28 @@
 
   /* ── KPI Grid → 2列 ── */
   .kpi-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
   }
-  .kpi-card { padding: 12px; }
-  .kpi-card-value { font-size: 20px; }
+  .kpi-card {
+    padding: 10px;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .kpi-card-label {
+    font-size: 11px;
+    letter-spacing: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 4px;
+  }
+  .kpi-card-value {
+    font-size: 18px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 
   /* ── 仪表板 Grid → 2列 ── */
   .dash-grid,
@@ -486,12 +507,12 @@
 
 @media (max-width: 380px) {
   .kpi-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 6px;
   }
-  .kpi-card { padding: 10px; }
-  .kpi-card-value { font-size: 18px; }
-  .kpi-card-label { font-size: 10px; }
+  .kpi-card { padding: 8px; min-width: 0; overflow: hidden; }
+  .kpi-card-value { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kpi-card-label { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   .dash-grid {
     grid-template-columns: repeat(2, 1fr);

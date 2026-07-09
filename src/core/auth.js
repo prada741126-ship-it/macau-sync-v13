@@ -102,14 +102,14 @@ function autoLogin() {
   // 检查 sessionStorage
   if (sessionStorage.getItem('macau_auth') === '1') {
     hidePasswordOverlay();
-    setSessionPw(atob(APP.PWD_ENCODED));
+    setSessionPw(APP.PWD_HASH);
     startSessionTimer();
     return true;
   }
   // 检查 localStorage
   if (Store.loadAuth() === '1') {
     hidePasswordOverlay();
-    setSessionPw(atob(APP.PWD_ENCODED));
+    setSessionPw(APP.PWD_HASH);
     sessionStorage.setItem('macau_auth', '1');
     startSessionTimer();
     return true;

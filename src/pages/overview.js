@@ -6,7 +6,11 @@
  *        calc/stats.js (calcKPI, rankByVolume, aggregateByDay)
  *        utils/format.js (fmt, fmtMoney), utils/dom.js ($, h)
  * 对照档: 第七节模块15
+ * 
+ * 命名空间: 仅导出 window.renderOverview
  */
+
+(function() {
 
 function renderOverview() {
   console.log('[v13:overview] renderOverview() called, txs count:', (State.get('txs') || []).length);
@@ -89,14 +93,6 @@ function _renderKPI(kpi) {
   info.textContent = '共 ' + kpi.txCount + ' 筆交易 · ' + kpi.agentCount + ' 位代理';
   grid.appendChild(info);
 
-  // ★ countUp 动画
-  var vals = grid.querySelectorAll('.kpi-card-value');
-  for (var j = 0; j < vals.length; j++) {
-    var v = vals[j];
-    if (v._cuRaw != null && typeof countUp === 'function') {
-      countUp(v, v._cuRaw, v._cuOpts);
-    }
-  }
 }
 
 function _renderRecentActivity(txs) {
@@ -132,3 +128,8 @@ function _renderRecentActivity(txs) {
     box.appendChild(item);
   }
 }
+
+// 导出公开 API
+window.renderOverview = renderOverview;
+
+})();
