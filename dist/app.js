@@ -5183,22 +5183,33 @@ function _doInitFirebase(onReady) {
       return null; // 返回 null，让轮询继续
     }
 
-    _db = firebase.database();
+    // 先检查 signInAnonymously 是否存在（避免 TypeError 静默）
+    var authInstance = firebase.auth();
+    if (typeof authInstance.signInAnonymously !== 'function') {
+      console.error('[v13:firebase] ❌ signInAnonymously not available on auth instance');
+      return null;
+    }
+
+    var tempDb = firebase.database(); // 临时持有，auth 成功后才赋值给 _db
 
     // Anonymous auth — RTDB 读写都需要认证完成后才能操作
-    firebase.auth().signInAnonymously().then(function() {
+    // ★ FIX: 只有 auth 成功后才设置 _db + 启动 _watchConnection，否则同步会 permission_denied
+    authInstance.signInAnonymously().then(function() {
       console.log('[v13:firebase] 🔑 Anonymous auth OK');
+      _db = tempDb;
+      _watchConnection();
       if (typeof onReady === 'function') onReady();
     }).catch(function(err) {
       console.error('[v13:firebase] ❌ Anonymous auth failed:', err.message);
+      _db = null; // 明确设为 null，确保同步不会启动
       if (typeof onReady === 'function') onReady();
     });
 
-    console.log('[v13:firebase] ✅ Connected! _db ready');
-    _watchConnection();
-    return _db;
+    console.log('[v13:firebase] ⏳ Waiting for anonymous auth...');
+    return null; // 返回 null，让轮询继续（auth 成功后 _db 会被设置）
   } catch (e) {
     console.error('[v13:firebase] Init error:', e);
+    _db = null;
     return null;
   }
 }
