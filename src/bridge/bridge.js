@@ -978,23 +978,22 @@ function hcSaveModal() {
 
 function hcOnCasinoChange() {
   var casino = (document.getElementById('hc-casino') || {}).value;
-  var hotelSel = document.getElementById('hc-hotel');
-  if (!hotelSel) return;
-  hotelSel.innerHTML = '<option value="">選擇酒店</option>';
+  var list = document.getElementById('hc-hotel-list');
+  if (!list) return;
+  list.innerHTML = '';
 
   var hotels = getHotelsByCasino(casino);
   for (var i = 0; i < hotels.length; i++) {
     var opt = document.createElement('option');
     opt.value = hotels[i];
-    opt.textContent = hotels[i];
-    hotelSel.appendChild(opt);
+    list.appendChild(opt);
   }
 }
 
 function _hcPopulateCasinoDropdown() {
-  var sel = document.getElementById('hc-casino');
-  if (!sel) return;
-  sel.innerHTML = '<option value="">選擇體系</option>';
+  var list = document.getElementById('hc-casino-list');
+  if (!list) return;
+  list.innerHTML = '';
   var config = getAllHC();
   var seen = {};
   for (var i = 0; i < config.length; i++) {
@@ -1002,8 +1001,7 @@ function _hcPopulateCasinoDropdown() {
       seen[config[i].casino] = true;
       var opt = document.createElement('option');
       opt.value = config[i].casino;
-      opt.textContent = config[i].casino;
-      sel.appendChild(opt);
+      list.appendChild(opt);
     }
   }
 }

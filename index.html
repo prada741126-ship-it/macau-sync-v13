@@ -11,7 +11,7 @@
   <!-- 版本快取清除 -->
   <script>
     (function() {
-      var APP_VERSION = '13.0.5.1783616619287';
+      var APP_VERSION = '13.0.5.1784622135813';
       var stored = localStorage.getItem('macau_app_version');
       var qs = location.search || '';
       if (stored && stored !== APP_VERSION && !sessionStorage.getItem('_v13_reloaded')) {
@@ -4062,7 +4062,7 @@ tr.rank-1 td {
   <!-- Firebase 初始化已统一由 src/sync/firebase.js 的 initFirebase() 处理（带重试） -->
 
   <!-- JS: 合并后由 build.js 输出为 app.js -->
-  <script src="app.js?v=13.0.5.1783616619287"></script>
+  <script src="app.js?v=13.0.5.1784622135813"></script>
 </head>
 <body>
 
@@ -4663,8 +4663,8 @@ tr.rank-1 td {
   <div id="hc-modal-bg">
     <div class="hc-modal">
       <h3 id="hc-modal-title">編輯房型</h3>
-      <div class="form-row"><label>體系</label><select id="hc-casino" onchange="hcOnCasinoChange()"><option value="">選擇體系</option></select></div>
-      <div class="form-row"><label>酒店</label><select id="hc-hotel"><option value="">選擇酒店</option></select></div>
+      <div class="form-row"><label>體系</label><input type="text" id="hc-casino" list="hc-casino-list" onchange="hcOnCasinoChange()" placeholder="選擇或輸入體系"><datalist id="hc-casino-list"></datalist></div>
+      <div class="form-row"><label>酒店</label><input type="text" id="hc-hotel" list="hc-hotel-list" placeholder="選擇或輸入酒店"><datalist id="hc-hotel-list"></datalist></div>
       <div class="form-row"><label>CODE</label><input type="text" id="hc-code"></div>
       <div class="form-row"><label>房型</label><input type="text" id="hc-room"></div>
       <div class="form-row"><label>平日價</label><input type="number" id="hc-weekday"></div>
@@ -4738,6 +4738,6 @@ tr.rank-1 td {
     })();
   </script>
 
-  <!-- BUILD: v13.0.5 | 2026-07-09 | 2026-07-09T17:03:39.287Z -->
+  <!-- BUILD: v13.0.5 | 2026-07-09 | 2026-07-21T08:22:15.814Z -->
 </body>
 </html>
