@@ -31,6 +31,103 @@ function assertEqual(actual, expected, msg) {
   }
 }
 
+// Password rotation: exercise the shipped validator and legacy ciphertext paths.
+console.log('\n--- auth rotation ---');
+var _testCrypto = require('crypto');
+var _testFs = require('fs');
+var _testPath = require('path');
+var _nextPassword = Buffer.from('WlptbTI4MzE=', 'base64').toString();
+var _oldPassword = Buffer.from('bWFjYXU4ODg=', 'base64').toString();
+var _oldHash = _testCrypto.createHash('sha256').update(_oldPassword).digest('hex');
+var _newHash = _testCrypto.createHash('sha256').update(_nextPassword).digest('hex');
+window.CryptoJS = {
+  SHA256: function(value) { return { toString: function() { return _testCrypto.createHash('sha256').update(value).digest('hex'); } }; },
+  AES: {
+    encrypt: function(json, key) { return { toString: function() { return Buffer.from(JSON.stringify({ key: key, json: json })).toString('base64'); } }; },
+    decrypt: function(ciphertext, key) { return { toString: function() { var parsed = JSON.parse(Buffer.from(ciphertext, 'base64').toString()); return parsed.key === key ? parsed.json : 'garbled'; } }; }
+  },
+  enc: { Utf8: {} }
+};
+
+test('new password passes while previous password fails', function() {
+  assertEqual(APP.PWD_HASH, _newHash);
+  assert(verifyPassword(_nextPassword));
+  assert(!verifyPassword(_oldPassword));
+});
+
+test('fallback validator uses the same new password', function() {
+  var template = _testFs.readFileSync(_testPath.join(__dirname, '..', 'template.html'), 'utf8');
+  var encoded = template.match(/var _v13_APP_PWD = '([^']+)'/);
+  assert(encoded, 'fallback verifier missing');
+  assert(Buffer.from(encoded[1], 'base64').toString() === _nextPassword, 'fallback password mismatch');
+});
+
+test('fallback entry rejects old input and accepts new input', function() {
+  var template = _testFs.readFileSync(_testPath.join(__dirname, '..', 'template.html'), 'utf8');
+  var start = template.indexOf('var _v13_APP_PWD');
+  window.atob = function(value) { return Buffer.from(value, 'base64').toString('binary'); };
+  window.eval(template.slice(start, template.indexOf('</script>', start)));
+  assert(window._v13b64d('WlptbTI4MzE=') === _nextPassword, 'fallback decoder mismatch');
+  var input = document.createElement('input');
+  input.id = 'pw-input';
+  document.body.appendChild(input);
+  var error = document.createElement('div');
+  error.id = 'pw-error';
+  document.body.appendChild(error);
+  var overlay = document.createElement('div');
+  overlay.id = 'pw-overlay';
+  document.body.appendChild(overlay);
+  input.value = _oldPassword;
+  window._v13LoginFallback();
+  assertEqual(sessionStorage.getItem('macau_auth'), null);
+  input.value = _nextPassword;
+  window._v13LoginFallback();
+  assert(sessionStorage.getItem('macau_auth') === APP.AUTH_TOKEN, 'fallback did not authenticate: ' + error.textContent);
+  logout();
+  input.remove(); error.remove(); overlay.remove();
+});
+
+test('old remembered login and session are refused', function() {
+  localStorage.setItem(STORAGE_KEYS.AUTH, '1');
+  sessionStorage.setItem('macau_auth', '1');
+  sessionStorage.setItem('_pw', _oldPassword);
+  assert(!autoLogin());
+  assertEqual(sessionStorage.getItem('macau_auth'), null);
+  assertEqual(sessionStorage.getItem('_pw'), null);
+  assertEqual(localStorage.getItem(STORAGE_KEYS.AUTH), null);
+});
+
+test('current remembered login can resume', function() {
+  Store.saveAuth(APP.AUTH_TOKEN);
+  assert(autoLogin());
+  assertEqual(sessionStorage.getItem('macau_auth'), APP.AUTH_TOKEN);
+  assertEqual(sessionStorage.getItem('_pw'), APP.PWD_HASH);
+  logout();
+});
+
+test('legacy encrypted records load and new writes use new key', function() {
+  checkCrypto();
+  var txs = [{ id: 1 }];
+  var fund = [{ id: 2 }];
+  var wallets = { agent: [{ id: 3 }] };
+  localStorage.setItem(STORAGE_KEYS.DATA, 'ENC:' + window.CryptoJS.AES.encrypt(JSON.stringify(txs), _oldHash).toString());
+  localStorage.setItem(STORAGE_KEYS.FUND, 'ENC:' + window.CryptoJS.AES.encrypt(JSON.stringify(fund), _oldHash).toString());
+  localStorage.setItem(STORAGE_KEYS.AGENT_WALLETS, 'ENC:' + window.CryptoJS.AES.encrypt(JSON.stringify(wallets), _oldHash).toString());
+  assertEqual(Store.loadTxs()[0].id, 1);
+  assertEqual(Store.loadFund()[0].id, 2);
+  assertEqual(Store.loadWallets().agent[0].id, 3);
+  Store.saveTxs(txs);
+  Store.saveFund(fund);
+  Store.saveWallets(wallets);
+  var encrypted = [STORAGE_KEYS.DATA, STORAGE_KEYS.FUND, STORAGE_KEYS.AGENT_WALLETS];
+  encrypted.forEach(function(key) {
+    var raw = localStorage.getItem(key);
+    assert(raw.indexOf('ENC:') === 0);
+    assert(window.CryptoJS.AES.decrypt(raw.slice(4), _newHash).toString());
+    assertEqual(JSON.parse(Buffer.from(raw.slice(4), 'base64').toString()).key, _newHash);
+  });
+});
+
 // ============================================================================
 // 格式化工具测试
 // ============================================================================
