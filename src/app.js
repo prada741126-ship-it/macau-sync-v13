@@ -177,7 +177,7 @@
     }
 
     // 如果已经登入（autoLogin 成功），直接初始化
-    if (sessionStorage.getItem('macau_auth') === '1') {
+    if (sessionStorage.getItem('macau_auth') === APP.AUTH_TOKEN) {
       initAppAfterLogin();
     }
   }

@@ -265,7 +265,7 @@ var Store = (function() {
     saveWorkingMonth(State.get('workingMonth'));
     saveFilters(State.get('savedFilters'));
     saveBackupList(State.get('backupList'));
-    saveAuth('1');
+    saveAuth(APP.AUTH_TOKEN);
     saveAppVersion(APP.VERSION);
   }
 

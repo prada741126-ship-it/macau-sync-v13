@@ -258,11 +258,12 @@ function runTests() {
     // 在 jsdom 中运行
     const vm = require('vm');
     const script = new vm.Script(jsContent);
-    const context = vm.createContext(dom.window);
+    const context = dom.getInternalVMContext();
     script.runInContext(context);
 
     // 将 jsdom window 中的函数暴露到 global (供测试使用)
     for (const key of Object.keys(dom.window)) {
+      if (['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'].includes(key)) continue;
       if (typeof dom.window[key] === 'function' || (typeof dom.window[key] !== 'object' && key !== 'window' && key !== 'global' && key !== 'globalThis')) {
         global[key] = dom.window[key];
       }
@@ -291,6 +292,7 @@ function runTests() {
 
     // 运行 test.js
     require(TEST_FILE);
+    dom.window.close();
 
     console.log('✅ All tests passed!');
   } catch (e) {

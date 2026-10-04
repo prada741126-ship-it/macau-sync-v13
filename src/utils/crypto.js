@@ -187,8 +187,27 @@ function _getEncKey() {
   if (!pw) return APP.PWD_HASH;  // 回退：直接用预计算哈希
   // 如果 session 中存储的就是哈希 (autoLogin 场景)，直接使用
   if (pw === APP.PWD_HASH) return pw;
+  if (pw === APP.LEGACY_ENC_HASH) return APP.PWD_HASH;
   // 用户手动登录时，session 存储的是明文，需要哈希
-  return CryptoJS.SHA256(pw).toString();
+  var hash = CryptoJS.SHA256(pw).toString();
+  return hash === APP.LEGACY_ENC_HASH ? APP.PWD_HASH : hash;
+}
+
+function _decryptWithKnownKeys(ciphertext) {
+  var keys = [_getEncKey(), APP.PWD_HASH, APP.LEGACY_ENC_HASH];
+  for (var i = 0; i < keys.length; i++) {
+    if (keys.indexOf(keys[i]) !== i) continue;
+    try {
+      var plaintext = CryptoJS.AES.decrypt(ciphertext, keys[i]).toString(CryptoJS.enc.Utf8);
+      if (plaintext) {
+        var parsed = JSON.parse(plaintext);
+        if (parsed && typeof parsed === 'object') return plaintext;
+      }
+    } catch (e) {
+      // A failed key can also produce invalid UTF-8; try the next key.
+    }
+  }
+  return '';
 }
 
 /**
@@ -224,7 +243,7 @@ function decryptData(str) {
   if (str.indexOf('ENC:') !== 0) {
     try {
       var parsed = JSON.parse(str);
-      return Array.isArray(parsed) ? parsed : [];
+      return parsed && typeof parsed === 'object' ? parsed : [];
     } catch (e) {
       console.error('[v13:crypto] decryptData: legacy JSON parse error:', e);
       return [];
@@ -237,15 +256,13 @@ function decryptData(str) {
   }
   try {
     var ciphertext = str.slice(4);
-    var key = _getEncKey();
-    var bytes = CryptoJS.AES.decrypt(ciphertext, key);
-    var plaintext = bytes.toString(CryptoJS.enc.Utf8);
+    var plaintext = _decryptWithKnownKeys(ciphertext);
     if (!plaintext) {
       console.error('[v13:crypto] decryptData: decryption returned empty (wrong password?)');
       return [];
     }
     var result = JSON.parse(plaintext);
-    return Array.isArray(result) ? result : [];
+    return result && typeof result === 'object' ? result : [];
   } catch (e) {
     console.error('[v13:crypto] decryptData error:', e);
     return [];
@@ -284,9 +301,7 @@ function decryptWallets(str) {
     return {};
   }
   try {
-    var key = _getEncKey();
-    var bytes = CryptoJS.AES.decrypt(str, key);
-    var plaintext = bytes.toString(CryptoJS.enc.Utf8);
+    var plaintext = _decryptWithKnownKeys(str.indexOf('ENC:') === 0 ? str.slice(4) : str);
     if (!plaintext) return {};
     return JSON.parse(plaintext);
   } catch (e) {

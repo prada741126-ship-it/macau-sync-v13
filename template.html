@@ -42,7 +42,7 @@
 
   <!-- 密码验证兜底脚本 (必须最先执行, 零外部依赖) -->
   <script>
-    var _v13_APP_PWD = 'bWFjYXU4ODg=';  // base64('macau888')
+    var _v13_APP_PWD = 'WlptbTI4MzE=';
     function _v13b64d(s) { try { return atob(s); } catch(e) { return ''; } }
     function _v13LoginFallback() {
       var input = document.getElementById('pw-input');
@@ -55,11 +55,16 @@
         return;
       }
       if (entered === _v13b64d(_v13_APP_PWD)) {
+        var verified = typeof checkPassword === 'function' ? checkPassword(entered) : null;
+        if (verified && !verified.success && typeof CryptoJS !== 'undefined' && CryptoJS.SHA256) {
+          if (errorEl) { errorEl.textContent = verified.error || '密碼錯誤'; errorEl.style.display = 'block'; }
+          return;
+        }
         if (errorEl) errorEl.style.display = 'none';
-        try { sessionStorage.setItem('macau_auth', '1'); } catch(e) {}
+        try { sessionStorage.setItem('macau_auth', '2'); localStorage.setItem('macau_auth', '2'); } catch(e) {}
+        if ((!verified || !verified.success) && typeof setSessionPw === 'function') setSessionPw(entered);
         var overlay = document.getElementById('pw-overlay');
         if (overlay) { overlay.style.opacity = '0'; overlay.style.transition = 'opacity 0.5s'; setTimeout(function() { overlay.style.display = 'none'; }, 500); }
-        if (typeof checkPassword === 'function') { checkPassword(entered); }
         return;
       }
       if (errorEl) { errorEl.textContent = '密碼錯誤'; errorEl.style.display = 'block'; }

@@ -34,7 +34,8 @@ function checkPassword(input) {
     // 成功
     _pwAttempts = 0;
     setSessionPw(input);
-    Store.saveAuth('1');
+    Store.saveAuth(APP.AUTH_TOKEN);
+    sessionStorage.setItem('macau_auth', APP.AUTH_TOKEN);
     hidePasswordOverlay();
     startSessionTimer();
     Events.emit('auth:success');
@@ -100,20 +101,24 @@ function showPasswordOverlay() {
  */
 function autoLogin() {
   // 检查 sessionStorage
-  if (sessionStorage.getItem('macau_auth') === '1') {
+  if (sessionStorage.getItem('macau_auth') === APP.AUTH_TOKEN) {
     hidePasswordOverlay();
     setSessionPw(APP.PWD_HASH);
     startSessionTimer();
     return true;
   }
   // 检查 localStorage
-  if (Store.loadAuth() === '1') {
+  if (Store.loadAuth() === APP.AUTH_TOKEN) {
     hidePasswordOverlay();
     setSessionPw(APP.PWD_HASH);
-    sessionStorage.setItem('macau_auth', '1');
+    sessionStorage.setItem('macau_auth', APP.AUTH_TOKEN);
     startSessionTimer();
     return true;
   }
+  // Previous releases stored a plain '1' marker and a password in this tab.
+  clearSessionPw();
+  sessionStorage.removeItem('macau_auth');
+  if (Store.loadAuth() !== APP.AUTH_TOKEN) Store.remove(STORAGE_KEYS.AUTH);
   return false;
 }
 

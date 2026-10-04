@@ -24,7 +24,9 @@ var APP = {
   SYSTEM_EN:     'BOYING INTERNATIONAL CLUB',
   LOGIN_TITLE:   '授 權 驗 證',
   LOGO_CHAR:     '\u2660',  // ♠
-  PWD_HASH:       '8204868322789a563871ffa6e828a1f096b4c4cec66706ee848283fae65551d6',  // SHA-256('macau888')
+  PWD_HASH:       'ad7e2f41b5874470385ef9567555316941ef06d41fef14dfe662ed979eb282d1',
+  LEGACY_ENC_HASH: '8204868322789a563871ffa6e828a1f096b4c4cec66706ee848283fae65551d6',
+  AUTH_TOKEN:     '2',
 };
 
 // ============================================================================
@@ -1048,8 +1050,27 @@ function _getEncKey() {
   if (!pw) return APP.PWD_HASH;  // 回退：直接用预计算哈希
   // 如果 session 中存储的就是哈希 (autoLogin 场景)，直接使用
   if (pw === APP.PWD_HASH) return pw;
+  if (pw === APP.LEGACY_ENC_HASH) return APP.PWD_HASH;
   // 用户手动登录时，session 存储的是明文，需要哈希
-  return CryptoJS.SHA256(pw).toString();
+  var hash = CryptoJS.SHA256(pw).toString();
+  return hash === APP.LEGACY_ENC_HASH ? APP.PWD_HASH : hash;
+}
+
+function _decryptWithKnownKeys(ciphertext) {
+  var keys = [_getEncKey(), APP.PWD_HASH, APP.LEGACY_ENC_HASH];
+  for (var i = 0; i < keys.length; i++) {
+    if (keys.indexOf(keys[i]) !== i) continue;
+    try {
+      var plaintext = CryptoJS.AES.decrypt(ciphertext, keys[i]).toString(CryptoJS.enc.Utf8);
+      if (plaintext) {
+        var parsed = JSON.parse(plaintext);
+        if (parsed && typeof parsed === 'object') return plaintext;
+      }
+    } catch (e) {
+      // A failed key can also produce invalid UTF-8; try the next key.
+    }
+  }
+  return '';
 }
 
 /**
@@ -1085,7 +1106,7 @@ function decryptData(str) {
   if (str.indexOf('ENC:') !== 0) {
     try {
       var parsed = JSON.parse(str);
-      return Array.isArray(parsed) ? parsed : [];
+      return parsed && typeof parsed === 'object' ? parsed : [];
     } catch (e) {
       console.error('[v13:crypto] decryptData: legacy JSON parse error:', e);
       return [];
@@ -1098,15 +1119,13 @@ function decryptData(str) {
   }
   try {
     var ciphertext = str.slice(4);
-    var key = _getEncKey();
-    var bytes = CryptoJS.AES.decrypt(ciphertext, key);
-    var plaintext = bytes.toString(CryptoJS.enc.Utf8);
+    var plaintext = _decryptWithKnownKeys(ciphertext);
     if (!plaintext) {
       console.error('[v13:crypto] decryptData: decryption returned empty (wrong password?)');
       return [];
     }
     var result = JSON.parse(plaintext);
-    return Array.isArray(result) ? result : [];
+    return result && typeof result === 'object' ? result : [];
   } catch (e) {
     console.error('[v13:crypto] decryptData error:', e);
     return [];
@@ -1145,9 +1164,7 @@ function decryptWallets(str) {
     return {};
   }
   try {
-    var key = _getEncKey();
-    var bytes = CryptoJS.AES.decrypt(str, key);
-    var plaintext = bytes.toString(CryptoJS.enc.Utf8);
+    var plaintext = _decryptWithKnownKeys(str.indexOf('ENC:') === 0 ? str.slice(4) : str);
     if (!plaintext) return {};
     return JSON.parse(plaintext);
   } catch (e) {
@@ -1866,7 +1883,7 @@ var Store = (function() {
     saveWorkingMonth(State.get('workingMonth'));
     saveFilters(State.get('savedFilters'));
     saveBackupList(State.get('backupList'));
-    saveAuth('1');
+    saveAuth(APP.AUTH_TOKEN);
     saveAppVersion(APP.VERSION);
   }
 
@@ -7408,7 +7425,8 @@ function checkPassword(input) {
     // 成功
     _pwAttempts = 0;
     setSessionPw(input);
-    Store.saveAuth('1');
+    Store.saveAuth(APP.AUTH_TOKEN);
+    sessionStorage.setItem('macau_auth', APP.AUTH_TOKEN);
     hidePasswordOverlay();
     startSessionTimer();
     Events.emit('auth:success');
@@ -7474,20 +7492,24 @@ function showPasswordOverlay() {
  */
 function autoLogin() {
   // 检查 sessionStorage
-  if (sessionStorage.getItem('macau_auth') === '1') {
+  if (sessionStorage.getItem('macau_auth') === APP.AUTH_TOKEN) {
     hidePasswordOverlay();
     setSessionPw(APP.PWD_HASH);
     startSessionTimer();
     return true;
   }
   // 检查 localStorage
-  if (Store.loadAuth() === '1') {
+  if (Store.loadAuth() === APP.AUTH_TOKEN) {
     hidePasswordOverlay();
     setSessionPw(APP.PWD_HASH);
-    sessionStorage.setItem('macau_auth', '1');
+    sessionStorage.setItem('macau_auth', APP.AUTH_TOKEN);
     startSessionTimer();
     return true;
   }
+  // Previous releases stored a plain '1' marker and a password in this tab.
+  clearSessionPw();
+  sessionStorage.removeItem('macau_auth');
+  if (Store.loadAuth() !== APP.AUTH_TOKEN) Store.remove(STORAGE_KEYS.AUTH);
   return false;
 }
 
@@ -12704,7 +12726,7 @@ function triggerJSONImport() {
     }
 
     // 如果已经登入（autoLogin 成功），直接初始化
-    if (sessionStorage.getItem('macau_auth') === '1') {
+    if (sessionStorage.getItem('macau_auth') === APP.AUTH_TOKEN) {
       initAppAfterLogin();
     }
   }
